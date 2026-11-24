@@ -1,11 +1,23 @@
 name: CI
 
+# Pull requests, master, release tags; every Monday too (02:00 UTC), so that the GLPI
+# nightly jobs say how this week's GLPI fares even without a commit.
 on:
   push:
+    branches: [master]
+    tags: ["v*"]
   pull_request:
+  schedule:
+    - cron: "0 2 * * 1"
+  workflow_dispatch:
 
 permissions:
   contents: read
+
+# A pull request's new commits cancel its older run; master and tags run to the end.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Actions are pinned to a commit (the version in the comment); Dependabot updates them.
 jobs:
