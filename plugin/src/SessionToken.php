@@ -14,7 +14,8 @@ use Session;
  *
  * - Clear token (64 hex chars) only lives in an HttpOnly, Secure, SameSite=Strict cookie
  *   restricted to the WebSocket path: JavaScript never sees it, other GLPI URLs never get it.
- * - Valkey stores `rt:s:{sha256(token)}` => {uid, name} with the PHP session lifetime;
+ * - Valkey stores `rt:s:{sha256(token)}` => {uid, name, avatar, groups} with the PHP
+ *   session lifetime;
  *   every GLPI request slides that TTL (one EXPIRE), so no extra request is ever needed.
  * - Logout and identity changes (impersonation) delete the key: the Rust server closes the
  *   corresponding connections.
@@ -53,6 +54,12 @@ final class SessionToken
                 Valkey::run(fn(Redis $r) => $r->hSet(self::sessionKey($state['hash']), 'avatar', $avatar));
                 $_SESSION[self::SESSION_KEY]['avatar'] = true;
             }
+            $groups = self::groups();
+            if ($alive === true && ($state['groups'] ?? null) !== $groups) {
+                // New session, or GLPI changed the user's groups (profile or entity switch).
+                Valkey::run(fn(Redis $r) => $r->hSet(self::sessionKey($state['hash']), 'groups', $groups));
+                $_SESSION[self::SESSION_KEY]['groups'] = $groups;
+            }
             if ($alive !== false) {
                 return; // alive, or Valkey down (fail open: keep the current cookie)
             }
@@ -70,11 +77,12 @@ final class SessionToken
         $hash = hash('sha256', $token);
         $name = (string) ($_SESSION['glpifriendlyname'] ?? $_SESSION['glpiname'] ?? '');
         $avatar = json_encode(self::avatar($uid));
+        $groups = self::groups();
 
-        $ok = Valkey::run(function (Redis $r) use ($hash, $uid, $name, $avatar, $ttl) {
+        $ok = Valkey::run(function (Redis $r) use ($hash, $uid, $name, $avatar, $groups, $ttl) {
             $key = self::sessionKey($hash);
             $r->multi(Redis::PIPELINE)
-                ->hMSet($key, ['uid' => (string) $uid, 'name' => $name, 'avatar' => $avatar])
+                ->hMSet($key, ['uid' => (string) $uid, 'name' => $name, 'avatar' => $avatar, 'groups' => $groups])
                 ->expire($key, $ttl)
                 ->exec();
             return true;
@@ -83,7 +91,7 @@ final class SessionToken
             return;
         }
 
-        $_SESSION[self::SESSION_KEY] = ['uid' => $uid, 'hash' => $hash, 'avatar' => true];
+        $_SESSION[self::SESSION_KEY] = ['uid' => $uid, 'hash' => $hash, 'avatar' => true, 'groups' => $groups];
         $options = [
             'expires'  => 0,
             'path'     => Settings::get('ws_path'),
@@ -96,6 +104,14 @@ final class SessionToken
         } elseif (!headers_sent()) {
             setcookie(Settings::get('cookie_name'), $token, $options);
         }
+    }
+
+    /** The user's GLPI groups as JSON (`[3,8]`): private tasks of "my groups". */
+    private static function groups(): string
+    {
+        $ids = array_map('intval', (array) ($_SESSION['glpigroups'] ?? []));
+        sort($ids);
+        return json_encode(array_values(array_unique(array_filter($ids, static fn(int $g) => $g > 0))));
     }
 
     /** @internal tests: receives (name, value, options) instead of setcookie(). */

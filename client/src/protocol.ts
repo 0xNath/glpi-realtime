@@ -14,11 +14,31 @@ export type ByeReason = "revoked" | "shutdown" | "policy" | "slow" | "idle";
 export type ServerMsg =
   | { v: 1; id?: number; t: "hello"; conn: string; user: { id: number; name: string }; ping_interval: number }
   | { v: 1; id?: number; t: "subscribed"; room: string }
-  | { v: 1; id?: number; t: "unsubscribed"; room: string }
+  /** `reason` is set when the server removed the subscription itself (rights lost). */
+  | { v: 1; id?: number; t: "unsubscribed"; room: string; reason?: "forbidden" }
   | { v: 1; id?: number; t: "pong" }
   | { v: 1; id?: number; t: "error"; code: ErrorCode; message: string }
   | { v: 1; id?: number; t: "bye"; reason: ByeReason }
-  | { v: 1; id?: number; t: "presence"; room: string; users: PresenceUser[] };
+  | { v: 1; id?: number; t: "presence"; room: string; users: PresenceUser[] }
+  | ({ v: 1; id?: number; t: "event"; room: string; by: Actor } & ItemEvent)
+  | { v: 1; id?: number; t: "regrant"; room: string }
+  /** The user's notifications changed: refresh the bell. `alert`: ring in this tab. */
+  | { v: 1; id?: number; t: "notification"; nid: string; kind: string; room: string; by: Actor; alert: boolean };
+
+/** Who did it; id 0 for GLPI itself (crons, mail collector). */
+export interface Actor {
+  id: number;
+  name: string;
+}
+
+/** Something changed on an item. No content: reload from GLPI to see it. */
+export interface ItemEvent {
+  /** `ticket.update`, `followup.add`, `task.delete`, `actor.add`, ... */
+  kind: string;
+  item?: { type: string; id: number };
+  /** Changed fields, for `ticket.update`. */
+  fields?: string[];
+}
 
 export interface PresenceUser {
   id: number;

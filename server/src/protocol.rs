@@ -3,6 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::events::{Actor, Event};
 use crate::presence::PresenceUser;
 
 pub const VERSION: u8 = 1;
@@ -103,6 +104,9 @@ pub enum ServerMsg {
     },
     Unsubscribed {
         room: String,
+        /// Set when the server removed the subscription itself (rights lost).
+        #[serde(skip_serializing_if = "Option::is_none")]
+        reason: Option<&'static str>,
     },
     Pong {},
     Error {
@@ -116,6 +120,28 @@ pub enum ServerMsg {
     Presence {
         room: String,
         users: Vec<PresenceUser>,
+    },
+    /// Something changed on the item. No content: clients reload from GLPI.
+    Event {
+        room: String,
+        by: Actor,
+        #[serde(flatten)]
+        event: Event,
+    },
+    /// Rights on the item may have changed: ask GLPI for a new grant, then `sub` again.
+    /// No event is delivered for this room until then.
+    Regrant {
+        room: String,
+    },
+    /// The user's notifications changed (assignment, answer on one of their tickets,
+    /// read in another tab...): refresh the bell from GLPI. `alert`: play the sound here.
+    Notification {
+        nid: String,
+        kind: String,
+        /// Item concerned (`Ticket:5`), empty for a read-state change.
+        room: String,
+        by: Actor,
+        alert: bool,
     },
 }
 

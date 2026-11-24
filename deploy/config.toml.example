@@ -39,6 +39,11 @@ sweep_interval_secs = 15
 # Instant logout: needs `notify-keyspace-events Kgx` in valkey.conf.
 keyspace_events = true
 
+[events]
+# After `regrant` (actor removed, entity moved), time given to a browser to get a new
+# grant from GLPI before it is removed from the item.
+regrant_timeout_secs = 30
+
 [shutdown]
 grace_secs = 5
 

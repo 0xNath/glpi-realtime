@@ -1,0 +1,15 @@
+<?php
+
+/**
+ * Every notification of the session user, with filters and quick actions.
+ * The page is drawn by the client (realtime.js) from ajax/inbox.php?full=1.
+ *
+ * @license GPL-3.0-or-later
+ */
+
+Session::checkLoginUser();
+Session::checkCentralAccess();
+
+Html::header(__('Notifications'), '', 'helpdesk', 'ticket');
+echo '<div id="glpi-rt-inbox-page" class="container-fluid"></div>';
+Html::footer();

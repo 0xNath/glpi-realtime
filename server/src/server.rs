@@ -20,6 +20,7 @@ use tokio::task::JoinHandle;
 use tracing::info;
 
 use crate::config::{Config, Listen};
+use crate::events::Hub;
 use crate::presence::Presence;
 use crate::protocol::ByeReason;
 use crate::registry::Registry;
@@ -33,6 +34,7 @@ pub struct AppState {
     pub registry: Arc<Registry>,
     pub user_limiter: Arc<DefaultKeyedRateLimiter<u64>>,
     pub presence: Arc<Presence>,
+    pub hub: Arc<Hub>,
     pub metrics: Option<PrometheusHandle>,
 }
 
@@ -117,6 +119,7 @@ pub async fn start(cfg: Config, metrics: Option<PrometheusHandle>) -> anyhow::Re
         registry: Arc::clone(&registry),
         user_limiter: Arc::new(RateLimiter::keyed(user_quota)),
         presence: Presence::new(store.clone(), Arc::clone(&registry), cfg.presence.ttl_secs),
+        hub: Hub::new(Arc::clone(&registry)),
         metrics,
     };
     let (stop_tx, stop_rx) = watch::channel(false);
@@ -127,6 +130,7 @@ pub async fn start(cfg: Config, metrics: Option<PrometheusHandle>) -> anyhow::Re
         stop_rx.clone(),
     ));
     tokio::spawn(Arc::clone(&state.presence).listen(Arc::clone(&cfg), stop_rx.clone()));
+    tokio::spawn(Arc::clone(&state.hub).listen(Arc::clone(&cfg), store.clone(), stop_rx.clone()));
     tokio::spawn(revocation::sweep(
         store.clone(),
         Arc::clone(&registry),

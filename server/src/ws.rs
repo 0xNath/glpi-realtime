@@ -2,7 +2,9 @@
 
 use std::collections::HashMap;
 use std::num::NonZeroU32;
-use std::time::{Duration, Instant};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 use axum::extract::State;
 use axum::extract::ws::{CloseFrame, Message, Utf8Bytes, WebSocket, WebSocketUpgrade};
@@ -11,9 +13,11 @@ use axum::response::{IntoResponse, Response};
 use futures_util::{SinkExt, StreamExt};
 use governor::{Quota, RateLimiter};
 use tokio::sync::mpsc;
+use tokio::time::Instant;
 use tracing::{info, warn};
 
 use crate::auth;
+use crate::events::{self, Delivery};
 use crate::presence::{self, Entry};
 use crate::protocol::{self, ByeReason, ClientMsg, Decoded, ErrorCode, Room, ServerMsg, UserInfo};
 use crate::registry::{RegisterError, Registration};
@@ -70,7 +74,10 @@ pub async fn handler(
     let max = app.cfg.limits.max_message_bytes;
     ws.max_message_size(max)
         .max_frame_size(max)
-        .on_upgrade(move |socket| Connection::new(app, registration, hash, session).run(socket))
+        .on_upgrade(move |socket| {
+            let (ev_tx, ev_rx) = mpsc::channel(app.cfg.limits.outbound_queue);
+            Connection::new(app, registration, hash, session, ev_tx).run(socket, ev_rx)
+        })
 }
 
 enum End {
@@ -82,10 +89,12 @@ enum End {
     Slow,
 }
 
-#[allow(dead_code)] // grant flags are used by ticket events (step 3)
 struct Joined {
+    /// Flags GLPI computed for this session; filter the item's events.
     grant: Grant,
     since: u64,
+    /// Set by `regrant`: no event until the client subscribes again, removed at this deadline.
+    stale_until: Option<Instant>,
 }
 
 enum PushError {
@@ -101,11 +110,21 @@ struct Connection {
     rooms: HashMap<Room, Joined>,
     /// Tab activity reported by the client (active until told otherwise).
     active: bool,
+    /// Same, shared with the hub to target notifications.
+    active_flag: Arc<AtomicBool>,
+    /// Where the hub sends this connection's events and notifications.
+    ev_tx: mpsc::Sender<Delivery>,
     violations: u32,
 }
 
 impl Connection {
-    fn new(app: AppState, reg: Registration, hash: String, session: Session) -> Self {
+    fn new(
+        app: AppState,
+        reg: Registration,
+        hash: String,
+        session: Session,
+        ev_tx: mpsc::Sender<Delivery>,
+    ) -> Self {
         Self {
             app,
             reg,
@@ -113,12 +132,20 @@ impl Connection {
             session,
             rooms: HashMap::new(),
             active: true,
+            active_flag: Arc::new(AtomicBool::new(true)),
+            ev_tx,
             violations: 0,
         }
     }
 
-    async fn run(mut self, socket: WebSocket) {
+    async fn run(mut self, socket: WebSocket, mut ev_rx: mpsc::Receiver<Delivery>) {
         let limits = self.app.cfg.limits.clone();
+        self.app.hub.add_user(
+            self.session.uid,
+            self.reg.id,
+            self.ev_tx.clone(),
+            Arc::clone(&self.active_flag),
+        );
         let (mut sink, mut stream) = socket.split();
         let (tx, mut rx) = mpsc::channel::<Message>(limits.outbound_queue);
 
@@ -156,9 +183,12 @@ impl Connection {
         };
 
         while end.is_none() {
+            let stale_deadline = self.rooms.values().filter_map(|j| j.stale_until).min();
             end = tokio::select! {
                 biased;
                 _ = close_rx.changed() => Some(End::Bye(close_rx.borrow().unwrap_or(ByeReason::Shutdown))),
+                Some(d) = ev_rx.recv() => self.deliver(&tx, d),
+                _ = sleep_until(stale_deadline) => self.expire_stale(&tx).await,
                 _ = ping.tick() => {
                     if last_seen.elapsed() > idle {
                         Some(End::Bye(ByeReason::Idle))
@@ -196,7 +226,9 @@ impl Connection {
             };
         }
 
+        self.app.hub.remove_user(self.session.uid, self.reg.id);
         for room in std::mem::take(&mut self.rooms).into_keys() {
+            self.app.hub.leave(&room, self.reg.id);
             self.app.presence.leave(&room, self.reg.id).await;
         }
         let end = end.unwrap_or(End::Gone);
@@ -239,6 +271,7 @@ impl Connection {
             ClientMsg::Activity { active } => {
                 if active != self.active {
                     self.active = active;
+                    self.active_flag.store(active, Ordering::Relaxed);
                     let rooms: Vec<(Room, u64)> = self
                         .rooms
                         .iter()
@@ -254,19 +287,17 @@ impl Connection {
                 None
             }
             ClientMsg::Unsub { room } => {
-                if let Some(r) = Room::parse(&room, &self.app.cfg.security.allowed_itemtypes)
-                    && self.rooms.remove(&r).is_some()
-                {
-                    self.app.presence.leave(&r, self.reg.id).await;
+                if let Some(r) = Room::parse(&room, &self.app.cfg.security.allowed_itemtypes) {
+                    self.leave(&r).await;
                 }
-                reply(tx, &ServerMsg::Unsubscribed { room }, id)
+                reply(tx, &ServerMsg::Unsubscribed { room, reason: None }, id)
             }
             ClientMsg::Sub { room } => {
                 let Some(r) = Room::parse(&room, &self.app.cfg.security.allowed_itemtypes) else {
                     return self.error(tx, ErrorCode::BadRequest, "unknown room", id);
                 };
                 if self.rooms.contains_key(&r) {
-                    return reply(tx, &ServerMsg::Subscribed { room }, id);
+                    return self.resubscribe(tx, r, room, id).await;
                 }
                 if self.rooms.len() >= self.app.cfg.limits.max_rooms_per_connection {
                     return self.error(tx, ErrorCode::TooManyRooms, "too many rooms", id);
@@ -275,7 +306,15 @@ impl Connection {
                     Ok(Some(g)) if g.has("read") => {
                         info!(conn = %self.reg.id, uid = self.session.uid, room = %r, "subscribed");
                         let since = presence::now();
-                        self.rooms.insert(r.clone(), Joined { grant: g, since });
+                        self.rooms.insert(
+                            r.clone(),
+                            Joined {
+                                grant: g,
+                                since,
+                                stale_until: None,
+                            },
+                        );
+                        self.app.hub.join(&r, self.reg.id, self.ev_tx.clone());
                         if let Some(end) = reply(tx, &ServerMsg::Subscribed { room }, id) {
                             return Some(end);
                         }
@@ -297,6 +336,102 @@ impl Connection {
                 }
             }
         }
+    }
+
+    /// `sub` on a room already joined: re-reads the grant (after `regrant`, or to pick
+    /// up new flags). Without a grant any more, the connection leaves the room.
+    async fn resubscribe(
+        &mut self,
+        tx: &mpsc::Sender<Message>,
+        r: Room,
+        room: String,
+        id: Option<u32>,
+    ) -> Option<End> {
+        match self.app.store.grant(&self.hash, &r).await {
+            Ok(Some(g)) if g.has("read") => {
+                if let Some(j) = self.rooms.get_mut(&r) {
+                    j.grant = g;
+                    j.stale_until = None;
+                }
+                reply(tx, &ServerMsg::Subscribed { room }, id)
+            }
+            Ok(_) => {
+                info!(conn = %self.reg.id, uid = self.session.uid, room = %r, "grant gone: leaving room");
+                self.leave(&r).await;
+                self.error(tx, ErrorCode::Forbidden, "no grant for this room", id)
+            }
+            Err(e) => {
+                warn!(error = %e, "valkey error while reading grant");
+                self.error(tx, ErrorCode::Internal, "temporarily unavailable", id)
+            }
+        }
+    }
+
+    async fn leave(&mut self, r: &Room) {
+        if self.rooms.remove(r).is_some() {
+            self.app.hub.leave(r, self.reg.id);
+            self.app.presence.leave(r, self.reg.id).await;
+        }
+    }
+
+    /// Something from the hub: item events (filtered with our grant) or a notification.
+    fn deliver(&mut self, tx: &mpsc::Sender<Message>, d: Delivery) -> Option<End> {
+        let (room, batch) = match d {
+            Delivery::Text(text) => return push_text(tx, text),
+            Delivery::Room(room, batch) => (room, batch),
+        };
+        let Some(j) = self.rooms.get_mut(&room) else {
+            return None; // left meanwhile
+        };
+        if batch.regrant && j.stale_until.is_none() {
+            let timeout = Duration::from_secs(self.app.cfg.events.regrant_timeout_secs);
+            j.stale_until = Some(Instant::now() + timeout);
+            return reply(
+                tx,
+                &ServerMsg::Regrant {
+                    room: room.to_string(),
+                },
+                None,
+            );
+        }
+        if j.stale_until.is_some() {
+            return None;
+        }
+        for msg in events::frames_for(
+            &room,
+            &batch,
+            &j.grant,
+            self.session.uid,
+            &self.session.groups,
+        ) {
+            if let Some(end) = reply(tx, &msg, None) {
+                return Some(end);
+            }
+        }
+        None
+    }
+
+    /// Rooms whose `regrant` was not answered in time: rights are assumed lost.
+    async fn expire_stale(&mut self, tx: &mpsc::Sender<Message>) -> Option<End> {
+        let now = Instant::now();
+        let expired: Vec<Room> = self
+            .rooms
+            .iter()
+            .filter(|(_, j)| j.stale_until.is_some_and(|t| t <= now))
+            .map(|(r, _)| r.clone())
+            .collect();
+        for r in expired {
+            info!(conn = %self.reg.id, uid = self.session.uid, room = %r, "regrant timed out: leaving room");
+            self.leave(&r).await;
+            let msg = ServerMsg::Unsubscribed {
+                room: r.to_string(),
+                reason: Some("forbidden"),
+            };
+            if let Some(end) = reply(tx, &msg, None) {
+                return Some(end);
+            }
+        }
+        None
     }
 
     fn entry(&self, since: u64) -> Entry {
@@ -343,6 +478,21 @@ fn push(tx: &mpsc::Sender<Message>, m: Message) -> Result<(), PushError> {
     })?;
     metrics::counter!("rt_messages_out_total").increment(1);
     Ok(())
+}
+
+fn push_text(tx: &mpsc::Sender<Message>, text: String) -> Option<End> {
+    match push(tx, Message::Text(text.into())) {
+        Ok(()) => None,
+        Err(PushError::Full) => Some(End::Slow),
+        Err(PushError::Closed) => Some(End::Gone),
+    }
+}
+
+async fn sleep_until(deadline: Option<Instant>) {
+    match deadline {
+        Some(t) => tokio::time::sleep_until(t).await,
+        None => std::future::pending().await,
+    }
 }
 
 fn push_json(

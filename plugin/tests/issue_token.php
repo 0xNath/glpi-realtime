@@ -19,6 +19,8 @@ session_start();
 $uid = (int) $argv[2];
 User::$db[$uid] = ['name' => strtolower($argv[3]), 'picture' => 'ab/' . $uid . '.png'];
 Session::$uid = $uid;
+// Typical requester: sees public followups and tasks, not private ones.
+Session::$rights = ['followup' => ITILFollowup::SEEPUBLIC, 'task' => CommonITILTask::SEEPUBLIC];
 $_SESSION['glpifriendlyname'] = $argv[3];
 
 // Capture the cookie the browser would receive.

@@ -13,11 +13,19 @@ export interface ClientOptions {
   clearTimeout?: (h: unknown) => void;
   random?: () => number;
   debug?: (...args: unknown[]) => void;
+  /**
+   * Asks GLPI to recompute the grant of this session on `room` (ajax/grant.php), after
+   * the server announced that rights on the item may have changed.
+   */
+  regrant?: (room: string) => Promise<unknown>;
 }
 
 /**
  * One WebSocket per tab, shared by every feature. Rooms are remembered and
  * re-subscribed after each reconnection; the server re-checks grants every time.
+ *
+ * A room the server refuses after having accepted it (rights lost) is forgotten and
+ * reported as `unsubscribed` with `reason: "forbidden"`.
  */
 export class RealtimeClient {
   state: State = "idle";
@@ -31,8 +39,12 @@ export class RealtimeClient {
   private active = true;
   private readonly rooms = new Set<string>();
   private readonly joined = new Set<string>();
+  /** Rooms accepted at least once: a later refusal means the rights were lost. */
+  private readonly accepted = new Set<string>();
+  /** `sub` requests waiting for their reply: id → room. */
+  private readonly pendingSubs = new Map<number, string>();
   private readonly handlers = new Map<string, Set<Handler>>();
-  private readonly o: Required<Omit<ClientOptions, "debug">> & Pick<ClientOptions, "debug">;
+  private readonly o: Required<Omit<ClientOptions, "debug" | "regrant">> & Pick<ClientOptions, "debug" | "regrant">;
 
   constructor(opts: ClientOptions) {
     this.o = {
@@ -67,12 +79,13 @@ export class RealtimeClient {
   subscribe(room: string): void {
     if (this.rooms.has(room)) return;
     this.rooms.add(room);
-    if (this.state === "open") this.send({ t: "sub", room });
+    if (this.state === "open") this.sub(room);
   }
 
   unsubscribe(room: string): void {
     if (!this.rooms.delete(room)) return;
     this.joined.delete(room);
+    this.accepted.delete(room);
     if (this.state === "open") this.send({ t: "unsub", room });
   }
 
@@ -86,8 +99,33 @@ export class RealtimeClient {
     return this.joined.has(room);
   }
 
-  private send(msg: ClientMsg): void {
-    this.ws?.send(JSON.stringify({ v: VERSION, id: this.nextId++, ...msg }));
+  private send(msg: ClientMsg): number {
+    const id = this.nextId++;
+    this.ws?.send(JSON.stringify({ v: VERSION, id, ...msg }));
+    return id;
+  }
+
+  private sub(room: string): void {
+    this.pendingSubs.set(this.send({ t: "sub", room }), room);
+  }
+
+  /** The server withholds events until GLPI rewrote our grant and we subscribe again. */
+  private async regrant(room: string, ws: WebSocket): Promise<void> {
+    try {
+      await this.o.regrant?.(room);
+    } catch (e) {
+      this.o.debug?.("realtime: regrant failed", e);
+    }
+    // The server decides: subscribed again, or forbidden.
+    if (ws === this.ws && this.state === "open" && this.rooms.has(room)) this.sub(room);
+  }
+
+  private lost(room: string): void {
+    const known = this.accepted.has(room);
+    this.rooms.delete(room);
+    this.joined.delete(room);
+    this.accepted.delete(room);
+    if (known) this.emit({ v: VERSION, t: "unsubscribed", room, reason: "forbidden" });
   }
 
   private connect(): void {
@@ -115,19 +153,37 @@ export class RealtimeClient {
         this.attempt = 0;
         this.user = msg.user;
         this.joined.clear();
+        this.pendingSubs.clear();
         // Before subscribing, so that our presence entries carry the right state.
         if (!this.active) this.send({ t: "activity", active: false });
-        for (const room of this.rooms) this.send({ t: "sub", room });
+        for (const room of this.rooms) this.sub(room);
         break;
       case "subscribed":
-        if (this.rooms.has(msg.room)) this.joined.add(msg.room);
+        if (msg.id !== undefined) this.pendingSubs.delete(msg.id);
+        if (this.rooms.has(msg.room)) {
+          this.joined.add(msg.room);
+          this.accepted.add(msg.room);
+        }
         break;
       case "unsubscribed":
+        if (msg.reason === "forbidden") {
+          this.lost(msg.room);
+          return; // emitted by lost()
+        }
         this.joined.delete(msg.room);
         break;
-      case "error":
-        this.o.debug?.("realtime:", msg.code, msg.message);
+      case "regrant":
+        if (this.ws && this.rooms.has(msg.room)) void this.regrant(msg.room, this.ws);
         break;
+      case "error": {
+        this.o.debug?.("realtime:", msg.code, msg.message);
+        const room = msg.id !== undefined ? this.pendingSubs.get(msg.id) : undefined;
+        if (room !== undefined) {
+          this.pendingSubs.delete(msg.id!);
+          if (msg.code === "forbidden") this.lost(room);
+        }
+        break;
+      }
     }
     this.emit(msg);
   }
@@ -136,6 +192,7 @@ export class RealtimeClient {
     if (ws !== this.ws) return; // a previous socket
     this.ws = null;
     this.joined.clear();
+    this.pendingSubs.clear();
     if (this.state === "stopped") return;
     if (code === CLOSE_REVOKED) {
       // GLPI session ended or changed: the next GLPI page issues a new token.

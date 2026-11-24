@@ -1,7 +1,7 @@
 <?php
 
 /**
- * glpi-realtime: real-time presence, events and collaborative drafts for GLPI.
+ * glpi-realtime: real-time presence, events, notifications and collaborative drafts for GLPI.
  *
  * This plugin is the only authority on identities and rights: it writes session tokens
  * and per-item grants into Valkey; the Rust WebSocket server only reads them.
@@ -12,10 +12,11 @@
  */
 
 use Glpi\Plugin\Hooks;
+use GlpiPlugin\Realtime\Events;
 use GlpiPlugin\Realtime\Grants;
 use GlpiPlugin\Realtime\SessionToken;
 
-define('PLUGIN_REALTIME_VERSION', '0.1.0');
+define('PLUGIN_REALTIME_VERSION', '0.2.0');
 define('PLUGIN_REALTIME_MIN_GLPI', '12.0.0');
 define('PLUGIN_REALTIME_MAX_GLPI', '12.0.99');
 
@@ -68,6 +69,11 @@ function plugin_init_realtime(): void
 
     // Per-item grants, computed by GLPI when the item form is displayed.
     $PLUGIN_HOOKS[Hooks::POST_ITEM_FORM]['realtime'] = [Grants::class, 'onPostItemForm'];
+
+    // Live events and notifications: item_add, item_update, ... on tickets and their sub-items.
+    foreach (Events::hooks() as $hook => $byClass) {
+        $PLUGIN_HOOKS[$hook]['realtime'] = $byClass;
+    }
 
     // Browser client (served from public/realtime.js).
     $PLUGIN_HOOKS[Hooks::ADD_JAVASCRIPT]['realtime'] = ['realtime.js'];

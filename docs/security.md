@@ -8,7 +8,8 @@
    works as without the plugin (50 ms timeout, then Valkey is skipped for the request).
    If a check cannot be made, the server refuses (401/503, `forbidden`, `internal`).
 3. **No content in transit** except collaborative drafts (step 5), only to authorized
-   participants, never logged.
+   participants, never logged. Item events carry kinds, ids and changed field names;
+   browsers reload the content from GLPI.
 
 ## Session token
 
@@ -31,9 +32,25 @@ already prevents the cookie from being sent from another site).
 - A grant `rt:g:{hash}:{Itemtype}:{id}` is written only after `$item->can($id, READ)`,
   when GLPI displays the item, or on `ajax/grant.php` (same check).
 - Grants belong to one token: they cannot be reused by another session.
-- Grants expire with the session token. Flags (`update`, `see_private_followup`, …) will
-  filter events in later steps; private items are never sent to sessions without the
-  matching flag.
+- Grants expire with the session token. Flags (`see_public_followup`,
+  `see_private_followup`, `see_public_task`, `see_private_task`, `see_private_task_groups`)
+  filter item events with the rules of GLPI's `canViewItem()`: a session never learns
+  that a private followup or task exists unless GLPI would show it.
+- Rights changes on an item (actor removed or demoted, entity moved) delete every grant on
+  it. Members receive no further event until GLPI grants them again (`regrant`), and are
+  removed from the item after 30 s otherwise. `ajax/grant.php` deletes the grant when
+  GLPI refuses `READ`.
+- Notifications are addressed by user id, chosen by the plugin among the item's actors
+  (and technicians of its entity for unassigned items). The WebSocket frame carries the
+  item reference and the author's name only. The bell reads its list from GLPI, in the
+  recipient's session: every item is loaded and must pass `can(READ)` before its title,
+  status or requesters are returned, so entity, profile and actor changes apply at once.
+  Ajax endpoints act on the session user's rows only; "Assume" uses GLPI's
+  `canAssignToMe()`. CSRF: GLPI's own `Sec-Fetch-Site`/`Origin` check on every POST.
+- Events are published by the plugin only; the server validates every batch (kinds, item
+  types, field names, sizes) and drops malformed ones. Valkey itself is a trust boundary:
+  whoever can write to it can forge sessions, grants and events. Keep it local, behind
+  its `0660` socket and, if it also listens on TCP, an ACL or `requirepass`.
 - Only item types listed in both the plugin (`enabled_itemtypes`) and the server
   (`allowed_itemtypes`) can be subscribed to.
 
@@ -61,7 +78,12 @@ systemd sandbox: dedicated user, no capabilities, read-only system, no home, pri
 
 - Support agent anonymization (`anonymize_support_agents`) is not applied to presence
   yet: a Self-Service user who can see a ticket sees the names of the technicians on it.
-- Rights changes (actors, profile) are re-evaluated when the item is displayed again;
-  live re-evaluation (`regrant`) comes with ticket events (step 3).
+- Profile rights changes (e.g. an administrator removing "see private followups") are not
+  pushed: they apply at the user's next login, as in GLPI. Actor and entity changes are
+  re-evaluated live (`regrant`).
+- During the regrant window (≤ 30 s) a member who lost access still appears in presence
+  lists and sees them; they receive no event.
+- Approvals (`validation.*`) and documents are announced to every reader of the ticket
+  (kind and id only), even if their profile cannot open approvals.
 - Logout revocation relies on `post_init` running for `/front/logout.php` (verified by the
   end-to-end tests on GLPI 12.0.0); the session TTL is the fallback.

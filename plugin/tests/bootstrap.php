@@ -105,7 +105,14 @@ final class User
 abstract class CommonDBTM
 {
     public array $fields = [];
+    public array $updates = [];
     public bool $readable = true;
+
+    public function __construct(array $fields = [], array $updates = [])
+    {
+        $this->fields = $fields;
+        $this->updates = $updates;
+    }
 
     public function getID(): int
     {
@@ -125,6 +132,11 @@ abstract class CommonDBTM
 
 abstract class CommonITILObject extends CommonDBTM
 {
+    public const INCOMING = 1;
+    public const ASSIGNED = 2;
+    public const SOLVED = 5;
+    public const CLOSED = 6;
+
     public bool $updatable = false;
 
     public function canUpdateItem(): bool
@@ -148,27 +160,160 @@ abstract class CommonITILObject extends CommonDBTM
     }
 }
 
-final class Ticket extends CommonITILObject {}
+final class Ticket extends CommonITILObject
+{
+    /** @var array<int, array<int, list<int>>> tickets_id => type => users */
+    public static array $actors = [];
+
+    public function getFromDB($id): bool
+    {
+        if (!isset(self::$actors[$id])) {
+            return false;
+        }
+        $this->fields = ['id' => $id];
+        return true;
+    }
+
+    public function getUsers($type): array
+    {
+        return array_map(static fn(int $u) => ['users_id' => $u], self::$actors[$this->getID()][$type] ?? []);
+    }
+}
+
+final class Change extends CommonITILObject {}
+
+final class Problem extends CommonITILObject {}
+
+final class ProjectTask extends CommonDBTM {}
+
+final class ProjectTaskTeam extends CommonDBTM {}
+
+abstract class CommonITILValidation extends CommonDBTM
+{
+    public const WAITING = 2;
+    public const ACCEPTED = 3;
+    public const REFUSED = 4;
+}
+
+final class ChangeValidation extends CommonITILValidation {}
+
+final class ChangeTask extends CommonDBTM {}
+
+abstract class CommonITILActor extends CommonDBTM
+{
+    public const REQUESTER = 1;
+    public const ASSIGN    = 2;
+    public const OBSERVER  = 3;
+}
+
+final class Ticket_User extends CommonITILActor {}
+
+final class Group_Ticket extends CommonITILActor {}
+
+final class Supplier_Ticket extends CommonITILActor {}
+
+final class ITILSolution extends CommonDBTM {}
+
+final class TicketValidation extends CommonITILValidation {}
+
+final class Change_User extends CommonITILActor {}
+
+final class Change_Group extends CommonITILActor {}
+
+final class Document_Item extends CommonDBTM {}
+
+final class Group_User
+{
+    /** @var array<int, list<int>> */
+    public static array $members = [];
+
+    public static function getGroupUsers($groups_id, $condition = []): array
+    {
+        return array_map(static fn(int $u) => ['id' => $u], self::$members[$groups_id] ?? []);
+    }
+}
 
 final class Computer extends CommonDBTM {}
 
-final class ITILFollowup
+final class ITILFollowup extends CommonDBTM
 {
+    public const SEEPUBLIC = 1;
     public const SEEPRIVATE = 8192;
     public const SEEPRIVATEGROUPS = 65536;
     public static string $rightname = 'followup';
 }
 
-abstract class CommonITILTask
+abstract class CommonITILTask extends CommonDBTM
 {
+    public const SEEPUBLIC = 1;
     public const SEEPRIVATE = 8192;
     public const SEEPRIVATEGROUPS = 65536;
     public static string $rightname = 'task';
 }
 
+final class TicketTask extends CommonITILTask {}
+
 require __DIR__ . '/../setup.php';
 
+use GlpiPlugin\Realtime\Directory;
 use GlpiPlugin\Realtime\Valkey;
+
+/** Directory with canned answers, for the notification rules. */
+final class FakeDirectory implements Directory
+{
+    /** @var array<string, array<int, array{channel: string, types: list<int>}>> "Ticket:5" => actors */
+    public array $actors = [];
+    /** @var array<int, list<int>> */
+    public array $groups = [];
+    /** @var array<int, list<int>> entity => technicians */
+    public array $technicians = [];
+    /** @var array<int, list<int>> entity => others */
+    public array $others = [];
+    /** @var array<int, array<int, string>> */
+    public array $teams = [];
+    /** @var array<string, int> */
+    public array $entities = [];
+
+    public function actors(string $itemtype, int $id): array
+    {
+        return $this->actors["$itemtype:$id"] ?? [];
+    }
+
+    public function hasAssignee(string $itemtype, int $id): bool
+    {
+        foreach ($this->actors($itemtype, $id) as $a) {
+            if (in_array(CommonITILActor::ASSIGN, $a['types'], true)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public function groupMembers(int $groups_id): array
+    {
+        return $this->groups[$groups_id] ?? [];
+    }
+
+    public function technicians(int $entities_id): array
+    {
+        return $this->technicians[$entities_id] ?? [];
+    }
+
+    public function others(string $itemtype, int $entities_id): array
+    {
+        return $this->others[$entities_id] ?? [];
+    }
+
+    public function projectTaskMembers(int $projecttasks_id): array
+    {
+        return $this->teams[$projecttasks_id] ?? [];
+    }
+
+    public function entityOf(string $itemtype, int $id): int
+    {
+        return $this->entities["$itemtype:$id"] ?? 0;
+    }
+}
 
 /** $target: TCP port on 127.0.0.1, or path of a unix socket. */
 function test_valkey(string $target): Redis

@@ -18,7 +18,7 @@ GLPI works unchanged when the server, Valkey or the plugin is absent.
 Browser ──wss /ws──► nginx ──unix socket──► glpi-realtime (Rust)
    │                                            │ reads tokens, grants
    └── GLPI pages ──► nginx ──► uWSGI/PHP ──────┴──► Valkey (db 6)
-                               (plugin writes tokens, grants)
+                               (plugin writes tokens, grants; publishes events)
 ```
 
 ## Status
@@ -27,7 +27,7 @@ Browser ──wss /ws──► nginx ──unix socket──► glpi-realtime (R
 |---|---|---|
 | 1 | Server skeleton, authentication, grants, deployment | done |
 | 2 | Presence | done |
-| 3 | Ticket events, notifications | — |
+| 3 | Ticket events, notifications (bell with queues, preferences, sound, full page) | done |
 | 4 | Single editor for ticket fields | — |
 | 5 | Collaborative answers (TipTap + Yjs) | — |
 | 6 | Load test at 20 000 connections, hardening | — |
@@ -68,5 +68,6 @@ and must match the server.
 - Health: `curl --unix-socket /run/glpi-realtime/rt.sock http://localhost/health`
 - Metrics (Prometheus): `.../metrics` — `rt_connections`, `rt_handshakes_total{result}`,
   `rt_messages_in_total`, `rt_messages_out_total`, `rt_errors_total{code}`,
-  `rt_disconnects_total{reason}`, `rt_revocations_total`.
+  `rt_disconnects_total{reason}`, `rt_revocations_total`, `rt_events_total`,
+  `rt_events_rejected_total`.
 - Browser debug: `localStorage.setItem('glpi-realtime-debug', '1')`, then reload.

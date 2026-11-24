@@ -1,6 +1,12 @@
 import { ActivityTracker } from "./activity.ts";
 import { RealtimeClient } from "./client.ts";
+import { Bell, InboxController } from "./bell.ts";
+import { InboxApi, labelsFor } from "./inbox.ts";
+import { Toasts } from "./notifications.ts";
+import { InboxPage } from "./page.ts";
+import { Chime } from "./sound.ts";
 import { render } from "./presence.ts";
+import { UpdatesBanner } from "./updates.ts";
 
 declare global {
   interface Window {
@@ -20,11 +26,61 @@ function roomsIn(root: ParentNode): string[] {
   return out;
 }
 
+/**
+ * Technicians get the bell (and the full page); the self-service interface, which GLPI
+ * answers with `enabled: false`, gets toasts. The bell refreshes when the server pushes,
+ * and polls every minute only while the WebSocket is down.
+ */
+function startInbox(client: RealtimeClient, rootDoc: string): void {
+  const api = new InboxApi(rootDoc);
+  const t = labelsFor(document.documentElement.lang || navigator.language || "en");
+  void api.list().then((first) => {
+    if (!first) {
+      const toasts = new Toasts(document, rootDoc);
+      client.on("notification", (msg) => {
+        if (msg.t === "notification" && msg.alert && msg.kind !== "inbox") toasts.show(msg, client.user?.id);
+      });
+      return;
+    }
+    const pageRoot = document.getElementById("glpi-rt-inbox-page");
+    const ctl = new InboxController(api, !!pageRoot);
+    if (pageRoot) {
+      ctl.withRead = true;
+      new InboxPage(pageRoot, ctl, api, t);
+    } else {
+      const chime = new Chime(window);
+      new Bell({ doc: document, ctl, api, t, rootDoc, ring: () => chime.play() });
+    }
+    client.on("notification", (msg) => {
+      if (msg.t === "notification") ctl.refresh(msg.alert);
+    });
+    // Reconnected: notifications may have been missed meanwhile.
+    client.on("hello", () => ctl.refresh());
+    setInterval(() => {
+      if (client.state !== "open") ctl.refresh();
+    }, 60_000);
+    void ctl.load();
+  });
+}
+
 function boot(): void {
   if (window.glpiRealtime || !("WebSocket" in window)) return;
   const scheme = location.protocol === "https:" ? "wss:" : "ws:";
   const debug = localStorage?.getItem?.("glpi-realtime-debug") === "1" ? console.debug.bind(console) : undefined;
-  const client = new RealtimeClient({ url: `${scheme}//${location.host}/ws`, debug });
+  const rootDoc: string = (window as any).CFG_GLPI?.root_doc ?? "";
+  const client = new RealtimeClient({
+    url: `${scheme}//${location.host}/ws`,
+    debug,
+    // Rights on the item may have changed: GLPI recomputes our grant (or removes it).
+    regrant: (room) => {
+      const [itemtype, id] = room.split(":");
+      const q = new URLSearchParams({ itemtype, id });
+      return fetch(`${rootDoc}/plugins/realtime/ajax/grant.php?${q}`, {
+        credentials: "same-origin",
+        headers: { "X-Requested-With": "XMLHttpRequest" },
+      });
+    },
+  });
   window.glpiRealtime = client;
 
   const activity = new ActivityTracker({ doc: document, win: window, onChange: (a) => client.setActive(a) });
@@ -34,6 +90,20 @@ function boot(): void {
   client.on("presence", (msg) => {
     if (msg.t === "presence") render(document, msg.room, msg.users, client.user?.id);
   });
+  const banner = new UpdatesBanner(document);
+  client.on("event", (msg) => {
+    if (msg.t !== "event") return;
+    // Our own change made from this very tab: the page already shows it.
+    if (msg.by.id === client.user?.id && document.hasFocus()) return;
+    banner.add(msg.room, msg, client.user?.id);
+  });
+  client.on("unsubscribed", (msg) => {
+    if (msg.t !== "unsubscribed" || msg.reason !== "forbidden") return;
+    banner.lost(msg.room);
+    render(document, msg.room, [], client.user?.id);
+  });
+  startInbox(client, rootDoc);
+
   // Connection lost: the list is unknown until the server sends it again.
   client.on("bye", () => {
     document.querySelectorAll<HTMLElement>(".glpi-rt-presence").forEach((el) => (el.hidden = true));

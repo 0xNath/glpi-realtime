@@ -16,6 +16,7 @@ pub struct Config {
     pub limits: Limits,
     pub revocation: RevocationConfig,
     pub presence: PresenceConfig,
+    pub events: EventsConfig,
     pub shutdown: ShutdownConfig,
     pub log: LogConfig,
 }
@@ -176,6 +177,22 @@ impl Default for PresenceConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
+pub struct EventsConfig {
+    /// After a `regrant`, time given to a client to obtain a new grant and subscribe
+    /// again before it is removed from the room.
+    pub regrant_timeout_secs: u64,
+}
+
+impl Default for EventsConfig {
+    fn default() -> Self {
+        Self {
+            regrant_timeout_secs: 30,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
 pub struct ShutdownConfig {
     /// Time given to clients to receive `bye` before the process exits.
     pub grace_secs: u64,
@@ -240,6 +257,9 @@ impl Config {
         let p = &self.presence;
         if p.heartbeat_secs == 0 || p.ttl_secs < 2 * p.heartbeat_secs {
             return Err("presence.ttl_secs must be at least twice presence.heartbeat_secs".into());
+        }
+        if self.events.regrant_timeout_secs == 0 {
+            return Err("events.regrant_timeout_secs must be > 0".into());
         }
         if l.outbound_queue == 0 || l.max_connections == 0 || l.max_connections_per_user == 0 {
             return Err("queue and connection limits must be > 0".into());

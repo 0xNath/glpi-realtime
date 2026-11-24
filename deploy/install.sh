@@ -87,7 +87,7 @@ systemctl reload nginx
 echo "==> GLPI plugin"
 rm -rf "$GLPI/plugins/realtime.new"
 mkdir "$GLPI/plugins/realtime.new"
-cp -r "$ROOT/plugin/setup.php" "$ROOT/plugin/hook.php" "$ROOT/plugin/src" "$ROOT/plugin/ajax" "$ROOT/plugin/public" \
+cp -r "$ROOT/plugin/setup.php" "$ROOT/plugin/hook.php" "$ROOT/plugin/src" "$ROOT/plugin/ajax" "$ROOT/plugin/front" "$ROOT/plugin/public" \
     "$GLPI/plugins/realtime.new/"
 chown -R root:root "$GLPI/plugins/realtime.new"
 find "$GLPI/plugins/realtime.new" -type d -exec chmod 755 {} + -o -type f -exec chmod 644 {} +

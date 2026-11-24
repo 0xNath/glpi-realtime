@@ -1,8 +1,10 @@
 //! Read-only view of what the GLPI plugin writes into Valkey.
 //!
 //! Keys (prefix configurable, default `rt:`):
-//! - `rt:s:{token_hash}` hash `uid`, `name` — session, TTL slid by every GLPI request.
+//! - `rt:s:{token_hash}` hash `uid`, `name`, `avatar`, `groups` — session, TTL slid by
+//!   every GLPI request.
 //! - `rt:g:{token_hash}:{Itemtype}:{id}` hash of `0`/`1` flags — rights computed by GLPI.
+//! - `rt:ev` channel — item events and notifications (see `events`).
 
 use std::collections::HashMap;
 
@@ -17,6 +19,8 @@ pub struct Session {
     pub uid: u64,
     pub name: String,
     pub avatar: Option<Avatar>,
+    /// GLPI groups of the user (private tasks of "my groups").
+    pub groups: Vec<u64>,
 }
 
 /// Rights of one session on one item, as computed by GLPI when the item was displayed.
@@ -28,6 +32,12 @@ pub struct Grant {
 impl Grant {
     pub fn has(&self, flag: &str) -> bool {
         self.flags.get(flag).copied().unwrap_or(false)
+    }
+
+    pub fn from_flags(flags: impl IntoIterator<Item = (String, bool)>) -> Self {
+        Self {
+            flags: flags.into_iter().collect(),
+        }
     }
 }
 
@@ -89,6 +99,10 @@ impl Store {
             uid,
             name: h.get("name").cloned().unwrap_or_default(),
             avatar: h.get("avatar").and_then(|a| Avatar::from_json(a)),
+            groups: h
+                .get("groups")
+                .and_then(|g| serde_json::from_str::<Vec<u64>>(g).ok())
+                .unwrap_or_default(),
         }))
     }
 
@@ -97,8 +111,9 @@ impl Store {
         if h.is_empty() {
             return Ok(None);
         }
-        let flags = h.into_iter().map(|(k, v)| (k, v == "1")).collect();
-        Ok(Some(Grant { flags }))
+        Ok(Some(Grant::from_flags(
+            h.into_iter().map(|(k, v)| (k, v == "1")),
+        )))
     }
 
     /// For each session hash, whether its key still exists. Pipelined in chunks.
@@ -120,6 +135,11 @@ impl Store {
 
     pub fn presence_key(&self, room: &Room) -> String {
         format!("{}p:{room}", self.prefix)
+    }
+
+    /// Pub/sub channel on which the plugin publishes item events and notifications.
+    pub fn events_channel(&self) -> String {
+        format!("{}ev", self.prefix)
     }
 
     /// Pub/sub channel announcing presence changes to every instance.

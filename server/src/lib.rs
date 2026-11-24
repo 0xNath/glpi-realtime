@@ -6,6 +6,7 @@
 pub mod auth;
 pub mod avatar;
 pub mod config;
+pub mod events;
 pub mod presence;
 pub mod protocol;
 pub mod registry;
