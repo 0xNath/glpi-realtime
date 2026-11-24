@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/0xNath/glpi-realtime/security/advisories/new
+    about: Report it privately, never in a public issue (see SECURITY.md).
+  - name: Installation problem
+    url: https://github.com/0xNath/glpi-realtime/blob/master/docs/troubleshooting.md
+    about: The troubleshooting guide explains what the plugin's checks report.

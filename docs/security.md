@@ -52,8 +52,17 @@ already prevents the cookie from being sent from another site).
   types, field names, sizes) and drops malformed ones. Valkey itself is a trust boundary:
   whoever can write to it can forge sessions, grants and events. Keep it local, behind
   its `0660` socket and, if it also listens on TCP, an ACL or `requirepass`.
-- Only item types listed in both the plugin (`enabled_itemtypes`) and the server
-  (`allowed_itemtypes`) can be subscribed to.
+- A room is joined only with a grant the plugin wrote for that very item, and the plugin
+  writes grants for its `enabled_itemtypes` only: the server follows that list. A room
+  name is `<PHP class name>:<id>` (canonical id, at most 100 characters of class name,
+  checked before it becomes part of a Valkey key); `[security] allowed_itemtypes`, when
+  set, restricts the item types further (defense in depth).
+- Valkey restarted without persistence: sessions and grants are gone. The server closes
+  the sockets as revoked (sweep); a tab then makes one GLPI request
+  (`ajax/session.php`): GLPI, which still knows the user, issues a new token (logged out:
+  refused, the tab stays disconnected), and grants are asked again through
+  `ajax/grant.php`, so GLPI decides again on every item. At most one such request per
+  tab every 30 s.
 
 ## Single editor
 

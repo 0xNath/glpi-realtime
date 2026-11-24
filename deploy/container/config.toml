@@ -1,0 +1,16 @@
+# glpi-realtime in a container: listens on TCP, Valkey is the "valkey" service. Everything
+# else comes from the environment (GLPI_RT_<SECTION>__<KEY>), at least the browsers' origin:
+#   GLPI_RT_SECURITY__ALLOWED_ORIGINS='["https://glpi.example.org"]'
+[listen]
+type = "tcp"
+addr = "0.0.0.0:8090"
+
+[valkey]
+url = "redis://valkey:6379"
+db = 6
+
+[revocation]
+keyspace_events = true
+
+[log]
+format = "json"

@@ -1,0 +1,19 @@
+name: Feature request
+description: An idea to make real-time work in GLPI better.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What you need
+      description: The situation in GLPI where it would help (who, on which items, what they do).
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How it could work
+  - type: input
+    id: glpi
+    attributes:
+      label: GLPI version you use

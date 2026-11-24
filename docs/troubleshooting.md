@@ -59,7 +59,8 @@ php bin/console plugin:activate realtime
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| Nobody shown on a computer, project or other item (tickets work) | Its type is not enabled: an upgraded install keeps its item types | The "Item types" check lists what is available, with the plugin command and the `config.toml` line to enable them (both sides, then restart the server). |
+| Nobody shown on a computer, project or other item (tickets work) | Its type is not enabled: an upgraded install keeps its item types | Enable it in Setup > Plugins > Realtime, "Settings". If the "Item types" check warns, `config.toml` still restricts them: remove `allowed_itemtypes` from `[security]` and restart the server. |
+| Real-time stops after Valkey restarted (before 0.7.0) | The server's listeners did not reconnect | Upgrade (0.7.0 reconnects and subscribes again), or restart the server. |
 | Someone stays shown after closing their tab | The browser did not close the connection (sleep, network loss) | They disappear after `limits.idle_timeout_secs` (90 s by default). |
 | A self-service user sees support agents' names | The entity does not anonymize them | GLPI's entity setting "Anonymize support agents": the real-time layer applies it too. |
 

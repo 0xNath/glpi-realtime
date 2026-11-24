@@ -65,13 +65,59 @@ pub fn fred_config(cfg: &ValkeyConfig) -> Result<Config, Error> {
     Ok(c)
 }
 
+/// Reconnection after a loss of Valkey: at once, then backing off up to 5 s, forever.
+fn reconnect_policy() -> ReconnectPolicy {
+    ReconnectPolicy::new_exponential(0, 100, 5_000, 2)
+}
+
+/// A pub/sub client that does not give up. Its first connection is retried until Valkey
+/// answers (the server may start before it); after a loss it reconnects and subscribes
+/// again (`manage_subscriptions`). None when the server stops meanwhile.
+pub async fn subscriber(
+    cfg: &ValkeyConfig,
+    what: &'static str,
+    stop: &mut tokio::sync::watch::Receiver<bool>,
+) -> Option<fred::clients::SubscriberClient> {
+    let mut delay = std::time::Duration::from_millis(250);
+    loop {
+        let attempt = fred_config(cfg).and_then(|c| {
+            Builder::from_config(c)
+                .with_connection_config(|c| {
+                    c.connection_timeout = std::time::Duration::from_secs(2);
+                })
+                .set_policy(reconnect_policy())
+                .build_subscriber_client()
+        });
+        let error = match attempt {
+            Ok(sub) => match sub.init().await {
+                Ok(_) => {
+                    let _resubscribe = sub.manage_subscriptions();
+                    tracing::info!(what, "subscriber connected");
+                    return Some(sub);
+                }
+                Err(e) => {
+                    let _ = sub.quit().await;
+                    e
+                }
+            },
+            Err(e) => e,
+        };
+        tracing::warn!(what, error = %error, retry_in_ms = delay.as_millis() as u64, "waiting for Valkey");
+        tokio::select! {
+            _ = stop.changed() => return None,
+            _ = tokio::time::sleep(delay) => {}
+        }
+        delay = (delay * 2).min(std::time::Duration::from_secs(5));
+    }
+}
+
 impl Store {
     pub async fn connect(cfg: &ValkeyConfig) -> Result<Self, Error> {
         let pool = Builder::from_config(fred_config(cfg)?)
             .with_connection_config(|c| {
                 c.connection_timeout = std::time::Duration::from_secs(2);
             })
-            .set_policy(ReconnectPolicy::new_exponential(0, 100, 5_000, 2))
+            .set_policy(reconnect_policy())
             .build_pool(cfg.pool_size.max(1))?;
         pool.init().await?;
         Ok(Self {

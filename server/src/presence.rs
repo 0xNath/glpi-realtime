@@ -23,7 +23,7 @@ use crate::avatar::{Anon, Avatar};
 use crate::config::Config;
 use crate::protocol::{self, ByeReason, Room, ServerMsg};
 use crate::registry::Registry;
-use crate::store::{Store, fred_config};
+use crate::store::Store;
 
 /// Stored in Valkey, one per connection.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -350,16 +350,9 @@ impl Presence {
 
     /// Reacts to changes announced by other instances.
     pub async fn listen(self: Arc<Self>, cfg: Arc<Config>, mut stop: watch::Receiver<bool>) {
-        let sub = match fred_config(&cfg.valkey)
-            .and_then(|c| Builder::from_config(c).build_subscriber_client())
-        {
-            Ok(s) => s,
-            Err(e) => return warn!(error = %e, "presence: subscriber disabled"),
+        let Some(sub) = crate::store::subscriber(&cfg.valkey, "presence", &mut stop).await else {
+            return;
         };
-        if let Err(e) = sub.init().await {
-            return warn!(error = %e, "presence: subscriber disabled");
-        }
-        let _resub = sub.manage_subscriptions();
         let mut rx = sub.message_rx();
         if let Err(e) = sub.subscribe(self.store.presence_channel()).await {
             return warn!(error = %e, "presence: subscriber disabled");

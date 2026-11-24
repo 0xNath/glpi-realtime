@@ -81,7 +81,14 @@ Config::$values = ['enabled_itemtypes' => '["Ticket","Change","Problem"]'];
 GlpiPlugin\Realtime\Settings::reset();
 $res = results();
 check($res['itemtypes'][0] === Health::INFO && str_contains($res['itemtypes'][1], 'Computer'), 'other item types available: info, naming them');
-check(str_contains($res['itemtypes'][2], 'enabled_itemtypes \'["Ticket","Change","Problem","Project"') && str_contains($res['itemtypes'][2], 'allowed_itemtypes = ["Ticket", "Change", "Problem", "Project"'), 'with the plugin command and the config.toml line');
+check(str_contains($res['itemtypes'][2], 'settings'), 'and where to enable them');
+
+// A server that follows GLPI's list (no allowed_itemtypes): nothing to keep in sync.
+$r->set(Valkey::key('srv:a'), json_encode(['allowed_itemtypes' => []] + json_decode((string) $r->get(Valkey::key('srv:a')), true)));
+Config::$values = ['enabled_itemtypes' => '["Ticket","Glpi\\\\CustomAsset\\\\NoSuchAsset"]'];
+GlpiPlugin\Realtime\Settings::reset();
+$res = results();
+check($res['itemtypes'][0] !== Health::WARNING, 'server following GLPI: no warning');
 Config::$values = [];
 GlpiPlugin\Realtime\Settings::reset();
 

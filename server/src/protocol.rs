@@ -17,17 +17,41 @@ pub struct Room {
     pub id: u64,
 }
 
+/// Longest item type accepted (a PHP class name, namespace included).
+const MAX_ITEMTYPE: usize = 100;
+
+/// A PHP class name: `Ticket`, `Glpi\CustomAsset\ServerAsset`.
+fn is_class_name(s: &str) -> bool {
+    let mut parts = s.split('\\');
+    s.len() <= MAX_ITEMTYPE
+        && parts.all(|p| {
+            let mut c = p.chars();
+            c.next()
+                .is_some_and(|f| f.is_ascii_alphabetic() || f == '_')
+                && c.all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+        })
+}
+
 impl Room {
+    /// `<Itemtype>:<id>`. With an empty `allowed_itemtypes`, any item type GLPI grants
+    /// (the plugin's `enabled_itemtypes`): every room needs a grant written by GLPI for
+    /// that very item anyway. A non-empty list restricts them.
     pub fn parse(s: &str, allowed_itemtypes: &[String]) -> Option<Room> {
         let (itemtype, id) = s.split_once(':')?;
+        // One name per room: digits only, no leading zero nor sign ("Ticket:09" is not 9).
+        if id.starts_with('0') || !id.bytes().all(|b| b.is_ascii_digit()) {
+            return None;
+        }
         let id: u64 = id.parse().ok().filter(|&n| n > 0)?;
-        allowed_itemtypes
-            .iter()
-            .any(|t| t == itemtype)
-            .then(|| Room {
-                itemtype: itemtype.to_string(),
-                id,
-            })
+        let allowed = if allowed_itemtypes.is_empty() {
+            is_class_name(itemtype)
+        } else {
+            allowed_itemtypes.iter().any(|t| t == itemtype)
+        };
+        allowed.then(|| Room {
+            itemtype: itemtype.to_string(),
+            id,
+        })
     }
 }
 
@@ -322,6 +346,31 @@ mod tests {
         assert!(Room::parse("Computer:1", &types()).is_none());
         assert!(Room::parse("Ticket:1:2", &types()).is_none());
         assert!(Room::parse("Ticket", &types()).is_none());
+    }
+
+    #[test]
+    fn rooms_follow_glpi_without_a_list() {
+        let any: Vec<String> = vec![];
+        assert!(Room::parse("Computer:1", &any).is_some());
+        assert_eq!(
+            Room::parse("Glpi\\CustomAsset\\ServerAsset:4", &any).map(|r| r.to_string()),
+            Some("Glpi\\CustomAsset\\ServerAsset:4".to_string())
+        );
+        for bad in [
+            "Ticket:09",
+            "Ticket:+9",
+            "Ticket: 9",
+            "9Ticket:1",
+            "Tick et:1",
+            "Ticket\\:1",
+            "\\Ticket:1",
+            ":1",
+            "Ti-cket:1",
+            "Ticket:0",
+        ] {
+            assert!(Room::parse(bad, &any).is_none(), "{bad}");
+        }
+        assert!(Room::parse(&format!("{}:1", "A".repeat(101)), &any).is_none());
     }
 
     #[test]

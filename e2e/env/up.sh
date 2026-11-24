@@ -15,6 +15,8 @@
 #   E2E_ENV_FILE             [<repo>/.e2e.local.env]
 #   SERVER_SOURCE            [server-build: compiles the server; server-prebuilt:
 #                            e2e/env/bin/glpi-realtime]
+#   RELEASE_ARCHIVE          a release archive (glpi-realtime-<version>-linux-x86_64.tar.gz):
+#                            installs it, server and plugin, instead of this repository
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
@@ -35,6 +37,15 @@ find "$HERE/.old" -mindepth 1 ! -name .gitignore -exec rm -rf {} +
 if [[ -n "${UPGRADE_FROM:-}" ]]; then
     echo "==> Plugin $UPGRADE_FROM, for the upgrade test"
     git -C "$ROOT" archive "$UPGRADE_FROM" plugin | tar -x -C "$HERE/.old"
+fi
+
+# The release installed: this repository, or a published archive.
+find "$HERE/release" -mindepth 1 ! -name .gitignore -exec rm -rf {} +
+if [[ -n "${RELEASE_ARCHIVE:-}" ]]; then
+    echo "==> Release archive $(basename "$RELEASE_ARCHIVE")"
+    tar -xzf "$RELEASE_ARCHIVE" -C "$HERE/release" --strip-components=1
+    [[ -x "$HERE/release/bin/glpi-realtime" ]] || die "no bin/glpi-realtime in $RELEASE_ARCHIVE"
+    export RELEASE_SOURCE=release-archive
 fi
 
 echo "==> GLPI $GLPI_VERSION: building and starting (from scratch)"
@@ -114,6 +125,7 @@ RT_COMPUTER_ID=$(id computer)
 RT_PROJECT_ID=$(id project)
 RT_PROJECT_TASK_ID=$(id project_task)
 E2E_INSECURE=1
+E2E_VALKEY_RESTART=$COMPOSE -f $HERE/compose.yaml restart valkey
 ENV
 echo "   settings of the tests: $ENV_FILE"
 

@@ -1,0 +1,21 @@
+# glpi-realtime server image: the static binary only (no shell, no package), as an
+# unprivileged user. Published by the CI as ghcr.io/0xnath/glpi-realtime for amd64 and
+# arm64. Build it yourself from a release archive's binary, or the CI's:
+#   cp bin/glpi-realtime deploy/container/bin/amd64/ && docker build deploy/container
+#
+# Configuration: /etc/glpi-realtime/config.toml (the defaults below), overridden with
+# environment variables GLPI_RT_<SECTION>__<KEY>, e.g.
+#   GLPI_RT_SECURITY__ALLOWED_ORIGINS='["https://glpi.example.org"]'
+#   GLPI_RT_VALKEY__URL=redis://valkey:6379
+FROM scratch
+ARG TARGETARCH=amd64
+COPY bin/${TARGETARCH}/glpi-realtime /usr/local/bin/glpi-realtime
+COPY config.toml /etc/glpi-realtime/config.toml
+USER 65534:65534
+EXPOSE 8090
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s CMD ["/usr/local/bin/glpi-realtime", "--healthcheck"]
+ENTRYPOINT ["/usr/local/bin/glpi-realtime"]
+LABEL org.opencontainers.image.title="glpi-realtime" \
+      org.opencontainers.image.description="Real-time collaboration server for GLPI" \
+      org.opencontainers.image.source="https://github.com/0xNath/glpi-realtime" \
+      org.opencontainers.image.licenses="GPL-3.0-or-later"

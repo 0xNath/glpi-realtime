@@ -18,8 +18,9 @@ shown live, one editor at a time, and instant notifications.
 | Mentions ("@name") notified at once | ✓ | |
 
 GLPI works unchanged when the server, Valkey or the plugin is absent. Documentation:
-[install](#install), [troubleshooting](docs/troubleshooting.md),
-[security model](docs/security.md), [protocol](docs/protocol.md),
+[install](#install) (or [with containers](#with-containers)),
+[troubleshooting](docs/troubleshooting.md), [security model](docs/security.md)
+([reporting a vulnerability](SECURITY.md)), [protocol](docs/protocol.md),
 [changes](CHANGELOG.md).
 
 | | |
@@ -86,7 +87,7 @@ from `deploy/examples/`, and upgrades never touch them.
 From [Releases](https://github.com/0xNath/glpi-realtime/releases):
 
 ```bash
-VERSION=0.6.0 ARCH=$(uname -m)                  # x86_64 or aarch64
+VERSION=0.7.0 ARCH=$(uname -m)                  # x86_64 or aarch64
 BASE=https://github.com/0xNath/glpi-realtime/releases/download/v$VERSION
 curl -LO "$BASE/glpi-realtime-$VERSION-linux-$ARCH.tar.gz" -LO "$BASE/SHA256SUMS"
 sha256sum --check --ignore-missing SHA256SUMS
@@ -126,7 +127,7 @@ with the checks of step 6 (errors are expected on a first install, before steps 
 sudo useradd --system --no-create-home --shell /usr/sbin/nologin glpi-realtime
 sudo install -d -m 750 -o root -g glpi-realtime /etc/glpi-realtime
 sudo install -m 640 -o root -g glpi-realtime deploy/examples/config.toml.example /etc/glpi-realtime/config.toml
-sudoedit /etc/glpi-realtime/config.toml      # allowed_origins, listen.group, valkey.url, allowed_itemtypes
+sudoedit /etc/glpi-realtime/config.toml      # allowed_origins, listen.group, valkey.url
 glpi-realtime --config /etc/glpi-realtime/config.toml --check
 
 sudo cp deploy/examples/glpi-realtime.service /etc/systemd/system/
@@ -135,8 +136,7 @@ sudo systemctl daemon-reload && sudo systemctl enable --now glpi-realtime
 ```
 
 - `allowed_origins`: GLPI's address, e.g. `["https://glpi.example.org"]`.
-- `allowed_itemtypes`: the item types with real-time features, the same as the plugin's
-  `enabled_itemtypes` ([Item types](#item-types)); the example lists the defaults.
+- The item types come from GLPI (the plugin's settings): nothing to keep in sync here.
 - `listen.group` and the unit's `SupplementaryGroups`: the web server's group
   (Debian/Ubuntu: `www-data`, RHEL/Fedora: `nginx` or `apache`), so that only it can open
   the socket (`0660`); add Valkey's socket group to `SupplementaryGroups`.
@@ -155,17 +155,9 @@ Start from [`deploy/examples/valkey.conf.example`](deploy/examples/valkey.conf.e
   forge sessions.
 
 Give that user's password to the server (`config.toml`: `[valkey] username`, `password`)
-and to GLPI (stored encrypted with GLPI's key):
-
-```bash
-cd /var/www/glpi       # as the user running GLPI (here www-data)
-sudo -u www-data php bin/console config:set --context=plugin:realtime valkey_username glpi-rt
-sudo -u www-data php bin/console config:set --context=plugin:realtime valkey_password '…'
-```
-
-The plugin's other settings (`valkey_socket`, `valkey_db`, `key_prefix`, `cookie_name`)
-default to the values of `config.toml.example`: change both sides together
-([Configuration](#configuration)).
+and to GLPI: **Setup > Plugins > Realtime**, "Settings" (stored encrypted with GLPI's
+key). The plugin's other settings (Valkey socket or host, database, key prefix, cookie
+name) default to the values of `config.toml.example`: change both sides together.
 
 ### 5. Web server (once)
 
@@ -226,22 +218,27 @@ monitoring tools expect it: 0 everything works, 1 warnings, 2 errors.
 Something wrong? [docs/troubleshooting.md](docs/troubleshooting.md) explains the usual
 causes.
 
+### With containers
+
+The server is also published as an image, `ghcr.io/0xnath/glpi-realtime:<version>` (amd64
+and arm64, a static binary as an unprivileged user, configured with
+`GLPI_RT_<SECTION>__<KEY>` variables, `--healthcheck` for the health check, signed with a
+build provenance attestation). [`deploy/examples/compose.yaml`](deploy/examples/compose.yaml)
+runs GLPI's official image with it, Valkey, MariaDB and Caddy (HTTPS, `/ws` to the server,
+[`Caddyfile.example`](deploy/examples/Caddyfile.example)); its header lists the steps.
+
 ### Upgrading
 
 Download the new release (step 1) and run step 2 again. Configuration is never changed
 by an upgrade; [CHANGELOG.md](CHANGELOG.md) says when you have to edit it, e.g.:
 
+- **0.7.0**: the server follows the item types enabled in GLPI: remove
+  `allowed_itemtypes` from `[security]` in `config.toml` (it now only restricts them),
+  then restart the server. Item types and the other plugin settings are changed in
+  Setup > Plugins > Realtime, "Settings".
 - **0.6.0**: projects, project tasks and assets get presence and a single editor; an
-  existing install keeps its item types (the checks list what is available). To enable
-  them, on both sides (as the user running GLPI, in GLPI's directory):
-
-  ```bash
-  php bin/console config:set --context=plugin:realtime enabled_itemtypes \
-    '["Ticket","Change","Problem","Project","ProjectTask","Computer","Monitor","NetworkEquipment","Peripheral","Phone","Printer"]'
-  ```
-
-  and the same list in `config.toml`, `[security] allowed_itemtypes`, then restart the
-  server.
+  existing install keeps its item types (the checks list what is available): enable
+  them in the plugin's settings.
 - **0.3.0**: add `"Change", "Problem"` to `security.allowed_itemtypes` in `config.toml`.
 
 ## Build and test
@@ -275,31 +272,45 @@ e2e/env/down.sh
 The CI runs them on GLPI 11.0, 12.0.0 and the latest 12.0, after an upgrade from the
 previous release (`UPGRADE_FROM`), and, as warnings only, on the next 12.0 and GLPI's main
 branch. They include accessibility checks (axe-core, WCAG 2.1 AA) of the real-time
-layer's elements. The README's screenshots come from the same environment:
-`npx playwright test --config screenshots.config.ts` in `e2e/`.
+layer's elements and a Valkey restart. The README's screenshots come from the same
+environment: `npx playwright test --config screenshots.config.ts` in `e2e/`.
+
+The CI also guards against performance regressions (2 000 connections, every p99 under
+1 s) and fuzzes what browsers and Valkey send the server:
+
+```bash
+cd server && cargo run --release --example loadtest -- --valkey unix:///path/to/valkey.sock \
+    --connections 2000 --rooms 200 --check --max-p99-ms 1000 --max-rss-mib 768
+cargo +nightly fuzz run message --fuzz-dir fuzz     # and room, batch, handshake (cargo-fuzz)
+```
 
 Release archives (what users install): `scripts/release.sh` builds
 `dist/glpi-realtime-<version>-linux-<arch>.tar.gz` (static binary when the
 `x86_64-unknown-linux-musl` target is installed, plugin, `deploy/`, docs),
 `dist/glpi-plugin-realtime-<version>.tar.bz2` and `SHA256SUMS`. The CI publishes them for
-`v*` tags, once every suite, the dependency audits and the end-to-end tests pass.
+`v*` tags, once every suite, the dependency audits, the load test, the fuzzing and the
+end-to-end tests pass, with the server's image; then it checks what users get: the
+published archive (checksum, attestation) installed in a disposable GLPI
+(`RELEASE_ARCHIVE` of `e2e/env/up.sh`) and the end-to-end tests run on it.
 `deploy/install.sh` also works from a built repository.
 
 ## Configuration
 
-See [`deploy/examples/config.toml.example`](deploy/examples/config.toml.example). Each value can be overridden
-with `GLPI_RT_<SECTION>__<KEY>`. Plugin settings (Valkey socket and db, key prefix, cookie
-name, enabled item types) are in GLPI's configuration table, context `plugin:realtime`,
-and must match the server.
+Server: [`deploy/examples/config.toml.example`](deploy/examples/config.toml.example);
+each value can be overridden with `GLPI_RT_<SECTION>__<KEY>`. Plugin: **Setup > Plugins >
+Realtime**, "Settings" (item types; Valkey socket or host, database, user, password; key
+prefix, cookie name, WebSocket path), checked before they are saved; Valkey, key prefix
+and cookie name must match the server. (Scripts: `bin/console config:set
+--context=plugin:realtime <name> <value>`.)
 
 ### Item types
 
-`enabled_itemtypes` (plugin) and `[security] allowed_itemtypes` (server) list the same
-classes; the checks warn while they differ. Default: tickets, changes, problems, projects,
-project tasks, computers, monitors, network devices, peripherals, phones and printers.
-Tickets, changes and problems get every feature; any other GLPI item with a standard form
-gets presence and the single editor of its form, custom assets of GLPI 11+ included, by
-class (e.g. `Glpi\CustomAsset\ServerAsset`).
+Chosen in the plugin's settings; the server follows them (a room needs a grant GLPI wrote
+for that very item). Default: tickets, changes, problems, projects, project tasks,
+computers, monitors, network devices, peripherals, phones and printers; the settings also
+offer other GLPI items and the custom assets of GLPI 11+. Tickets, changes and problems
+get every feature; the others get presence and the single editor of their form. A
+`[security] allowed_itemtypes` list in `config.toml` restricts the server further.
 
 ### Mentions
 
@@ -331,7 +342,10 @@ checks that the template matches the sources (`scripts/i18n.py --check`).
 
 ## Operations
 
-- Health: `curl --unix-socket /run/glpi-realtime/rt.sock http://localhost/health`
+- Health: `glpi-realtime --healthcheck` (exit code), or
+  `curl --unix-socket /run/glpi-realtime/rt.sock http://localhost/health`
+- Valkey restarted, even without persistence: the server reconnects and subscribes again;
+  open tabs get a new session from GLPI and their grants again, without reloading.
 - Metrics (Prometheus): `.../metrics` — `rt_connections`, `rt_handshakes_total{result}`,
   `rt_messages_in_total`, `rt_messages_out_total`, `rt_errors_total{code}`,
   `rt_disconnects_total{reason}`, `rt_revocations_total`, `rt_events_total`,

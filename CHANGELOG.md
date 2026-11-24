@@ -3,6 +3,32 @@
 Server and plugin share one version number. Upgrades never change your configuration:
 "Configuration" lists what to edit yourself.
 
+## 0.7.0
+
+- Plugin settings in GLPI: Setup > Plugins > Realtime has a "Settings" form (item types,
+  among the default ones, other GLPI items and the custom assets of GLPI 11+; Valkey
+  socket or host, database, user, password; key prefix, cookie name, WebSocket path),
+  checked before they are saved.
+- One list of item types: the server follows the types enabled in GLPI (every room
+  needs a grant GLPI wrote for that very item); `[security] allowed_itemtypes` only
+  restricts them now, and the example no longer sets it.
+- Valkey restarts: the server's listeners (events, presence, locks, drafts, keyspace
+  notifications) reconnect and subscribe again (before, real-time stopped until the
+  server was restarted), and wait for Valkey when the server starts first. Open tabs whose
+  session Valkey lost get a new one from GLPI (`ajax/session.php`) and their grants
+  again, without reloading.
+- Container image `ghcr.io/0xnath/glpi-realtime` (amd64, arm64; static binary, no shell,
+  unprivileged, attested) and an example with GLPI's image, Valkey, MariaDB and Caddy
+  (`deploy/examples/compose.yaml`); `glpi-realtime --healthcheck`.
+- Room names are canonical (`Ticket:09` is refused; found by fuzzing).
+- `SECURITY.md` (private reporting), issue and pull request templates.
+- CI: load test with thresholds (2 000 connections, p99 under 1 s), fuzzing of what
+  browsers and Valkey send the server, end-to-end tests of a Valkey restart and of the
+  settings, and of each published release (archive checked and installed, image run).
+
+Configuration: remove `allowed_itemtypes` from `[security]` in `config.toml` (or keep it
+to restrict the item types), then restart the server.
+
 ## 0.6.0
 
 - Mentions: a user mentioned with "@" (GLPI's mentions) in a description, followup, task,

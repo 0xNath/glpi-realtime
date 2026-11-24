@@ -26,7 +26,7 @@ use crate::events::{Delivery, Hub};
 use crate::locks::Holder;
 use crate::presence::{Entry, now};
 use crate::protocol::{self, Room, ServerMsg};
-use crate::store::{Grant, Store, fred_config};
+use crate::store::{Grant, Store};
 
 /// Largest draft accepted (HTML, after the client removed pasted images).
 pub const MAX_HTML: usize = 48 * 1024;
@@ -389,16 +389,9 @@ impl Drafts {
     }
 
     pub async fn listen(self: Arc<Self>, cfg: Arc<Config>, mut stop: watch::Receiver<bool>) {
-        let sub = match fred_config(&cfg.valkey)
-            .and_then(|c| Builder::from_config(c).build_subscriber_client())
-        {
-            Ok(s) => s,
-            Err(e) => return warn!(error = %e, "drafts: subscriber disabled"),
+        let Some(sub) = crate::store::subscriber(&cfg.valkey, "drafts", &mut stop).await else {
+            return;
         };
-        if let Err(e) = sub.init().await {
-            return warn!(error = %e, "drafts: subscriber disabled");
-        }
-        let _resub = sub.manage_subscriptions();
         let mut rx = sub.message_rx();
         if let Err(e) = sub.subscribe(self.channel()).await {
             return warn!(error = %e, "drafts: subscriber disabled");

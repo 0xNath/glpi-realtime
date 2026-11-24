@@ -11,7 +11,7 @@ db = 6
 
 [security]
 allowed_origins = ["https://localhost:8443"]
-allowed_itemtypes = ["Ticket", "Change", "Problem", "Project", "ProjectTask", "Computer", "Monitor", "NetworkEquipment", "Peripheral", "Phone", "Printer"]
 
 [revocation]
 keyspace_events = true
+sweep_interval_secs = 3   # the resilience test restarts Valkey: sessions lost, found by the sweep

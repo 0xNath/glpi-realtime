@@ -24,7 +24,7 @@ use uuid::Uuid;
 use crate::config::Config;
 use crate::protocol::{self, ByeReason, Room, ServerMsg};
 use crate::registry::Registry;
-use crate::store::{Grant, Store, fred_config};
+use crate::store::{Grant, Store};
 
 pub const MAX_EVENTS_PER_BATCH: usize = 64;
 pub const MAX_FIELDS: usize = 64;
@@ -393,16 +393,9 @@ impl Hub {
         store: Store,
         mut stop: watch::Receiver<bool>,
     ) {
-        let sub = match fred_config(&cfg.valkey)
-            .and_then(|c| Builder::from_config(c).build_subscriber_client())
-        {
-            Ok(s) => s,
-            Err(e) => return warn!(error = %e, "events: subscriber disabled"),
+        let Some(sub) = crate::store::subscriber(&cfg.valkey, "events", &mut stop).await else {
+            return;
         };
-        if let Err(e) = sub.init().await {
-            return warn!(error = %e, "events: subscriber disabled");
-        }
-        let _resub = sub.manage_subscriptions();
         let mut rx = sub.message_rx();
         if let Err(e) = sub.subscribe(store.events_channel()).await {
             return warn!(error = %e, "events: subscriber disabled");

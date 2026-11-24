@@ -1,0 +1,43 @@
+[package]
+name = "glpi-realtime-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+glpi-realtime = { path = ".." }
+
+# Not part of the server's workspace: built with nightly by `cargo fuzz` only.
+[workspace]
+
+[[bin]]
+name = "message"
+path = "fuzz_targets/message.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "room"
+path = "fuzz_targets/room.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "batch"
+path = "fuzz_targets/batch.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "handshake"
+path = "fuzz_targets/handshake.rs"
+test = false
+doc = false
+bench = false

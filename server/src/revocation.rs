@@ -11,7 +11,7 @@ use tracing::{debug, info, warn};
 use crate::config::Config;
 use crate::protocol::ByeReason;
 use crate::registry::Registry;
-use crate::store::{Store, fred_config};
+use crate::store::Store;
 
 fn revoke(registry: &Registry, hash: &str) {
     let n = registry.close_session(hash, ByeReason::Revoked);
@@ -60,16 +60,9 @@ pub async fn keyspace(
     registry: Arc<Registry>,
     mut stop: watch::Receiver<bool>,
 ) {
-    let sub = match fred_config(&cfg.valkey)
-        .and_then(|c| Builder::from_config(c).build_subscriber_client())
-    {
-        Ok(s) => s,
-        Err(e) => return warn!(error = %e, "keyspace subscriber disabled"),
+    let Some(sub) = crate::store::subscriber(&cfg.valkey, "keyspace", &mut stop).await else {
+        return;
     };
-    if let Err(e) = sub.init().await {
-        return warn!(error = %e, "keyspace subscriber disabled");
-    }
-    let _resub = sub.manage_subscriptions();
     // fred routes `__keyspace@...` messages to a dedicated channel, not to `message_rx`.
     let mut rx = sub.keyspace_event_rx();
     let key_prefix = store.session_key("");

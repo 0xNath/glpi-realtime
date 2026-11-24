@@ -25,6 +25,7 @@ services:
       args:
         GLPI_VERSION: ${GLPI_VERSION:-12.0}
         SERVER_SOURCE: ${SERVER_SOURCE:-server-build}
+        RELEASE_SOURCE: ${RELEASE_SOURCE:-release-repo}
     image: localhost/glpi-realtime-e2e:${GLPI_VERSION:-12.0}
     environment:
       GLPI_DB_HOST: db

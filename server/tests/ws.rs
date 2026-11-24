@@ -121,8 +121,10 @@ async fn subscribe_requires_a_grant_written_by_glpi() {
     send(&mut b, json!({"v":1,"t":"sub","room":"Ticket:43"})).await;
     assert_eq!(recv(&mut b).await["code"], "forbidden");
 
-    // Only allowed item types, well-formed ids.
+    // Any item type GLPI grants (no grant: forbidden); malformed rooms are refused.
     send(&mut a, json!({"v":1,"t":"sub","room":"User:1"})).await;
+    assert_eq!(recv(&mut a).await["code"], "forbidden");
+    send(&mut a, json!({"v":1,"t":"sub","room":"Us er:1"})).await;
     assert_eq!(recv(&mut a).await["code"], "bad_request");
     send(&mut a, json!({"v":1,"t":"sub","room":"Ticket:0"})).await;
     assert_eq!(recv(&mut a).await["code"], "bad_request");

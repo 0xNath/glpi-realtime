@@ -456,36 +456,37 @@ final class Health
                 sprintf(__('Add "%s" to [security] allowed_origins in config.toml, then restart the server.', 'realtime'), $origin)
             );
 
+        // The server follows GLPI's list unless config.toml restricts it (allowed_itemtypes).
         $enabled = Settings::enabledItemtypes();
         $missing = [];
         foreach ($statuses as $s) {
-            $missing = [...$missing, ...array_diff($enabled, (array) ($s['allowed_itemtypes'] ?? []))];
+            $allowed = (array) ($s['allowed_itemtypes'] ?? []);
+            if ($allowed !== []) {
+                $missing = [...$missing, ...array_diff($enabled, $allowed)];
+            }
         }
         $missing = array_values(array_unique($missing));
         // Types of the default list this install does not have (upgrades keep their list).
         $available = array_values(array_diff(json_decode(Settings::DEFAULTS['enabled_itemtypes'], true), $enabled));
-        $all = json_encode([...$enabled, ...$available]);
-        $out[] = $missing === [] && $available !== []
-            ? self::check(
-                'itemtypes',
-                __('Item types', 'realtime'),
-                self::INFO,
-                sprintf(__('Enabled: %s. Also available (presence and a single editor of their form): %s.', 'realtime'), implode(', ', $enabled), implode(', ', $available)),
-                sprintf(
-                    __('To enable them, on both sides: bin/console config:set --context=plugin:realtime enabled_itemtypes \'%s\' (as the user running GLPI), and allowed_itemtypes = %s in [security] of config.toml, then restart the server.', 'realtime'),
-                    $all,
-                    '["' . implode('", "', [...$enabled, ...$available]) . '"]'
-                )
-            )
-            : ($missing === []
-            ? self::check('itemtypes', __('Item types', 'realtime'), self::OK, implode(', ', $enabled))
-            : self::check(
+        if ($missing !== []) {
+            $out[] = self::check(
                 'itemtypes',
                 __('Item types', 'realtime'),
                 self::WARNING,
                 sprintf(__('Enabled in GLPI but refused by the server: %s.', 'realtime'), implode(', ', $missing)),
-                sprintf(__('Add them to [security] allowed_itemtypes in config.toml (%s), then restart the server.', 'realtime'), '"' . implode('", "', $missing) . '"')
-            ));
+                __('Remove allowed_itemtypes from [security] in config.toml (the server then follows GLPI\'s list), or add them to it; then restart the server.', 'realtime')
+            );
+        } elseif ($available !== []) {
+            $out[] = self::check(
+                'itemtypes',
+                __('Item types', 'realtime'),
+                self::INFO,
+                sprintf(__('Enabled: %s. Also available (presence and a single editor of their form): %s.', 'realtime'), implode(', ', $enabled), implode(', ', $available)),
+                __('Enable them in the plugin\'s settings (Setup > Plugins > Realtime, "Item types").', 'realtime')
+            );
+        } else {
+            $out[] = self::check('itemtypes', __('Item types', 'realtime'), self::OK, implode(', ', $enabled));
+        }
 
         $s = $statuses[0];
         if (empty($s['keyspace_events'])) {

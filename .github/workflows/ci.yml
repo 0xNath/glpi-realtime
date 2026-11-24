@@ -137,6 +137,52 @@ jobs:
             e2e/playwright-report/
           retention-days: 7
 
+  # Regression guard: 2 000 connections on 200 items; every connection, event and presence
+  # update must go through, each p99 under 1 s, the load test + server under 768 MiB.
+  load:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Valkey
+        run: |
+          id=$(docker create valkey/valkey:9.0)
+          sudo docker cp "$id":/usr/local/bin/valkey-server /usr/local/bin/valkey-server
+          docker rm "$id"
+          valkey-server --port 0 --unixsocket /tmp/valkey.sock --save "" --appendonly no --daemonize yes
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # stable branch, 2026-10-15
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: server
+      - run: ulimit -n 65536 && cargo run --release --locked --example loadtest -- --valkey unix:///tmp/valkey.sock --connections 2000 --rooms 200 --check --max-p99-ms 1000 --max-rss-mib 768
+        working-directory: server
+
+  # What browsers and Valkey send the server (frames, rooms, event batches, handshake
+  # headers), fuzzed for a minute each.
+  fuzz:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # stable branch, 2026-10-15
+        with:
+          toolchain: nightly
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: cargo-fuzz
+      - name: Fuzz
+        working-directory: server
+        run: |
+          for t in message room batch handshake; do
+            cargo +nightly fuzz run "$t" --fuzz-dir fuzz -- -max_total_time=60
+          done
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: failure()
+        with:
+          name: fuzz-artifacts
+          path: server/fuzz/artifacts/
+          retention-days: 7
+
   audit:
     runs-on: ubuntu-24.04
     steps:
@@ -159,7 +205,7 @@ jobs:
   # (gh attestation verify <archive> --repo <owner>/glpi-realtime).
   release-build:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [test, audit, e2e]
+    needs: [test, audit, e2e, load, fuzz]
     strategy:
       matrix:
         runner: [ubuntu-24.04, ubuntu-24.04-arm]
@@ -209,3 +255,89 @@ jobs:
           files: |
             dist/*.tar.*
             dist/SHA256SUMS
+
+  # The server's image, for amd64 and arm64 (the release's static binaries), with a build
+  # provenance attestation: ghcr.io/<owner>/glpi-realtime:<version> and :latest.
+  image:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: release-build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+      - id: build
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/glpi-realtime"
+          for pair in x86_64:amd64 aarch64:arm64; do
+            mkdir -p "deploy/container/bin/${pair#*:}"
+            tar -xzf "dist/glpi-realtime-$version-linux-${pair%%:*}.tar.gz" -O "glpi-realtime-$version/bin/glpi-realtime" > "deploy/container/bin/${pair#*:}/glpi-realtime"
+            chmod +x "deploy/container/bin/${pair#*:}/glpi-realtime"
+          done
+          echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker buildx create --use
+          docker buildx build --platform linux/amd64,linux/arm64 --push \
+            -t "$image:$version" -t "$image:latest" --metadata-file meta.json deploy/container
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "digest=$(jq -r '."containerimage.digest"' meta.json)" >> "$GITHUB_OUTPUT"
+      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        with:
+          subject-name: ${{ steps.build.outputs.image }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+  # What users get: the published archive, checked as the README says (checksum,
+  # attestation), installed with deploy/install.sh in a disposable GLPI, then the
+  # end-to-end tests; and the published image starts.
+  release-check:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [release, image]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      attestations: read
+      packages: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      COMPOSE: docker compose
+      E2E_ENV_FILE: ${{ github.workspace }}/.e2e.local.env
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Download and verify the release
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          gh release download "$GITHUB_REF_NAME" -D dl -p "glpi-realtime-$version-linux-x86_64.tar.gz" -p SHA256SUMS
+          (cd dl && sha256sum --check --ignore-missing SHA256SUMS)
+          gh attestation verify "dl/glpi-realtime-$version-linux-x86_64.tar.gz" --repo "$GITHUB_REPOSITORY"
+          echo "RELEASE_ARCHIVE=$PWD/dl/glpi-realtime-$version-linux-x86_64.tar.gz" >> "$GITHUB_ENV"
+      - name: The image starts and checks its configuration
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/glpi-realtime:${GITHUB_REF_NAME#v}"
+          gh attestation verify "oci://$image" --repo "$GITHUB_REPOSITORY"
+          docker run --rm -e GLPI_RT_SECURITY__ALLOWED_ORIGINS='["https://glpi.example.org"]' "$image" --check
+      - name: Disposable GLPI with the release installed
+        run: e2e/env/up.sh
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+      - run: npm ci && npx playwright install --with-deps chromium
+        working-directory: e2e
+      - run: npx playwright test
+        working-directory: e2e
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: failure()
+        with:
+          name: release-check
+          path: e2e/test-results/
+          retention-days: 7

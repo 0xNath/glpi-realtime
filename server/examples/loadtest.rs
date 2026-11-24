@@ -10,6 +10,9 @@
 //! - presence fan-out: one more member per room, time until the others saw the list;
 //! - server memory (RSS, when started here).
 //!
+//! `--check` (CI): exit code 1 unless every connection, event and presence update went
+//! through, with every p99 under `--max-p99-ms` and the RSS under `--max-rss-mib`.
+//!
 //! Keys it created are removed at the end.
 
 use std::sync::Arc;
@@ -33,6 +36,11 @@ struct Args {
     connections: usize,
     rooms: usize,
     concurrency: usize,
+    /// Fail (exit code 1) unless every connection, event and presence went through, within
+    /// these limits: the CI's regression guard.
+    check: bool,
+    max_p99_ms: u64,
+    max_rss_mib: u64,
 }
 
 fn args() -> Args {
@@ -42,9 +50,16 @@ fn args() -> Args {
         connections: 2000,
         rooms: 200,
         concurrency: 500,
+        check: false,
+        max_p99_ms: 1_000,
+        max_rss_mib: 1_024,
     };
     let mut it = std::env::args().skip(1);
     while let Some(k) = it.next() {
+        if k == "--check" {
+            a.check = true;
+            continue;
+        }
         let v = it.next().unwrap_or_default();
         match k.as_str() {
             "--valkey" => a.valkey = v,
@@ -52,6 +67,8 @@ fn args() -> Args {
             "--connections" => a.connections = v.parse().expect("--connections N"),
             "--rooms" => a.rooms = v.parse().expect("--rooms N"),
             "--concurrency" => a.concurrency = v.parse().expect("--concurrency N"),
+            "--max-p99-ms" => a.max_p99_ms = v.parse().expect("--max-p99-ms N"),
+            "--max-rss-mib" => a.max_rss_mib = v.parse().expect("--max-rss-mib N"),
             _ => panic!("unknown argument {k}"),
         }
     }
@@ -67,9 +84,11 @@ fn pct(v: &mut [Duration], p: f64) -> Duration {
     v[((v.len() as f64 - 1.0) * p).round() as usize]
 }
 
-fn report(label: &str, v: &mut [Duration]) {
+/// Prints the percentiles; returns the p99 (None without sample).
+fn report(label: &str, v: &mut [Duration]) -> Option<Duration> {
     if v.is_empty() {
-        return println!("{label}: no sample");
+        println!("{label}: no sample");
+        return None;
     }
     println!(
         "{label}: n={} p50={:?} p95={:?} p99={:?} max={:?}",
@@ -79,6 +98,7 @@ fn report(label: &str, v: &mut [Duration]) {
         pct(v, 0.99),
         pct(v, 1.0)
     );
+    Some(pct(v, 0.99))
 }
 
 fn rss_mib() -> Option<u64> {
@@ -228,7 +248,18 @@ async fn main() -> anyhow::Result<()> {
             .map(|m| format!(", load test + server RSS {m} MiB"))
             .unwrap_or_default()
     );
-    report("handshake+sub", &mut handshake);
+    let mut problems: Vec<String> = vec![];
+    let limit = Duration::from_millis(a.max_p99_ms);
+    let failures = failed.load(Ordering::Relaxed);
+    if failures > 0 || conns.len() < a.connections {
+        problems.push(format!("{} of {} connections", conns.len(), a.connections));
+    }
+    if let Some(m) = rss_mib().filter(|&m| m > a.max_rss_mib) {
+        problems.push(format!("RSS {m} MiB > {} MiB", a.max_rss_mib));
+    }
+    if let Some(p) = report("handshake+sub", &mut handshake).filter(|&p| p > limit) {
+        problems.push(format!("handshake p99 {p:?} > {limit:?}"));
+    }
 
     // Drain the presence lists that followed the subscriptions.
     tokio::time::sleep(Duration::from_secs(2)).await;
@@ -271,7 +302,12 @@ async fn main() -> anyhow::Result<()> {
         }
     }
     println!("events: {} of {expected} delivered", lat.len());
-    report("event delivery (from publish)", &mut lat);
+    if lat.len() < expected {
+        problems.push(format!("{} of {expected} events delivered", lat.len()));
+    }
+    if let Some(p) = report("event delivery (from publish)", &mut lat).filter(|&p| p > limit) {
+        problems.push(format!("event p99 {p:?} > {limit:?}"));
+    }
 
     // Presence fan-out: one newcomer per room.
     let t = Instant::now();
@@ -317,7 +353,14 @@ async fn main() -> anyhow::Result<()> {
         }
     }
     println!("presence: {} of {expected} members told", pres.len());
-    report("presence fan-out (from first newcomer)", &mut pres);
+    if pres.len() < expected {
+        problems.push(format!("{} of {expected} presence updates", pres.len()));
+    }
+    if let Some(p) =
+        report("presence fan-out (from first newcomer)", &mut pres).filter(|&p| p > limit)
+    {
+        problems.push(format!("presence p99 {p:?} > {limit:?}"));
+    }
 
     // Clean up.
     drop(keep);
@@ -340,6 +383,15 @@ async fn main() -> anyhow::Result<()> {
     }
     if let Some(s) = server {
         s.stop().await?;
+    }
+    if a.check {
+        if !problems.is_empty() {
+            anyhow::bail!("load check failed: {}", problems.join("; "));
+        }
+        println!(
+            "load check passed (p99 <= {limit:?}, RSS <= {} MiB)",
+            a.max_rss_mib
+        );
     }
     Ok(())
 }

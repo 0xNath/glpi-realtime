@@ -18,14 +18,31 @@ export interface ClientOptions {
    * the server announced that rights on the item may have changed.
    */
   regrant?: (room: string) => Promise<unknown>;
+  /** Clock (tests). */
+  now?: () => number;
+  /**
+   * A GLPI request (ajax/session.php): GLPI issues a new token if Valkey lost ours (restart
+   * without persistence). Resolves true when the GLPI session is alive, false when it ended.
+   */
+  refreshSession?: () => Promise<boolean>;
 }
+
+/** Connections refused in a row (401: token unknown) before asking GLPI for a new one. */
+const REFUSED_BEFORE_REFRESH = 2;
+/** At most one session refresh per this long (a real revocation must not loop). */
+const REFRESH_INTERVAL_MS = 30_000;
 
 /**
  * One WebSocket per tab, shared by every feature. Rooms are remembered and
  * re-subscribed after each reconnection; the server re-checks grants every time.
  *
- * A room the server refuses after having accepted it (rights lost) is forgotten and
- * reported as `unsubscribed` with `reason: "forbidden"`.
+ * A room the server refuses after having accepted it is first granted again by GLPI (its
+ * grant may have been lost with Valkey's data); refused again (rights lost), it is
+ * forgotten and reported as `unsubscribed` with `reason: "forbidden"`.
+ *
+ * Valkey lost the session (restart without persistence): the server closes the socket as
+ * revoked, or refuses it (401). GLPI is asked for a new token, then the tab reconnects;
+ * if the GLPI session has ended, the tab stays disconnected.
  */
 export class RealtimeClient {
   state: State = "idle";
@@ -51,8 +68,14 @@ export class RealtimeClient {
   private readonly accepted = new Set<string>();
   /** `sub` requests waiting for their reply: id → room. */
   private readonly pendingSubs = new Map<number, string>();
+  /** Rooms refused once since their grant was asked again (a second refusal: lost). */
+  private readonly regranted = new Set<string>();
+  /** Sockets closed in a row before their `hello` (refused handshakes). */
+  private refused = 0;
+  private lastRefresh = -Infinity;
   private readonly handlers = new Map<string, Set<Handler>>();
-  private readonly o: Required<Omit<ClientOptions, "debug" | "regrant">> & Pick<ClientOptions, "debug" | "regrant">;
+  private readonly o: Required<Omit<ClientOptions, "debug" | "regrant" | "refreshSession" | "now">> &
+    Pick<ClientOptions, "debug" | "regrant" | "refreshSession"> & { now: () => number };
 
   constructor(opts: ClientOptions) {
     this.o = {
@@ -60,6 +83,7 @@ export class RealtimeClient {
       setTimeout: (fn, ms) => globalThis.setTimeout(fn, ms),
       clearTimeout: (h) => globalThis.clearTimeout(h as number),
       random: Math.random,
+      now: () => Date.now(),
       ...opts,
     };
   }
@@ -150,6 +174,7 @@ export class RealtimeClient {
 
   /** The server withholds events until GLPI rewrote our grant and we subscribe again. */
   private async regrant(room: string, ws: WebSocket): Promise<void> {
+    this.regranted.add(room); // refused once more after this: the rights are gone
     try {
       await this.o.regrant?.(room);
     } catch (e) {
@@ -190,6 +215,7 @@ export class RealtimeClient {
       case "hello":
         this.state = "open";
         this.attempt = 0;
+        this.refused = 0;
         this.user = msg.user;
         this.conn = msg.conn;
         if (msg.lock_ttl) this.lockTtl = msg.lock_ttl;
@@ -202,6 +228,7 @@ export class RealtimeClient {
         break;
       case "subscribed":
         if (msg.id !== undefined) this.pendingSubs.delete(msg.id);
+        this.regranted.delete(msg.room);
         if (this.rooms.has(msg.room)) {
           this.joined.add(msg.room);
           this.accepted.add(msg.room);
@@ -225,7 +252,14 @@ export class RealtimeClient {
         const room = msg.id !== undefined ? this.pendingSubs.get(msg.id) : undefined;
         if (room !== undefined) {
           this.pendingSubs.delete(msg.id!);
-          if (msg.code === "forbidden") this.lost(room);
+          if (msg.code === "forbidden") {
+            // Accepted before: GLPI grants it again (lost with Valkey's data?), once.
+            if (this.accepted.has(room) && !this.regranted.has(room) && this.o.regrant && this.ws) {
+              void this.regrant(room, this.ws);
+            } else {
+              this.lost(room);
+            }
+          }
         }
         break;
       }
@@ -235,13 +269,44 @@ export class RealtimeClient {
 
   private onClose(ws: WebSocket, code: number): void {
     if (ws !== this.ws) return; // a previous socket
+    const greeted = this.state === "open";
     this.ws = null;
     this.joined.clear();
     this.pendingSubs.clear();
     if (this.state === "stopped") return;
     if (code === CLOSE_REVOKED) {
-      // GLPI session ended or changed: the next GLPI page issues a new token.
-      this.state = "revoked";
+      // GLPI session ended or changed, or Valkey lost it: GLPI decides.
+      return void this.refresh(true);
+    }
+    this.refused = greeted ? 0 : this.refused + 1;
+    if (this.refused >= REFUSED_BEFORE_REFRESH) return void this.refresh(false);
+    this.retry();
+  }
+
+  /**
+   * Asks GLPI for a new token (ajax/session.php), then reconnects. Without GLPI session,
+   * or asked too recently: revoked (after a revocation) or the usual backoff.
+   */
+  private async refresh(revoked: boolean): Promise<void> {
+    const now = this.o.now();
+    let alive = false;
+    if (this.o.refreshSession && now - this.lastRefresh >= REFRESH_INTERVAL_MS) {
+      this.lastRefresh = now;
+      this.state = "waiting";
+      try {
+        alive = await this.o.refreshSession();
+      } catch (e) {
+        this.o.debug?.("realtime: session refresh failed", e);
+      }
+      if ((this.state as State) === "stopped") return; // stopped while GLPI answered
+    }
+    if (alive) {
+      this.refused = 0;
+      this.attempt = 0;
+      return this.retry();
+    }
+    if (revoked) {
+      this.state = "revoked"; // the next GLPI page issues a new token
       return;
     }
     this.retry();

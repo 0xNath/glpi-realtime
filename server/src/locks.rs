@@ -29,7 +29,7 @@ use crate::config::Config;
 use crate::events::{Delivery, Hub};
 use crate::presence::{Entry, now};
 use crate::protocol::{self, Room, ServerMsg};
-use crate::store::{Store, fred_config};
+use crate::store::Store;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, Default)]
 #[serde(rename_all = "snake_case")]
@@ -335,16 +335,9 @@ impl Locks {
 
     /// Reacts to lock changes made through other instances.
     pub async fn listen(self: Arc<Self>, cfg: Arc<Config>, mut stop: watch::Receiver<bool>) {
-        let sub = match fred_config(&cfg.valkey)
-            .and_then(|c| Builder::from_config(c).build_subscriber_client())
-        {
-            Ok(s) => s,
-            Err(e) => return warn!(error = %e, "locks: subscriber disabled"),
+        let Some(sub) = crate::store::subscriber(&cfg.valkey, "locks", &mut stop).await else {
+            return;
         };
-        if let Err(e) = sub.init().await {
-            return warn!(error = %e, "locks: subscriber disabled");
-        }
-        let _resub = sub.manage_subscriptions();
         let mut rx = sub.message_rx();
         if let Err(e) = sub.subscribe(self.channel()).await {
             return warn!(error = %e, "locks: subscriber disabled");

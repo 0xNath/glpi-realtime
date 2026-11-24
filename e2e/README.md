@@ -28,6 +28,9 @@ env/down.sh
   (`GLPI_VERSION=dev-nightly`).
 - `SERVER_SOURCE=server-prebuilt`: takes `env/bin/glpi-realtime` (a static binary, as the
   CI does) instead of compiling the server in the image.
+- `RELEASE_ARCHIVE=<glpi-realtime-<version>-linux-x86_64.tar.gz>`: installs that release
+  archive (server and plugin) instead of this repository: what the CI does with each
+  published release.
 - Screenshots of the README and of GLPI's catalog, on a fresh environment:
   `npx playwright test --config screenshots.config.ts` (writes `docs/img/`).
 
@@ -71,8 +74,10 @@ while the fields are edited, and GLPI refusing a second solution whatever the br
 does; presence on the ticket list; the bell (read and unread, preferences, assume) and
 mentions notified at once; projects, project tasks and assets (presence, the single
 editor of their form, GLPI refusing an outdated form, presence on the asset list); the
-configuration page; accessibility (axe-core, WCAG 2.1 AA) of the real-time layer's
-elements.
+configuration page and its settings form; accessibility (axe-core, WCAG 2.1 AA) of the
+real-time layer's elements; a Valkey restart (disposable environment only:
+`E2E_VALKEY_RESTART`, written by `env/up.sh`), after which open pages come back by
+themselves.
 
 ## Run (your GLPI)
 

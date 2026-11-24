@@ -22,7 +22,7 @@ Every message carries `"v": 1`. A client may add an integer `"id"`, echoed in th
 
 | `t` | Fields | Reply |
 |---|---|---|
-| `sub` | `room` (`"Ticket:42"`, `"Change:7"`, `"Computer:3"`: any item type of `security.allowed_itemtypes`) | `subscribed` or `error` |
+| `sub` | `room` (`"Ticket:42"`, `"Change:7"`, `"Computer:3"`, `"Glpi\\CustomAsset\\ServerAsset:4"`: a PHP class name and a canonical id; restricted by `security.allowed_itemtypes` when set) | `subscribed` or `error` |
 | `unsub` | `room` | `unsubscribed` |
 | `ping` | — | `pong` |
 | `activity` | `active` (bool) | none; presence lists change for the other members |
@@ -234,7 +234,7 @@ The self-service interface has no bell: it shows a toast for each `alert`.
 
 | `bye.reason` | Close code | Client behaviour |
 |---|---|---|
-| `revoked` | 4001 | Do not reconnect: the GLPI session ended or changed. The next GLPI page issues a new token. |
+| `revoked` | 4001 | The GLPI session ended or changed, or Valkey lost it: ask GLPI (`ajax/session.php`, at most every 30 s); if it issued a new token, reconnect, else stay disconnected until the next GLPI page. Two handshakes refused in a row (401) are handled the same way. A room refused after a reconnection is granted again by GLPI (`ajax/grant.php`) once before being reported lost. |
 | `shutdown` | 1012 | Reconnect with backoff (server restart). |
 | `policy` | 1008 | Too many rate-limit violations. Reconnect with backoff. |
 | `idle` | 1001 | No traffic (including pongs) for `idle_timeout_secs`. Reconnect. |

@@ -23,6 +23,9 @@ pub const ORIGIN: &str = "https://glpi.test";
 pub struct Valkey {
     child: Child,
     _dir: tempfile::TempDir,
+    bin: &'static str,
+    extra: Vec<String>,
+    auth: Option<(String, String)>,
     /// Unix socket of this test's private Valkey (no TCP port: no collisions between tests).
     pub socket: std::path::PathBuf,
     pub client: Client,
@@ -51,39 +54,88 @@ pub async fn valkey_with(extra: &[&str], auth: Option<(&str, &str)>) -> Option<V
     })?;
     let dir = tempfile::tempdir().unwrap();
     let socket = dir.path().join("valkey.sock");
+    let extra: Vec<String> = extra.iter().map(|s| s.to_string()).collect();
+    let auth = auth.map(|(u, p)| (u.to_string(), p.to_string()));
+    let child = spawn_valkey(bin, &socket, dir.path(), &extra).await;
+    let client = test_client(&socket, &auth).await;
+    Some(Valkey {
+        child,
+        _dir: dir,
+        bin,
+        extra,
+        auth,
+        socket,
+        client,
+    })
+}
+
+async fn spawn_valkey(
+    bin: &str,
+    socket: &std::path::Path,
+    dir: &std::path::Path,
+    extra: &[String],
+) -> Child {
+    let _ = std::fs::remove_file(socket);
     let child = Command::new(bin)
         .args(["--port", "0", "--save", "", "--appendonly", "no"])
         .args(["--notify-keyspace-events", "Kgx"])
         .arg("--unixsocket")
-        .arg(&socket)
+        .arg(socket)
         .arg("--dir")
-        .arg(dir.path())
+        .arg(dir)
         .args(extra)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
         .unwrap();
     for _ in 0..500 {
-        if std::os::unix::net::UnixStream::connect(&socket).is_ok() {
+        if std::os::unix::net::UnixStream::connect(socket).is_ok() {
             break;
         }
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
+    child
+}
+
+async fn test_client(socket: &std::path::Path, auth: &Option<(String, String)>) -> Client {
     let mut cfg =
         fred::prelude::Config::from_url_unix(&format!("unix://{}", socket.display())).unwrap();
     cfg.database = Some(6);
     if let Some((u, p)) = auth {
-        cfg.username = Some(u.into());
-        cfg.password = Some(p.into());
+        cfg.username = Some(u.clone());
+        cfg.password = Some(p.clone());
     }
     let client = Builder::from_config(cfg).build().unwrap();
     client.init().await.unwrap();
-    Some(Valkey {
-        child,
-        _dir: dir,
-        socket,
-        client,
-    })
+    client
+}
+
+impl Valkey {
+    /// A restart without persistence: every key is lost (sessions, grants, presence).
+    pub async fn restart(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+        self.child = spawn_valkey(self.bin, &self.socket, self._dir.path(), &self.extra).await;
+        self.client = test_client(&self.socket, &self.auth).await;
+    }
+
+    /// A network blip: every other client (the server's) is disconnected, the data is kept.
+    /// Returns how many connections were cut.
+    pub async fn drop_clients(&self) -> i64 {
+        let mut n = 0;
+        for kind in ["normal", "pubsub"] {
+            let killed: i64 = self
+                .client
+                .custom(
+                    fred::cmd!("CLIENT"),
+                    vec!["KILL", "TYPE", kind, "SKIPME", "yes"],
+                )
+                .await
+                .unwrap();
+            n += killed;
+        }
+        n
+    }
 }
 
 pub fn config(vk: &Valkey) -> Config {

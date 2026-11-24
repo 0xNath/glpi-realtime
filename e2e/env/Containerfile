@@ -5,9 +5,11 @@
 # an older plugin for the upgrade test (UPGRADE_FROM). Built from the repository's root:
 #   docker build -f e2e/env/Containerfile --build-arg GLPI_VERSION=12.0 .
 # SERVER_SOURCE=server-prebuilt takes e2e/env/bin/glpi-realtime (a static binary, CI)
-# instead of compiling it.
+# instead of compiling it. RELEASE_SOURCE=release-archive takes /opt/release from a
+# release archive extracted in e2e/env/release (up.sh RELEASE_ARCHIVE=...).
 ARG GLPI_VERSION=12.0
 ARG SERVER_SOURCE=server-build
+ARG RELEASE_SOURCE=release-repo
 
 FROM docker.io/library/rust:1-trixie AS server-build
 WORKDIR /src
@@ -20,6 +22,18 @@ FROM scratch AS server-prebuilt
 COPY e2e/env/bin/glpi-realtime /glpi-realtime
 
 FROM ${SERVER_SOURCE} AS server
+
+# /opt/release, laid out like a release archive: from this repository...
+FROM scratch AS release-repo
+COPY --from=server /glpi-realtime /opt/release/bin/glpi-realtime
+COPY plugin/ /opt/release/plugin/
+COPY deploy/ /opt/release/deploy/
+
+# ...or from a published one.
+FROM scratch AS release-archive
+COPY e2e/env/release/ /opt/release/
+
+FROM ${RELEASE_SOURCE} AS release
 
 FROM docker.io/glpi/glpi:${GLPI_VERSION}
 USER root
@@ -35,10 +49,8 @@ COPY e2e/env/apache.conf /etc/apache2/sites-enabled/000-default.conf
 COPY e2e/env/ports.conf /etc/apache2/ports.conf
 COPY e2e/env/supervisor-realtime.conf /etc/supervisor/conf.d/realtime.conf
 COPY e2e/env/config.toml /etc/glpi-realtime/config.toml
-COPY --from=server /glpi-realtime /usr/local/bin/glpi-realtime
-COPY --from=server /glpi-realtime /opt/release/bin/glpi-realtime
-COPY plugin/ /opt/release/plugin/
-COPY deploy/ /opt/release/deploy/
+COPY --from=release /opt/release/ /opt/release/
+COPY --from=release /opt/release/bin/glpi-realtime /usr/local/bin/glpi-realtime
 COPY e2e/env/.old/ /opt/realtime-old/
 COPY --chown=www-data e2e/env/rtseed/ /var/www/glpi/plugins/rtseed/
 USER www-data

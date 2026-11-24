@@ -24,11 +24,9 @@ key_prefix = "rt:"                  # must match the plugin setting key_prefix
 cookie_name = "glpi_rt"             # must match the plugin setting cookie_name
 # Exact browser origins allowed to open the WebSocket (CSWSH protection).
 allowed_origins = ["https://glpi.example.org"]
-# Items with presence and the single editor of their fields: the plugin's enabled_itemtypes
-# (bin/console config:set --context=plugin:realtime enabled_itemtypes '[...]'), the same on
-# both sides. Any GLPI item with a standard form; custom assets (GLPI 11+) by class, e.g.
-# "Glpi\\CustomAsset\\ServerAsset".
-allowed_itemtypes = ["Ticket", "Change", "Problem", "Project", "ProjectTask", "Computer", "Monitor", "NetworkEquipment", "Peripheral", "Phone", "Printer"]
+# Item types: those enabled in GLPI (the plugin's settings, "Item types"): every room needs
+# a grant GLPI wrote for that very item. A list here only restricts them, e.g.
+# allowed_itemtypes = ["Ticket", "Change", "Problem"]
 
 [limits]
 max_connections = 25000             # per instance

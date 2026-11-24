@@ -10,10 +10,27 @@
 
 use GlpiPlugin\Realtime\Health;
 use GlpiPlugin\Realtime\Settings;
+use GlpiPlugin\Realtime\SettingsForm;
 
 global $CFG_GLPI;
 
 Session::checkRight('config', UPDATE);
+
+// Settings form (below the checks): saved through GLPI, then the checks run again.
+$self = $CFG_GLPI['root_doc'] . '/plugins/realtime/front/config.php';
+if (isset($_POST['save_settings'])) {
+    $result = SettingsForm::validate($_POST, array_keys(SettingsForm::candidates()));
+    if ($result['errors'] === []) {
+        Config::setConfigurationValues(Settings::CONTEXT, $result['values']);
+        Settings::reset();
+        Session::addMessageAfterRedirect(htmlescape(__('Settings saved. The checks below use them.', 'realtime')));
+    } else {
+        foreach ($result['errors'] as $error) {
+            Session::addMessageAfterRedirect(htmlescape($error), false, ERROR);
+        }
+    }
+    Html::redirect($self);
+}
 
 Html::header(__('Realtime', 'realtime'), '', 'config', 'plugin');
 
@@ -83,14 +100,53 @@ echo '<p>' . sprintf(
     htmlescape(__('More on each problem: %s.', 'realtime')),
     '<a class="text-decoration-underline" href="' . htmlescape(Health::TROUBLESHOOTING) . '" target="_blank" rel="noopener">' . htmlescape(__('troubleshooting guide', 'realtime')) . '</a>'
 ) . '</p>';
-echo '<p class="text-secondary small">' . htmlescape(sprintf(
-    __('Plugin settings (context plugin:realtime) are changed with: bin/console config:set --context=plugin:realtime <name> <value>. Current: valkey_socket=%s, valkey_db=%s, key_prefix=%s, cookie_name=%s, ws_path=%s.', 'realtime'),
-    Settings::get('valkey_socket'),
-    Settings::get('valkey_db'),
-    Settings::get('key_prefix'),
-    Settings::get('cookie_name'),
-    Settings::get('ws_path')
-)) . '</p></div>';
+// --- Settings ---------------------------------------------------------------------------
+$field = static fn(string $name, string $label, string $value, string $help = '', string $type = 'text'): string =>
+    '<div class="mb-3"><label class="form-label" for="glpi-rt-' . $name . '">' . htmlescape($label) . '</label>'
+    . '<input class="form-control" type="' . $type . '" id="glpi-rt-' . $name . '" name="' . $name . '" value="' . htmlescape($value) . '"'
+    . ($help !== '' ? ' aria-describedby="glpi-rt-' . $name . '-help"' : '') . ($type === 'password' ? ' autocomplete="new-password"' : '') . '>'
+    . ($help !== '' ? '<div class="form-hint" id="glpi-rt-' . $name . '-help">' . htmlescape($help) . '</div>' : '') . '</div>';
+
+$enabled = Settings::enabledItemtypes();
+echo '<form method="post" action="' . htmlescape($self) . '" class="card mb-3" id="glpi-rt-settings">';
+echo '<div class="card-header"><h2 class="card-title h3 mb-0">' . htmlescape(__('Settings', 'realtime')) . '</h2></div><div class="card-body">';
+
+echo '<fieldset class="mb-4"><legend class="h4">' . htmlescape(__('Item types', 'realtime')) . '</legend>';
+echo '<p class="form-hint">' . htmlescape(__('Tickets, changes and problems get every feature; other items get presence (on the item and on the lists) and a single editor of their form. The server follows this list.', 'realtime')) . '</p>';
+echo '<div class="row">';
+foreach (SettingsForm::candidates() as $class => $label) {
+    $id = 'glpi-rt-type-' . md5($class);
+    echo '<div class="col-12 col-sm-6 col-lg-4"><label class="form-check" for="' . $id . '">'
+        . '<input class="form-check-input" type="checkbox" id="' . $id . '" name="itemtypes[]" value="' . htmlescape($class) . '"' . (in_array($class, $enabled, true) ? ' checked' : '') . '>'
+        . '<span class="form-check-label">' . htmlescape($label)
+        . (in_array($class, SettingsForm::ITIL, true) ? ' <span class="badge glpi-rt-badge-info">' . htmlescape(__('all features', 'realtime')) . '</span>' : '')
+        . '</span></label></div>';
+}
+echo '</div></fieldset>';
+
+echo '<fieldset><legend class="h4">' . htmlescape(__('Valkey and server', 'realtime')) . '</legend>';
+echo '<p class="form-hint">' . htmlescape(__('These must match the server\'s config.toml: Valkey (url, db), key prefix, cookie name; the WebSocket path is the web server\'s location.', 'realtime')) . '</p>';
+echo '<div class="row"><div class="col-12 col-lg-6">';
+echo $field('valkey_socket', __('Valkey', 'realtime'), Settings::get('valkey_socket'), __('Unix socket path, or host[:port].', 'realtime'));
+echo $field('valkey_db', __('Valkey database', 'realtime'), Settings::get('valkey_db'), __('[valkey] db in config.toml.', 'realtime'), 'number');
+echo $field('valkey_username', __('Valkey user (ACL)', 'realtime'), Settings::get('valkey_username'), __('Empty without ACL user.', 'realtime'));
+echo '<div class="mb-3"><label class="form-label" for="glpi-rt-valkey_password">' . htmlescape(__('Valkey password', 'realtime')) . '</label>'
+    . '<input class="form-control" type="password" id="glpi-rt-valkey_password" name="valkey_password" value="" autocomplete="new-password" aria-describedby="glpi-rt-valkey_password-help">'
+    . '<div class="form-hint" id="glpi-rt-valkey_password-help">' . htmlescape(Settings::get('valkey_password') !== ''
+        ? __('Set (stored encrypted by GLPI). Leave empty to keep it.', 'realtime')
+        : __('Not set. Stored encrypted by GLPI.', 'realtime')) . '</div>'
+    . (Settings::get('valkey_password') !== '' ? '<label class="form-check mt-1"><input class="form-check-input" type="checkbox" name="valkey_password_remove" value="1"><span class="form-check-label">' . htmlescape(__('Remove the password', 'realtime')) . '</span></label>' : '')
+    . '</div>';
+echo '</div><div class="col-12 col-lg-6">';
+echo $field('key_prefix', __('Key prefix', 'realtime'), Settings::get('key_prefix'), __('[valkey] key_prefix in config.toml.', 'realtime'));
+echo $field('cookie_name', __('Session cookie name', 'realtime'), Settings::get('cookie_name'), __('[security] cookie_name in config.toml.', 'realtime'));
+echo $field('ws_path', __('WebSocket path', 'realtime'), Settings::get('ws_path'), __('The web server\'s location to the server (/ws).', 'realtime'));
+echo '</div></div></fieldset>';
+
+echo '</div><div class="card-footer text-end"><button type="submit" name="save_settings" value="1" class="btn btn-primary">'
+    . '<i class="ti ti-device-floppy me-1" aria-hidden="true"></i>' . htmlescape(__('Save', 'realtime')) . '</button></div>';
+Html::closeForm();
+echo '</div>';
 
 $t = [
     'ok'          => $badges[Health::OK],

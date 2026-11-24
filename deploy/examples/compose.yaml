@@ -1,0 +1,74 @@
+# GLPI with glpi-realtime, in containers: an example to adapt, not a turnkey production
+# setup (backups, secrets, upgrades of GLPI are yours). Caddy serves HTTPS (certificate
+# from Let's Encrypt for GLPI_HOST) and sends /ws to glpi-realtime, the rest to GLPI.
+#
+#   1. Put the plugin of a release next to this file: ./plugins/realtime
+#      (tar xjf glpi-plugin-realtime-<version>.tar.bz2 -C plugins)
+#   2. Copy Caddyfile.example to Caddyfile, set GLPI_HOST and the passwords below
+#      (or in an .env file), then: docker compose up -d
+#   3. Once GLPI is installed (log in as glpi/glpi, change the passwords):
+#        docker compose exec glpi php bin/console plugin:install --username=glpi realtime
+#        docker compose exec glpi php bin/console plugin:activate realtime
+#        docker compose exec glpi php bin/console config:set url_base https://$GLPI_HOST
+#      then, in GLPI, Setup > Plugins > Realtime: Valkey "valkey:6379", and check.
+name: glpi
+services:
+  caddy:
+    image: docker.io/library/caddy:2
+    ports: ["80:80", "443:443"]
+    environment:
+      GLPI_HOST: ${GLPI_HOST:?set GLPI_HOST, e.g. glpi.example.org}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on: [glpi, glpi-realtime]
+    restart: unless-stopped
+
+  glpi:
+    image: docker.io/glpi/glpi:12.0
+    environment:
+      GLPI_DB_HOST: db
+      GLPI_DB_PORT: "3306"
+      GLPI_DB_NAME: glpi
+      GLPI_DB_USER: glpi
+      GLPI_DB_PASSWORD: ${GLPI_DB_PASSWORD:?set GLPI_DB_PASSWORD}
+    volumes:
+      - glpi-data:/var/glpi
+      # The plugin, from a release (not in /var/glpi/marketplace: GLPI must own that one).
+      - ./plugins/realtime:/var/www/glpi/plugins/realtime:ro
+    depends_on: [db, valkey]
+    restart: unless-stopped
+
+  glpi-realtime:
+    image: ghcr.io/0xnath/glpi-realtime:${GLPI_REALTIME_VERSION:-latest}
+    environment:
+      GLPI_RT_SECURITY__ALLOWED_ORIGINS: '["https://${GLPI_HOST}"]'
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/glpi-realtime", "--healthcheck"]
+      interval: 30s
+    depends_on: [valkey]
+    restart: unless-stopped
+
+  # Reachable by GLPI and glpi-realtime only (no published port): whoever can write to it
+  # can forge sessions. Keyspace notifications: logouts close WebSockets at once.
+  valkey:
+    image: docker.io/valkey/valkey:9.0
+    command: ["valkey-server", "--notify-keyspace-events", "Kgx", "--save", "60", "1"]
+    volumes: [valkey-data:/data]
+    restart: unless-stopped
+
+  db:
+    image: docker.io/library/mariadb:11.8
+    environment:
+      MARIADB_RANDOM_ROOT_PASSWORD: "yes"
+      MARIADB_DATABASE: glpi
+      MARIADB_USER: glpi
+      MARIADB_PASSWORD: ${GLPI_DB_PASSWORD:?set GLPI_DB_PASSWORD}
+    volumes: [db-data:/var/lib/mysql]
+    restart: unless-stopped
+
+volumes:
+  caddy-data:
+  glpi-data:
+  valkey-data:
+  db-data:

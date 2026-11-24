@@ -1,0 +1,6 @@
+# Caddy in front of GLPI and glpi-realtime (deploy/examples/compose.yaml): HTTPS with an
+# automatic certificate, /ws to the real-time server (WebSocket upgrade included).
+{$GLPI_HOST} {
+	reverse_proxy /ws glpi-realtime:8090
+	reverse_proxy glpi:80
+}

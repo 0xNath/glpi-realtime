@@ -1,0 +1,49 @@
+name: Bug report
+description: Something does not work as described.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks! First, the plugin's checks (Setup > Plugins > Realtime, or
+        `php bin/console plugins:realtime:check`) and the
+        [troubleshooting guide](https://github.com/0xNath/glpi-realtime/blob/master/docs/troubleshooting.md)
+        explain most installation problems. Security issues: see SECURITY.md, not here.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens, and what you expected
+      description: Steps to reproduce, with who does what (e.g. "Alice opens ticket 5, Bob edits its fields...").
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: glpi-realtime version
+      placeholder: "0.6.0"
+    validations:
+      required: true
+  - type: input
+    id: glpi
+    attributes:
+      label: GLPI version
+      placeholder: "12.0.2"
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Distribution, web server (nginx/Apache), PHP (FPM, mod_php), Valkey or Redis version, browser.
+  - type: textarea
+    id: checks
+    attributes:
+      label: Output of the checks
+      description: "`php bin/console plugins:realtime:check --format=json`, as the user running GLPI (it holds no password)."
+      render: json
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: "`journalctl -u glpi-realtime` around the problem; the browser console with `localStorage.setItem('glpi-realtime-debug', '1')`."
+      render: text

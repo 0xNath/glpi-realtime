@@ -96,6 +96,15 @@ function boot(): void {
         headers: { "X-Requested-With": "XMLHttpRequest" },
       });
     },
+    // Our token is unknown (Valkey lost it): this GLPI request issues a new one.
+    refreshSession: async () => {
+      const resp = await fetch(`${rootDoc}/plugins/realtime/ajax/session.php`, {
+        credentials: "same-origin",
+        headers: { "X-Requested-With": "XMLHttpRequest" },
+        redirect: "manual", // logged out: GLPI redirects to its login page
+      });
+      return resp.ok && (await resp.json().catch(() => null))?.ok === true;
+    },
   });
   window.glpiRealtime = client;
 
