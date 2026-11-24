@@ -32,6 +32,7 @@ Every message carries `"v": 1`. A client may add an integer `"id"`, echoed in th
 | `draft_end` | `room`, `kind` | none |
 | `draft_watch` | `room`, `kind`, `on` | `draft` (current content) when `on` |
 | `draft_take` | `room`, `kind` | `draft` (now ours) or `error` `locked` |
+| `watch` | `rooms` (list of items, replaces the previous set) | `watching{rooms}`: those with a `read` grant (max `limits.max_watched_rooms`) |
 | `compose` | `room`, `kind` (`followup`, `task`, `solution`, `validation`, `document`) or `null` | none; presence lists change |
 
 A `sub` succeeds only if GLPI wrote a grant `rt:g:{hash}:{room}` with `read=1` for this
@@ -61,6 +62,11 @@ Error codes: `bad_request`, `unsupported_version`, `forbidden`, `rate_limited`,
 `too_many_rooms`, `locked`, `too_large`, `internal`.
 
 ## Presence
+
+**List pages** (search results of tickets, changes, problems) show who is on each row: the
+client asks GLPI for grants on the displayed rows (`ajax/grants.php`, `READ` checked per
+item), then sends `watch`. It receives `presence` for those items without being listed in
+them, and without events, locks or drafts.
 
 `presence` lists everyone currently subscribed to the room, **one entry per user**
 (several tabs count once), ordered by arrival (`since`, Unix seconds). It includes the

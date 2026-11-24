@@ -26,6 +26,7 @@ allowed_itemtypes = ["Ticket", "Change", "Problem"]
 [limits]
 max_connections = 25000             # per instance
 max_connections_per_user = 10       # tabs
+max_watched_rooms = 200             # items whose presence a list page follows
 max_message_bytes = 65536
 max_rooms_per_connection = 50
 messages_per_second = 20            # per connection

@@ -121,6 +121,20 @@ impl Store {
         )))
     }
 
+    /// For each room, whether this session has a grant with `read=1`. One pipeline.
+    pub async fn readable(&self, hash: &str, rooms: &[Room]) -> Result<Vec<bool>, Error> {
+        if rooms.is_empty() {
+            return Ok(vec![]);
+        }
+        let client = self.pool.next();
+        let pipe = client.pipeline();
+        for r in rooms {
+            let _: () = pipe.hget(self.grant_key(hash, r), "read").await?;
+        }
+        let res: Vec<Option<String>> = pipe.all().await?;
+        Ok(res.into_iter().map(|v| v.as_deref() == Some("1")).collect())
+    }
+
     /// For each session hash, whether its key still exists. Pipelined in chunks.
     pub async fn sessions_alive(&self, hashes: &[String]) -> Result<Vec<bool>, Error> {
         let mut out = Vec::with_capacity(hashes.len());

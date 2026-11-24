@@ -1,6 +1,6 @@
 //! WebSocket handshake and per-connection loop.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::num::NonZeroU32;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -121,6 +121,8 @@ struct Connection {
     hash: String,
     session: Session,
     rooms: HashMap<Room, Joined>,
+    /// Items whose presence this connection follows from a list page.
+    watched: HashSet<Room>,
     /// Tab activity reported by the client (active until told otherwise).
     active: bool,
     /// Same, shared with the hub to target notifications.
@@ -144,6 +146,7 @@ impl Connection {
             hash,
             session,
             rooms: HashMap::new(),
+            watched: HashSet::new(),
             active: true,
             active_flag: Arc::new(AtomicBool::new(true)),
             ev_tx,
@@ -241,6 +244,9 @@ impl Connection {
         }
 
         self.app.hub.remove_user(self.session.uid, self.reg.id);
+        for r in std::mem::take(&mut self.watched) {
+            self.app.presence.unwatch(&r, self.reg.id);
+        }
         for room in std::mem::take(&mut self.rooms).into_keys() {
             self.app.hub.leave(&room, self.reg.id);
             self.app
@@ -339,6 +345,7 @@ impl Connection {
                 self.handle_lock(tx, req, id).await
             }
             ClientMsg::Compose { room, kind } => self.handle_compose(tx, room, kind, id).await,
+            ClientMsg::Watch { rooms } => self.handle_watch(tx, rooms, id).await,
             m @ (ClientMsg::Draft { .. }
             | ClientMsg::DraftEnd { .. }
             | ClientMsg::DraftWatch { .. }
@@ -463,6 +470,50 @@ impl Connection {
                 .writer_left(r, &self.reg.id.to_string())
                 .await;
         }
+    }
+
+    /// `watch`: presence of list rows, for items this session may read.
+    async fn handle_watch(
+        &mut self,
+        tx: &mpsc::Sender<Message>,
+        rooms: Vec<String>,
+        id: Option<u32>,
+    ) -> Option<End> {
+        let mut wanted: Vec<Room> = vec![];
+        for raw in &rooms {
+            if let Some(r) = Room::parse(raw, &self.app.cfg.security.allowed_itemtypes)
+                && !wanted.contains(&r)
+            {
+                wanted.push(r);
+            }
+        }
+        wanted.truncate(self.app.cfg.limits.max_watched_rooms);
+        let readable = match self.app.store.readable(&self.hash, &wanted).await {
+            Ok(v) => v,
+            Err(e) => {
+                warn!(error = %e, "valkey error while reading grants");
+                return self.error(tx, ErrorCode::Internal, "temporarily unavailable", id);
+            }
+        };
+        let next: HashSet<Room> = wanted
+            .into_iter()
+            .zip(readable)
+            .filter_map(|(r, ok)| ok.then_some(r))
+            .collect();
+        for r in self.watched.difference(&next).cloned().collect::<Vec<_>>() {
+            self.app.presence.unwatch(&r, self.reg.id);
+        }
+        let added: Vec<Room> = next.difference(&self.watched).cloned().collect();
+        self.watched = next;
+        let mut list: Vec<String> = self.watched.iter().map(Room::to_string).collect();
+        list.sort();
+        if let Some(end) = reply(tx, &ServerMsg::Watching { rooms: list }, id) {
+            return Some(end);
+        }
+        for r in added {
+            self.app.presence.watch(&r, self.reg.id, tx.clone()).await;
+        }
+        None
     }
 
     /// A joined room whose grant is current (no pending regrant).

@@ -42,6 +42,8 @@ export class RealtimeClient {
   /** Tab activity; the server assumes `true` on each new connection. */
   private active = true;
   private readonly rooms = new Set<string>();
+  /** Items whose presence a list page follows (`watch`), re-sent after reconnection. */
+  private watched: string[] = [];
   /** Last `lock` state per room, for features that start after it arrived. */
   private readonly locks = new Map<string, Holder | null>();
   private readonly joined = new Set<string>();
@@ -117,6 +119,16 @@ export class RealtimeClient {
     if (this.state === "open" && this.joined.has(room)) this.send({ t: "compose", room, kind });
   }
 
+  /** Follows the presence of list rows without being in them (replaces the set). */
+  watch(rooms: string[]): void {
+    this.watched = rooms;
+    if (this.state === "open") this.send({ t: "watch", rooms });
+  }
+
+  isWatched(room: string): boolean {
+    return this.watched.includes(room);
+  }
+
   lockOf(room: string): Holder | null {
     return this.locks.get(room) ?? null;
   }
@@ -186,6 +198,7 @@ export class RealtimeClient {
         // Before subscribing, so that our presence entries carry the right state.
         if (!this.active) this.send({ t: "activity", active: false });
         for (const room of this.rooms) this.sub(room);
+        if (this.watched.length) this.send({ t: "watch", rooms: this.watched });
         break;
       case "subscribed":
         if (msg.id !== undefined) this.pendingSubs.delete(msg.id);

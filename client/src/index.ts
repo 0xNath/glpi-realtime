@@ -3,6 +3,7 @@ import { RealtimeClient } from "./client.ts";
 import { Bell, InboxController } from "./bell.ts";
 import { InboxApi, labelsFor } from "./inbox.ts";
 import { FieldsEditor } from "./editor.ts";
+import { ListPresence } from "./list.ts";
 import { LiveTimeline, TIMELINE_EVENTS } from "./timeline.ts";
 import { Toasts } from "./notifications.ts";
 import { InboxPage } from "./page.ts";
@@ -90,8 +91,34 @@ function boot(): void {
   for (const room of roomsIn(document)) client.subscribe(room);
 
   client.on("presence", (msg) => {
-    if (msg.t === "presence") render(document, msg.room, msg.users, client.user?.id);
+    // Rows of a list are drawn by ListPresence; the bar is for the item being displayed.
+    if (msg.t === "presence" && (client.isJoined(msg.room) || !client.isWatched(msg.room))) {
+      render(document, msg.room, msg.users, client.user?.id);
+    }
   });
+
+  // Lists of tickets, changes and problems: who is on each row.
+  let list: ListPresence | null = null;
+  const followList = () => {
+    if (!document.querySelector("table.search-results")) return;
+    list ??= new ListPresence(
+      document,
+      client,
+      async (items) => {
+        const resp = await fetch(`${rootDoc}/plugins/realtime/ajax/grants.php`, {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
+          body: JSON.stringify({ items }),
+        });
+        const data = resp.ok ? await resp.json() : null;
+        return Array.isArray(data?.rooms) ? data.rooms : [];
+      },
+      document.documentElement.lang || navigator.language || "en",
+    );
+    list.scan();
+  };
+  followList();
   const banner = new UpdatesBanner(document);
   client.on("event", (msg) => {
     if (msg.t !== "event") return;
@@ -144,6 +171,7 @@ function boot(): void {
       });
     }
     followForm();
+    followList();
   }).observe(document.body, { childList: true, subtree: true });
 
   client.start();

@@ -72,9 +72,23 @@ struct Changed {
 
 struct LocalRoom {
     members: HashMap<Uuid, mpsc::Sender<Message>>,
+    /// Connections that only look at the list (search results): they receive the list but
+    /// are not in it.
+    watchers: HashMap<Uuid, mpsc::Sender<Message>>,
     last_sent: Option<Vec<PresenceUser>>,
     /// Serializes refreshes of this room so that an older list never overwrites a newer one.
     refresh_lock: Arc<tokio::sync::Mutex<()>>,
+}
+
+impl LocalRoom {
+    fn new() -> Self {
+        Self {
+            members: HashMap::new(),
+            watchers: HashMap::new(),
+            last_sent: None,
+            refresh_lock: Arc::default(),
+        }
+    }
 }
 
 pub struct Presence {
@@ -135,11 +149,7 @@ impl Presence {
             let mut rooms = self.rooms.lock().expect("presence poisoned");
             rooms
                 .entry(room.clone())
-                .or_insert_with(|| LocalRoom {
-                    members: HashMap::new(),
-                    last_sent: None,
-                    refresh_lock: Arc::default(),
-                })
+                .or_insert_with(LocalRoom::new)
                 .members
                 .insert(conn, tx);
         }
@@ -178,7 +188,7 @@ impl Presence {
             match rooms.get_mut(room) {
                 Some(r) => {
                     r.members.remove(&conn);
-                    if r.members.is_empty() {
+                    if r.members.is_empty() && r.watchers.is_empty() {
                         rooms.remove(room);
                         false
                     } else {
@@ -194,6 +204,28 @@ impl Presence {
         self.announce(room).await;
         if still_local {
             self.refresh(room, None).await;
+        }
+    }
+
+    /// Follows a room's list without being in it (list pages). The current list is sent.
+    pub async fn watch(&self, room: &Room, conn: Uuid, tx: mpsc::Sender<Message>) {
+        self.rooms
+            .lock()
+            .expect("presence poisoned")
+            .entry(room.clone())
+            .or_insert_with(LocalRoom::new)
+            .watchers
+            .insert(conn, tx);
+        self.refresh(room, Some(conn)).await;
+    }
+
+    pub fn unwatch(&self, room: &Room, conn: Uuid) {
+        let mut rooms = self.rooms.lock().expect("presence poisoned");
+        if let Some(r) = rooms.get_mut(room) {
+            r.watchers.remove(&conn);
+            if r.members.is_empty() && r.watchers.is_empty() {
+                rooms.remove(room);
+            }
         }
     }
 
@@ -242,6 +274,7 @@ impl Presence {
             }
             r.members
                 .iter()
+                .chain(r.watchers.iter())
                 .filter(|(id, _)| changed || Some(**id) == force)
                 .map(|(id, tx)| (*id, tx.clone()))
                 .collect()

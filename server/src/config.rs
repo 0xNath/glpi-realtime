@@ -108,6 +108,8 @@ pub struct Limits {
     pub max_connections_per_user: usize,
     pub max_message_bytes: usize,
     pub max_rooms_per_connection: usize,
+    /// Items whose presence a list page may follow (`watch`).
+    pub max_watched_rooms: usize,
     /// Token bucket per connection.
     pub messages_per_second: u32,
     pub burst: u32,
@@ -129,6 +131,7 @@ impl Default for Limits {
             max_connections_per_user: 10,
             max_message_bytes: 64 * 1024,
             max_rooms_per_connection: 50,
+            max_watched_rooms: 200,
             messages_per_second: 20,
             burst: 40,
             user_messages_per_second: 50,

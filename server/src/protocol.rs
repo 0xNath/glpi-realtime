@@ -104,6 +104,11 @@ pub enum ClientMsg {
         room: String,
         kind: Kind,
     },
+    /// Follow the presence of these items without being in them (list pages). Replaces
+    /// the previous set; items without a `read` grant are left out.
+    Watch {
+        rooms: Vec<String>,
+    },
     /// Writing an answer in the timeline (`followup`, `task`, `solution`, `validation`,
     /// `document`), or `null` when done. Shown to the other members (presence).
     Compose {
@@ -191,6 +196,10 @@ pub enum ServerMsg {
     /// No event is delivered for this room until then.
     Regrant {
         room: String,
+    },
+    /// Reply to `watch`: the items whose presence is now followed.
+    Watching {
+        rooms: Vec<String>,
     },
     /// A shared draft, to those who follow it (and to its new writer after a takeover).
     /// `null`: sent or discarded.
