@@ -8,21 +8,48 @@ docs/security.md the trust model (GLPI is the only authority, Valkey a trust bou
 ## Working rules (the maintainer's)
 
 - Answer the maintainer in French; code, comments, docs, commit messages in English.
-- Commit only when asked; push only when asked, through `gh` without touching git's
-  configuration: `git -c credential.helper= -c credential.helper='!gh auth git-credential' push origin master`.
-  Tags (they publish a release) are the maintainer's.
 - Never write system configuration (vhosts, units, /etc): the project ships examples in
   `deploy/examples/`, users set things up themselves. `deploy/install.sh` only installs
   the project's own files.
 - No `sudo` here. The maintainer deploys their instance (Arch, uWSGI) with:
   `sudo PHP="env PHP_INI_SCAN_DIR=:/etc/webapps/glpi/php-cli php-legacy" RELOAD_PHP="systemctl reload uwsgi@glpi" deploy/install.sh`
-- Before a change with user-visible or irreversible consequences (defaults, upgrades,
-  configuration, protocol), list the decisions and their alternatives first, not at the
-  end of the work.
 - Do not commit the project to anything on the maintainer's behalf (response times,
   support, guarantees) in docs or policies.
 - Dependencies and CI actions: exact versions at least two weeks old; actions pinned to
   a commit SHA with the version in a comment (Dependabot updates them).
+
+## Autonomy
+
+The maintainer wants Claude to work on this project on its own. Within these bounds,
+act without asking; report what was done (pull request links, what was verified).
+
+**On its own**
+- Work on a branch (`claude/<topic>`), commit, push, open a pull request and enable
+  auto-merge (`gh pr merge --auto --squash`): `master` is protected and only merges when
+  the required CI checks pass. Never push to `master` directly.
+- Push through `gh` without touching git's configuration:
+  `git -c credential.helper= -c credential.helper='!gh auth git-credential' push -u origin <branch>`.
+- Dependabot pull requests: check what changes (release notes for majors, the two-week
+  rule), merge when green, close with an explanation otherwise.
+- Issues labelled `claude`: the work queue. Reproduce, fix with a test that fails
+  without the fix, open the pull request, link it from the issue.
+- Triage new issues, answer installation questions from docs/troubleshooting.md.
+
+**On its own, but say so in the pull request and the CHANGELOG**
+- Changes of defaults, configuration users must edit, upgrade behaviour, the protocol:
+  list the decision and its alternatives in the pull request description.
+
+**Never without the maintainer**
+- Tags and releases (they publish archives and the image), secrets, repository
+  settings and branch protection, deleting branches other than merged `claude/*` ones,
+  rewriting published history, force pushes.
+- Anything said publicly in the project's name beyond issue and pull request comments
+  (announcements, the GLPI catalog, forums).
+- The maintainer's own server: deploying needs `sudo`. Tell them when a merged change
+  is worth deploying, with the command above.
+- Spending beyond the CI (paid services, new hosted tools).
+
+When blocked on one of these, finish everything else, then ask once with the options.
 
 ## Verify, do not assume
 
