@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { login, openTicketAsAllowed, room, ticketId, waitForFrame } from "./helpers.ts";
+import { login, openAnswer, openTicketAsAllowed, room, ticketId, waitForFrame } from "./helpers.ts";
 
 const banner = `.glpi-rt-updates[data-room="${room}"]`; // field changes only
 
@@ -9,9 +9,12 @@ const banner = `.glpi-rt-updates[data-room="${room}"]`; // field changes only
  * without going through the rich-text editor. Leaves a followup on the test ticket.
  */
 async function addFollowup(page: import("@playwright/test").Page, text: string): Promise<number> {
+  // GLPI 12 loads the followup form when its block opens.
+  await openAnswer(page, "ITILFollowup");
+  await expect(page.locator("#new-ITILFollowup-block form[action*='itilfollowup.form.php']")).toBeAttached();
   return page.evaluate(
     async ({ text, ticketId }) => {
-      const form = document.querySelector<HTMLFormElement>("form[action*='itilfollowup.form.php']");
+      const form = document.querySelector<HTMLFormElement>("#new-ITILFollowup-block form[action*='itilfollowup.form.php']");
       if (!form) throw new Error("no followup form on the ticket page");
       const data = new FormData(form);
       data.set("itemtype", "Ticket");
@@ -44,7 +47,11 @@ test("a followup added by one technician appears in the other's timeline, withou
   // Merged live from the tab GLPI renders for Bob: no reload, no "refresh" banner.
   const item = bob.page.locator(`.itil-timeline > .timeline-item[data-itemtype="ITILFollowup"][data-items-id="${ev.item.id}"]`);
   await expect(item).toContainText(secret);
-  await expect(bob.page.locator(banner)).toBeHidden();
+  // No "refresh" banner for the followup itself (GLPI may also change the status, which
+  // is announced: the first followup of a new ticket moves it to "processing").
+  if (await bob.page.locator(banner).isVisible()) {
+    await expect(bob.page.locator(banner)).not.toContainText(/suivi|followup/i);
+  }
 
   await alice.context.close();
   await bob.context.close();

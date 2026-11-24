@@ -1,38 +1,6 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
-import { login, openTicketAsAllowed, room, ticketId, waitForFrame } from "./helpers.ts";
-
-/** Opens one of GLPI's answer forms (followup, solution...) and waits for its editor. */
-async function openAnswer(page: Page, cls: string): Promise<void> {
-  await page.evaluate((cls) => {
-    const block = document.getElementById(`new-${cls}-block`);
-    if (!block) throw new Error(`no ${cls} answer form`);
-    (window as any).bootstrap.Collapse.getOrCreateInstance(block, { toggle: false }).show();
-  }, cls);
-  await expect(page.locator(`#new-${cls}-block textarea[name='content']`)).toBeAttached();
-}
-
-async function closeAnswer(page: Page, cls: string): Promise<void> {
-  await page.evaluate((cls) => {
-    (window as any).bootstrap.Collapse.getOrCreateInstance(document.getElementById(`new-${cls}-block`)!).hide();
-  }, cls);
-}
-
-/** Types into the TinyMCE editor of an answer form. */
-async function typeAnswer(page: Page, cls: string, text: string): Promise<void> {
-  await expect
-    .poll(() => page.evaluate((cls) => {
-      const area = document.querySelector<HTMLTextAreaElement>(`#new-${cls}-block textarea[name='content']`);
-      return !!(area && (window as any).tinymce?.get(area.id));
-    }, cls))
-    .toBe(true);
-  await page.evaluate(({ cls, text }) => {
-    const area = document.querySelector<HTMLTextAreaElement>(`#new-${cls}-block textarea[name='content']`)!;
-    const ed = (window as any).tinymce.get(area.id);
-    ed.setContent(`<p>${text}</p>`);
-    ed.fire("input");
-  }, { cls, text });
-}
+import { closeAnswer, login, openAnswer, openTicketAsAllowed, room, ticketId, typeAnswer, waitForFrame } from "./helpers.ts";
 
 test("while one technician edits the fields, the other's are read-only", async ({ browser }) => {
   const alice = await login(browser, "alice");
@@ -99,6 +67,9 @@ test("the ticket list shows who is on each ticket", async ({ browser }) => {
   await openTicketAsAllowed(bob);
   await waitForFrame(bob, (f) => f.t === "subscribed" && f.room === room, "subscribed");
 
+  // Real people may be on the test ticket too (an rt-alice tab left open...): compare.
+  await bob.page.waitForTimeout(1000);
+  const before = [...bob.frames].reverse().find((f) => f.t === "presence" && f.room === room)?.users.length ?? 0;
   await alice.page.goto("/front/ticket.php");
   await waitForFrame(alice, (f) => f.t === "watching", "watching");
   const watching = alice.frames.find((f) => f.t === "watching")!;
@@ -107,7 +78,7 @@ test("the ticket list shows who is on each ticket", async ({ browser }) => {
   // Looking at the list does not put Alice on the ticket.
   await bob.page.waitForTimeout(1000);
   const last = [...bob.frames].reverse().find((f) => f.t === "presence" && f.room === room);
-  expect(last.users.some((u: any) => /alice/i.test(u.name))).toBe(false);
+  expect(last.users.length, "nobody added by looking at the list").toBe(before);
   await alice.context.close();
   await bob.context.close();
 });

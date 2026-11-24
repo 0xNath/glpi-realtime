@@ -337,6 +337,8 @@ export class SharedDrafts {
     };
     ed.on("input change keyup undo redo SetContent", schedule);
     block.querySelector("input[name='is_private']")?.addEventListener("change", schedule);
+    // What was typed (or prefilled by a GLPI template) before we listened is shared too.
+    schedule();
   }
 
   /** Sends our draft (we become its writer, or learn that someone else is). */
