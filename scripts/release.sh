@@ -19,11 +19,14 @@ python3 scripts/i18n.py --check
 VERSION=$server_v
 ARCH=$(uname -m)
 
+echo "==> Client dependencies"
+(cd client && npm ci --silent)
+
 echo "==> Tests"
 scripts/test-all.sh
 
 echo "==> Client bundle"
-(cd client && npm ci --silent && npm run -s build)
+(cd client && npm run -s build)
 
 echo "==> Server binary"
 TARGET="$ARCH-unknown-linux-musl"

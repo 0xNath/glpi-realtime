@@ -10,27 +10,35 @@ use fred::interfaces::PubsubInterface;
 use fred::types::Value;
 use serde_json::json;
 
-fn php() -> Option<&'static str> {
-    ["php-legacy", "php"].into_iter().find(|b| {
-        Command::new(b)
-            .args([
-                "-d",
-                "extension=igbinary",
-                "-d",
-                "extension=redis",
-                "-r",
-                "exit(class_exists('Redis') ? 0 : 1);",
-            ])
+/// A PHP CLI with the redis extension, and the `-d extension=...` flags it still needs
+/// (none when it already loads them: setup-php, distribution packages).
+fn php() -> Option<(&'static str, Vec<String>)> {
+    ["php-legacy", "php"].into_iter().find_map(|b| {
+        let modules = Command::new(b).arg("-m").output().ok()?;
+        let loaded = String::from_utf8_lossy(&modules.stdout).to_string();
+        let flags: Vec<String> = ["igbinary", "redis"]
+            .into_iter()
+            .filter(|e| !loaded.lines().any(|l| l.trim() == *e))
+            .flat_map(|e| ["-d".to_string(), format!("extension={e}")])
+            .collect();
+        let ok = Command::new(b)
+            .args(&flags)
+            .args(["-r", "exit(class_exists('Redis') ? 0 : 1);"])
             .status()
-            .map(|s| s.success())
-            .unwrap_or(false)
+            .is_ok_and(|s| s.success());
+        ok.then_some((b, flags))
     })
 }
 
-fn run_php(php: &str, script: &str, args: &[String]) -> std::process::Output {
+fn run_php(
+    (php, flags): &(&str, Vec<String>),
+    script: &str,
+    args: &[String],
+) -> std::process::Output {
     let script = format!("{}/../plugin/tests/{script}", env!("CARGO_MANIFEST_DIR"));
     let out = Command::new(php)
-        .args(["-d", "extension=igbinary", "-d", "extension=redis", &script])
+        .args(flags)
+        .arg(&script)
         .args(args)
         .output()
         .unwrap();
@@ -51,24 +59,15 @@ async fn token_issued_by_the_plugin_is_accepted() {
     let Some(php) = php() else {
         return eprintln!("php with redis missing: skipped");
     };
-    let script = concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../plugin/tests/issue_token.php"
-    );
-    let out = Command::new(php)
-        .args(["-d", "extension=igbinary", "-d", "extension=redis", script])
-        .args([
+    let out = run_php(
+        &php,
+        "issue_token.php",
+        &[
             vk.socket.display().to_string(),
             "5".into(),
             "Bob Durand".into(),
             "42".into(),
-        ])
-        .output()
-        .unwrap();
-    assert!(
-        out.status.success(),
-        "{}",
-        String::from_utf8_lossy(&out.stderr)
+        ],
     );
     let issued: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
     let token = issued["cookie"]["token"].as_str().unwrap().to_string();
@@ -114,7 +113,7 @@ async fn events_published_by_the_plugin_reach_clients() {
     };
     let sock = vk.socket.display().to_string();
     let out = run_php(
-        php,
+        &php,
         "issue_token.php",
         &[sock.clone(), "5".into(), "Rita".into(), "42".into()],
     );
@@ -136,7 +135,7 @@ async fn events_published_by_the_plugin_reach_clients() {
     }
 
     run_php(
-        php,
+        &php,
         "publish_events.php",
         &[sock.clone(), "9".into(), "42".into(), "changes".into()],
     );
@@ -168,7 +167,7 @@ async fn events_published_by_the_plugin_reach_clients() {
 
     // Removing an actor revokes every grant: the next `sub` is refused until GLPI says so.
     run_php(
-        php,
+        &php,
         "publish_events.php",
         &[sock, "9".into(), "42".into(), "unassign".into()],
     );

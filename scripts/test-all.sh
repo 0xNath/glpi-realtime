@@ -3,7 +3,11 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PHP=$(command -v php-legacy || command -v php)
-PHPX=(-d extension=igbinary -d extension=redis)
+# Load igbinary/redis only when this PHP does not already (setup-php, distro packages).
+PHPX=()
+for ext in igbinary redis; do
+    "$PHP" -m 2>/dev/null | grep -qx "$ext" || PHPX+=(-d "extension=$ext")
+done
 
 echo "== Rust (unit + integration + interop)"
 (cd "$ROOT/server" && cargo clippy --all-targets -q -- -D warnings && cargo test -q)
