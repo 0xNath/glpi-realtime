@@ -72,6 +72,9 @@ cd e2e && E2E_ENV_FILE=../.e2e.local.env npx playwright test
 e2e/env/down.sh
 ```
 
+The suite can run again on the same environment: the tests that change their item for
+good (assume, solution) skip themselves once done, with the reason.
+
 Options of `up.sh`: `UPGRADE_FROM=v0.6.0` (upgrade test), `RELEASE_ARCHIVE=...` (install
 a release archive), `PLUGIN_MAX_GLPI=99.99.99` (unreleased GLPI). Plain
 `npx playwright test` in `e2e/` runs against the maintainer's instance
