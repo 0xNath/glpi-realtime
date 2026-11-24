@@ -37,6 +37,9 @@ pub struct Actor {
     pub id: u64,
     #[serde(default)]
     pub name: String,
+    /// How the author appears to self-service users when agents are anonymized.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anon: Option<crate::avatar::Anon>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -126,6 +129,10 @@ pub struct Batch {
     /// Rights on the item may have changed: every grant on it was deleted.
     #[serde(default)]
     pub regrant: bool,
+    /// When not empty, the regrant concerns these sessions only (token hashes): their
+    /// user's rights changed, the others' grants are intact.
+    #[serde(default)]
+    pub sessions: Vec<String>,
     #[serde(default)]
     pub events: Vec<Event>,
     #[serde(default)]
@@ -159,6 +166,14 @@ impl Batch {
             return None;
         }
         b.by.name = b.by.name.chars().take(255).collect();
+        b.by.anon = b.by.anon.take().and_then(crate::avatar::Anon::clean);
+        if b.sessions.len() > MAX_RECIPIENTS
+            || b.sessions
+                .iter()
+                .any(|h| h.len() != 64 || !h.bytes().all(|c| c.is_ascii_hexdigit()))
+        {
+            return None;
+        }
         for e in &mut b.events {
             if !is_word(&e.kind, 32, b".") {
                 return None;
@@ -365,6 +380,7 @@ impl Hub {
                 .collect()
         };
         for (id, tx, alert) in targets {
+            metrics::counter!("rt_notifications_total", "alert" => if alert { "yes" } else { "no" }).increment(1);
             let text = if alert { loud.clone() } else { quiet.clone() };
             self.deliver(id, &tx, Delivery::Text(text));
         }

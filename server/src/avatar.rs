@@ -66,9 +66,111 @@ impl Avatar {
     }
 }
 
+/// How a support agent appears to self-service users when their entity anonymizes agents
+/// (computed by GLPI: generic name or nickname, neutral initials).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Anon {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub avatar: Option<Avatar>,
+}
+
+impl Anon {
+    /// Parses the plugin's JSON; the avatar is validated like any other.
+    pub fn from_json(json: &str) -> Option<Anon> {
+        #[derive(Deserialize)]
+        struct Raw {
+            name: String,
+            #[serde(default)]
+            avatar: Option<serde_json::Value>,
+        }
+        let r: Raw = serde_json::from_str(json).ok()?;
+        Some(Anon {
+            name: r.name.chars().take(255).collect(),
+            avatar: r.avatar.and_then(|a| Avatar::from_json(&a.to_string())),
+        })
+    }
+
+    /// Re-validates an `anon` received inside a published batch.
+    pub fn clean(self) -> Option<Anon> {
+        Anon::from_json(&serde_json::to_string(&self).ok()?)
+    }
+}
+
+/// Applies the anonymized representations of a frame for its recipient, and removes
+/// them: users (presence), authors (`by`), lock holders and draft writers may carry an
+/// `anon` object. For a session that must see agents anonymized, their `name` and
+/// `avatar` become the anonymized ones. Frames without `anon` are returned unchanged
+/// (anonymization disabled: no cost).
+pub fn anonymize(text: &str, anon_view: bool) -> std::borrow::Cow<'_, str> {
+    use std::borrow::Cow;
+    if !text.contains("\"anon\"") {
+        return Cow::Borrowed(text);
+    }
+    let Ok(mut v) = serde_json::from_str::<serde_json::Value>(text) else {
+        return Cow::Borrowed(text);
+    };
+    fn walk(v: &mut serde_json::Value, anon_view: bool) {
+        match v {
+            serde_json::Value::Object(map) => {
+                if let Some(anon) = map.remove("anon")
+                    && anon_view
+                    && let serde_json::Value::Object(a) = anon
+                {
+                    if let Some(name) = a.get("name") {
+                        map.insert("name".into(), name.clone());
+                    }
+                    match a.get("avatar") {
+                        Some(av) => map.insert("avatar".into(), av.clone()),
+                        None => map.remove("avatar"),
+                    };
+                }
+                for child in map.values_mut() {
+                    walk(child, anon_view);
+                }
+            }
+            serde_json::Value::Array(items) => {
+                for child in items {
+                    walk(child, anon_view);
+                }
+            }
+            _ => {}
+        }
+    }
+    walk(&mut v, anon_view);
+    Cow::Owned(v.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn frames_are_anonymized_for_self_service_only() {
+        let frame = r#"{"t":"presence","users":[{"id":2,"name":"Alice Martin","avatar":{"picture":"/p.png"},"anon":{"name":"Helpdesk user","avatar":{"initials":"HE"}}},{"id":3,"name":"Rita"}]}"#;
+        let tech: serde_json::Value = serde_json::from_str(&anonymize(frame, false)).unwrap();
+        assert_eq!(tech["users"][0]["name"], "Alice Martin");
+        assert!(tech["users"][0].get("anon").is_none(), "never sent as such");
+        let user: serde_json::Value = serde_json::from_str(&anonymize(frame, true)).unwrap();
+        assert_eq!(user["users"][0]["name"], "Helpdesk user");
+        assert_eq!(user["users"][0]["avatar"]["initials"], "HE");
+        assert_eq!(
+            user["users"][1]["name"], "Rita",
+            "requesters are not anonymized"
+        );
+        let plain = r#"{"t":"pong"}"#;
+        assert!(
+            matches!(anonymize(plain, true), std::borrow::Cow::Borrowed(_)),
+            "no anon: untouched"
+        );
+        let no_avatar =
+            r#"{"by":{"id":1,"name":"A","avatar":{"picture":"/x"},"anon":{"name":"H"}}}"#;
+        let v: serde_json::Value = serde_json::from_str(&anonymize(no_avatar, true)).unwrap();
+        assert!(
+            v["by"].get("avatar").is_none(),
+            "the real picture does not stay"
+        );
+    }
 
     #[test]
     fn valid_avatars() {

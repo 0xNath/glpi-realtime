@@ -1,3 +1,4 @@
+import { register } from "./i18n.ts";
 import type { Avatar, PresenceUser } from "./protocol.ts";
 
 export const MAX_AVATARS = 5;
@@ -27,7 +28,7 @@ interface Labels {
   inactive: string;
 }
 
-const LABELS: Record<string, Labels> = {
+const LABELS = register<Record<string, Labels>>("presence", {
   fr: {
     also: "Également sur % :",
     more: (n) => `et ${n} autre${n > 1 ? "s" : ""}`,
@@ -40,7 +41,7 @@ const LABELS: Record<string, Labels> = {
     active: "active on %",
     inactive: "inactive (tab in background or unused)",
   },
-};
+});
 
 /** Labels for an item type ("Également sur ce changement :"). */
 export function labels(lang: string, itemtype = "Ticket"): Labels {

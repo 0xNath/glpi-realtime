@@ -9,5 +9,12 @@ unixsocketperm 660
 # Instant revocation of WebSocket sessions at logout (glpi-realtime: revocation.keyspace_events).
 notify-keyspace-events Kgx
 
-# If Valkey also listens on TCP, protect it: whoever can write to it can forge sessions.
-# requirepass ... / ACLs, or: port 0
+# Whoever can write to Valkey can forge sessions, grants and events: keep it local
+# (port 0 if nothing else needs TCP) and give glpi-realtime and GLPI their own ACL user,
+# limited to the project's keys and channels (keyspace notifications included):
+#   user default off
+#   user glpi-rt on >CHANGE-ME ~rt:* &rt:* &__keyspace@*__:rt:* +@all -@dangerous
+# Then: config.toml [valkey] username/password, and in GLPI (stored encrypted):
+#   bin/console glpi:config:set --context=plugin:realtime valkey_username glpi-rt
+#   bin/console glpi:config:set --context=plugin:realtime valkey_password 'CHANGE-ME'
+port 0

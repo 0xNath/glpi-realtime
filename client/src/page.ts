@@ -43,7 +43,7 @@ export class InboxPage {
 
   render(list: InboxList): void {
     const t = this.t;
-    const shown = tabs(list.preferences, list.can_see_others);
+    const shown = tabs(list.preferences, list.can_see_others, list.interface);
     if (!shown.includes(this.tab)) this.tab = "all";
     const all = groups(list, this.tab, this.ctl.withRead);
     const statuses = new Map<number, string>();

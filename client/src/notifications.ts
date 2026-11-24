@@ -1,3 +1,4 @@
+import { register } from "./i18n.ts";
 import type { Actor } from "./protocol.ts";
 import { lang, who } from "./updates.ts";
 
@@ -16,7 +17,7 @@ export interface Notification {
 
 type Lang = "fr" | "en";
 
-const TEXT: Record<Lang, Record<string, (by: string, ref: string) => string>> = {
+const TEXT = register<Record<Lang, Record<string, (by: string, ref: string) => string>>>("notifications.text", {
   fr: {
     assigned: (by, ref) => `${by} vous a attribué ${ref}`,
     created: (by, ref) => `${by} a créé ${ref}`,
@@ -43,17 +44,17 @@ const TEXT: Record<Lang, Record<string, (by: string, ref: string) => string>> = 
     transferred: (by, ref) => `${by} transferred ${ref}`,
     other: (by, ref) => `${by} updated ${ref}`,
   },
-};
+});
 
-const ITEM: Record<Lang, Record<string, string>> = {
+const ITEM = register<Record<Lang, Record<string, string>>>("notifications.items", {
   fr: { Ticket: "le ticket", Change: "le changement", Problem: "le problème" },
   en: { Ticket: "ticket", Change: "change", Problem: "problem" },
-};
+});
 
-const UI = {
+const UI = register("notifications.ui", {
   fr: { title: "Notification", open: "Ouvrir", close: "Fermer" },
   en: { title: "Notification", open: "Open", close: "Close" },
-};
+});
 
 function parseRoom(room: string): { itemtype: string; id: number } | null {
   const m = /^([A-Za-z_]+):([1-9][0-9]*)$/.exec(room);

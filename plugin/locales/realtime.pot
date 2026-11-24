@@ -1,0 +1,19 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: glpi-realtime\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: src/ConcurrencyGuard.php:60
+#, php-format
+msgid "%s changed this item while you were editing it: your changes were not saved. Refresh the page and try again."
+msgstr ""
+
+#: src/SolutionGuard.php:53
+msgid "A solution has already been proposed for this item. Refresh the page to see it."
+msgstr ""
+
+#: ajax/assign.php:46
+msgid "You are already assigned to this item."
+msgstr ""

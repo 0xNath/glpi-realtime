@@ -10,7 +10,7 @@ use std::collections::HashMap;
 
 use fred::prelude::*;
 
-use crate::avatar::Avatar;
+use crate::avatar::{Anon, Avatar};
 use crate::config::ValkeyConfig;
 use crate::protocol::Room;
 
@@ -21,6 +21,10 @@ pub struct Session {
     pub avatar: Option<Avatar>,
     /// GLPI groups of the user (private tasks of "my groups").
     pub groups: Vec<u64>,
+    /// How this user appears to self-service users when agents are anonymized.
+    pub anon: Option<Anon>,
+    /// This session must see support agents anonymized.
+    pub anon_view: bool,
 }
 
 /// Rights of one session on one item, as computed by GLPI when the item was displayed.
@@ -54,6 +58,10 @@ pub fn fred_config(cfg: &ValkeyConfig) -> Result<Config, Error> {
         Config::from_url(&cfg.url)?
     };
     c.database = Some(cfg.db);
+    if let Some(p) = &cfg.password {
+        c.password = Some(p.clone());
+        c.username.clone_from(&cfg.username);
+    }
     Ok(c)
 }
 
@@ -108,6 +116,8 @@ impl Store {
                 .get("groups")
                 .and_then(|g| serde_json::from_str::<Vec<u64>>(g).ok())
                 .unwrap_or_default(),
+            anon: h.get("anon").and_then(|a| Anon::from_json(a)),
+            anon_view: h.get("anon_view").is_some_and(|v| v == "1"),
         }))
     }
 

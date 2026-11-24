@@ -40,6 +40,8 @@ final class Grants
                 // Inbox tables missing (plugin not updated yet): never break the form.
             }
         }
+        // Inside the fields form: GLPI refuses to save it if the item changed meanwhile.
+        echo ConcurrencyGuard::field($item);
         if (self::write($item)) {
             // Rooms the client should join on this page.
             echo sprintf(
@@ -73,20 +75,44 @@ final class Grants
         $flags = array_map(static fn(bool $b) => $b ? '1' : '0', self::flags($item));
         $sessionKey = SessionToken::sessionKey($hash);
 
-        return Valkey::run(function (Redis $r) use ($key, $index, $hash, $flags, $sessionKey) {
+        $room = self::room($item);
+        return Valkey::run(function (Redis $r) use ($key, $index, $hash, $flags, $sessionKey, $room) {
             $ttl = $r->ttl($sessionKey);
             if (!is_int($ttl) || $ttl <= 0) {
                 return false; // no live session token: nothing to grant
             }
+            $mine = Valkey::key('gs:' . $hash); // rooms of this session (rights changes)
             $r->multi(Redis::PIPELINE)
                 ->del($key)
                 ->hMSet($key, $flags)
                 ->expire($key, $ttl)
                 ->sAdd($index, $hash)
                 ->expire($index, Settings::sessionTtl())
+                ->sAdd($mine, $room)
+                ->expire($mine, $ttl)
                 ->exec();
             return true;
         }, false);
+    }
+
+    /**
+     * Deletes every grant of one session (its user's rights changed). Returns the rooms.
+     *
+     * @return list<string>
+     */
+    public static function revokeSession(Redis $r, string $hash): array
+    {
+        $mine = Valkey::key('gs:' . $hash);
+        $rooms = $r->sMembers($mine);
+        if (!is_array($rooms) || $rooms === []) {
+            return [];
+        }
+        $pipe = $r->multi(Redis::PIPELINE);
+        foreach ($rooms as $room) {
+            $pipe->del(Valkey::key('g:' . $hash . ':' . $room))->sRem(Valkey::key('gi:' . $room), $hash);
+        }
+        $pipe->del($mine)->exec();
+        return array_values($rooms);
     }
 
     /**

@@ -1,0 +1,27 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: glpi-realtime\n"
+"Language: fr_FR\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+#: src/ConcurrencyGuard.php:60
+#, php-format
+msgid ""
+"%s changed this item while you were editing it: your changes were not saved. "
+"Refresh the page and try again."
+msgstr ""
+"%s a modifié cet élément pendant que vous l'éditiez : vos modifications "
+"n'ont pas été enregistrées. Actualisez la page et recommencez."
+
+#: src/SolutionGuard.php:53
+msgid ""
+"A solution has already been proposed for this item. Refresh the page to see "
+"it."
+msgstr ""
+"Une solution a déjà été proposée pour cet élément. Actualisez la page pour "
+"la voir."
+
+#: ajax/assign.php:46
+msgid "You are already assigned to this item."
+msgstr "Vous êtes déjà attribué à cet élément."

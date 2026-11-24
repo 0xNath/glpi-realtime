@@ -74,8 +74,14 @@ pub async fn handler(
 
     metrics::counter!("rt_handshakes_total", "result" => "ok").increment(1);
     let max = app.cfg.limits.max_message_bytes;
+    // Small buffers: tungstenite's defaults (128 KiB read + 128 KiB write per socket)
+    // cost ~3 GiB at 20 000 connections, while messages are small. The read buffer grows
+    // when a larger message arrives (up to max_message_size).
     ws.max_message_size(max)
         .max_frame_size(max)
+        .read_buffer_size(4 * 1024)
+        .write_buffer_size(0)
+        .max_write_buffer_size(max + 1024)
         .on_upgrade(move |socket| {
             let (ev_tx, ev_rx) = mpsc::channel(app.cfg.limits.outbound_queue);
             Connection::new(app, registration, hash, session, ev_tx).run(socket, ev_rx)
@@ -165,8 +171,17 @@ impl Connection {
         let (mut sink, mut stream) = socket.split();
         let (tx, mut rx) = mpsc::channel::<Message>(limits.outbound_queue);
 
+        let anon_view = self.session.anon_view;
         let writer = tokio::spawn(async move {
             while let Some(m) = rx.recv().await {
+                // Anonymized agents for self-service sessions; `anon` never leaves the server.
+                let m = match m {
+                    Message::Text(t) => match crate::avatar::anonymize(t.as_str(), anon_view) {
+                        std::borrow::Cow::Borrowed(_) => Message::Text(t),
+                        std::borrow::Cow::Owned(o) => Message::Text(o.into()),
+                    },
+                    other => other,
+                };
                 let is_close = matches!(m, Message::Close(_));
                 if sink.send(m).await.is_err() || is_close {
                     break;
@@ -488,6 +503,7 @@ impl Connection {
             }
         }
         wanted.truncate(self.app.cfg.limits.max_watched_rooms);
+        metrics::counter!("rt_watch_total").increment(1);
         let readable = match self.app.store.readable(&self.hash, &wanted).await {
             Ok(v) => v,
             Err(e) => {
@@ -547,6 +563,7 @@ impl Connection {
                 self.session.uid,
                 &self.session.name,
                 self.session.avatar.clone(),
+                self.session.anon.clone(),
             )
         };
         match msg {
@@ -659,6 +676,7 @@ impl Connection {
                 self.session.uid,
                 &self.session.name,
                 self.session.avatar.clone(),
+                self.session.anon.clone(),
             );
             me.reason = reason;
             if self.app.locks.acquire(&r, scope, me, force).await.is_err() {
@@ -692,7 +710,10 @@ impl Connection {
         let Some(j) = self.rooms.get_mut(&room) else {
             return None; // left meanwhile
         };
-        if batch.regrant && j.stale_until.is_none() {
+        // A regrant for other sessions (their user's rights changed) does not concern us.
+        let regrant =
+            batch.regrant && (batch.sessions.is_empty() || batch.sessions.contains(&self.hash));
+        if regrant && j.stale_until.is_none() {
             let timeout = Duration::from_secs(self.app.cfg.events.regrant_timeout_secs);
             j.stale_until = Some(Instant::now() + timeout);
             return reply(
@@ -782,6 +803,7 @@ impl Connection {
             active: self.active,
             avatar: self.session.avatar.clone(),
             composing,
+            anon: self.session.anon.clone(),
         }
     }
 

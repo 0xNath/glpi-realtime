@@ -24,7 +24,7 @@ use tokio::sync::watch;
 use tracing::{debug, warn};
 use uuid::Uuid;
 
-use crate::avatar::Avatar;
+use crate::avatar::{Anon, Avatar};
 use crate::config::Config;
 use crate::events::{Delivery, Hub};
 use crate::presence::{Entry, now};
@@ -66,6 +66,8 @@ pub struct Holder {
     /// (`solution`, `pending`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anon: Option<Anon>,
 }
 
 /// Reasons a fields lock may be taken for, besides editing the fields.
@@ -172,6 +174,7 @@ impl Locks {
         force: bool,
     ) -> Result<Option<Holder>, LockError> {
         let force = force && self.can_take_over(room, scope, &me.conn).await;
+        let me_conn = me.conn.clone();
         let json = serde_json::to_string(&me).expect("holder serializes");
         let cur: String = self
             .store
@@ -194,6 +197,18 @@ impl Locks {
             })?;
         // Newly taken, or its reason changed: everyone must know.
         let (changed, stored) = cur.split_at(cur.len().min(1));
+        let scope_label = match scope {
+            Scope::Fields => "fields",
+            Scope::Solution => "solution",
+        };
+        let ours = serde_json::from_str::<Holder>(stored).is_ok_and(|h| h.conn == me_conn);
+        let result = match (changed == "1", ours) {
+            (true, _) => "taken",
+            (false, true) => "renewed",
+            (false, false) => "busy",
+        };
+        metrics::counter!("rt_locks_total", "scope" => scope_label, "result" => result)
+            .increment(1);
         if changed == "1" {
             self.changed(room, scope).await;
         }
@@ -357,7 +372,13 @@ impl Locks {
 }
 
 /// Holder description for a connection.
-pub fn holder(conn: Uuid, uid: u64, name: &str, avatar: Option<Avatar>) -> Holder {
+pub fn holder(
+    conn: Uuid,
+    uid: u64,
+    name: &str,
+    avatar: Option<Avatar>,
+    anon: Option<Anon>,
+) -> Holder {
     Holder {
         conn: conn.to_string(),
         id: uid,
@@ -365,5 +386,6 @@ pub fn holder(conn: Uuid, uid: u64, name: &str, avatar: Option<Avatar>) -> Holde
         since: now(),
         avatar,
         reason: None,
+        anon,
     }
 }

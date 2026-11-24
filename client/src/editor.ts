@@ -1,3 +1,4 @@
+import { register } from "./i18n.ts";
 import { h, icon } from "./dom.ts";
 import type { Holder, PresenceUser } from "./protocol.ts";
 import { noun } from "./updates.ts";
@@ -74,7 +75,7 @@ export class EditorState {
   }
 }
 
-const TEXT = {
+const TEXT = register("editor", {
   fr: {
     other: (n: string, since: string, it: string) => `${n} modifie les champs de ${it} ${since}.`,
     solution: (n: string, it: string) => `${n} ajoute une solution : le statut de ${it} va changer, ses champs sont bloqués jusqu'à l'envoi.`,
@@ -97,7 +98,7 @@ const TEXT = {
     refresh: "Refresh",
     since: (m: number) => (m < 1 ? "since a moment" : `for ${m} min`),
   },
-};
+});
 
 const CONTROLS = "input, select, textarea, [contenteditable=''], [contenteditable=true], .select2-selection, .edit-timeline-item";
 

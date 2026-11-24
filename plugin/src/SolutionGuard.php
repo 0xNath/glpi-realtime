@@ -49,11 +49,8 @@ final class SolutionGuard
                 register_shutdown_function([self::class, 'releaseAll']);
             }
             if (self::existing($type, $id) > 0) {
-                $fr = str_starts_with((string) ($_SESSION['glpilanguage'] ?? ''), 'fr');
                 Session::addMessageAfterRedirect(
-                    htmlescape($fr
-                        ? 'Une solution a déjà été proposée pour cet élément. Actualisez la page pour la voir.'
-                        : 'A solution has already been proposed for this item. Refresh the page to see it.'),
+                    htmlescape(__('A solution has already been proposed for this item. Refresh the page to see it.', 'realtime')),
                     false,
                     ERROR
                 );

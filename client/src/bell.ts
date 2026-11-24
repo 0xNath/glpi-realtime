@@ -1,3 +1,4 @@
+import { desktopEnabled, desktopSupported, notifyDesktop, setDesktop } from "./desktop.ts";
 import { h, icon, safeHref } from "./dom.ts";
 import {
   actorName,
@@ -6,6 +7,7 @@ import {
   groups,
   groupText,
   type InboxApi,
+  type InboxItem,
   type InboxList,
   type Labels,
   type Preferences,
@@ -24,7 +26,7 @@ export class InboxController {
   withRead = false;
   private readonly api: InboxApi;
   private readonly full: boolean;
-  private readonly listeners = new Set<(l: InboxList, ring: boolean) => void>();
+  private readonly listeners = new Set<(l: InboxList, ring: boolean, fresh: InboxItem[]) => void>();
   private timer: ReturnType<typeof setTimeout> | null = null;
   private pendingRing = false;
   private inflight: Promise<void> | null = null;
@@ -34,7 +36,7 @@ export class InboxController {
     this.full = full;
   }
 
-  onChange(cb: (l: InboxList, ring: boolean) => void): void {
+  onChange(cb: (l: InboxList, ring: boolean, fresh: InboxItem[]) => void): void {
     this.listeners.add(cb);
   }
 
@@ -66,7 +68,7 @@ export class InboxController {
     const fresh = arrivals(this.list, next);
     this.list = next;
     const rings = ring && fresh.length > 0 && shouldRing(fresh, next.preferences);
-    for (const cb of this.listeners) cb(next, rings);
+    for (const cb of this.listeners) cb(next, rings, ring ? fresh : []);
   }
 }
 
@@ -227,7 +229,22 @@ export class Bell {
       doc.body.appendChild(this.root);
     }
     doc.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && !this.panel.hidden) this.toggle(false);
+      if (e.key === "Escape" && !this.panel.hidden) {
+        this.toggle(false);
+        button.focus();
+      }
+    });
+    // Tabs: arrows move between them (WAI-ARIA tabs pattern).
+    this.tabsEl.addEventListener("keydown", (e) => {
+      const tabsEls = Array.from(this.tabsEl.querySelectorAll<HTMLElement>("[role=tab]"));
+      const i = tabsEls.indexOf(e.target as HTMLElement);
+      if (i < 0) return;
+      const next = e.key === "ArrowRight" ? i + 1 : e.key === "ArrowLeft" ? i - 1 : e.key === "Home" ? 0 : e.key === "End" ? tabsEls.length - 1 : null;
+      if (next === null) return;
+      e.preventDefault();
+      const target = tabsEls[(next + tabsEls.length) % tabsEls.length];
+      target.click();
+      this.tabsEl.querySelector<HTMLElement>(`[data-tab="${target.dataset.tab}"]`)?.focus();
     });
     // Docked in the header, the panel behaves like GLPI's dropdowns: a click elsewhere closes it.
     doc.addEventListener("click", (e) => {
@@ -236,14 +253,17 @@ export class Bell {
         this.toggle(false);
       }
     });
-    this.o.ctl.onChange((list, ring) => {
+    this.o.ctl.onChange((list, ring, fresh) => {
       this.render(list);
       if (ring) this.ringing();
+      if (fresh.length) notifyDesktop(this.o.doc, list, fresh, this.o.t);
     });
   }
 
   toggle(open = this.panel.hidden): void {
     this.panel.hidden = !open;
+    // Keyboard users land in the panel (the active tab).
+    if (open) setTimeout(() => this.tabsEl.querySelector<HTMLElement>("[aria-selected=true]")?.focus(), 0);
     this.root.querySelector(".glpi-rt-bell-button")?.setAttribute("aria-expanded", String(open));
     if (open && !this.root.classList.contains("is-docked")) {
       this.root.classList.remove("is-minimized");
@@ -266,7 +286,7 @@ export class Bell {
 
   render(list: InboxList): void {
     const { doc, t } = this.o;
-    const shown = tabs(list.preferences, list.can_see_others);
+    const shown = tabs(list.preferences, list.can_see_others, list.interface);
     if (!shown.includes(this.tab)) this.tab = "all";
     const total = list.counts.all ?? 0;
     this.badge.hidden = total === 0;
@@ -281,6 +301,8 @@ export class Bell {
           {
             type: "button",
             role: "tab",
+            "data-tab": tab,
+            tabindex: tab === this.tab ? "0" : "-1",
             class: `glpi-rt-tab${tab === this.tab ? " is-active" : ""}`,
             "aria-selected": String(tab === this.tab),
             onclick: () => {
@@ -398,6 +420,7 @@ export function dock(doc: Document, bell: HTMLElement): boolean {
 export function openPreferences(doc: Document, list: InboxList, t: Labels, save: (p: Partial<Preferences>) => Promise<void>): void {
   ensureStyle(doc);
   const p = list.preferences;
+  const helpdesk = list.interface === "helpdesk";
   const box = (key: string, label: string) =>
     h("label", {}, h("input", { type: "checkbox", class: "form-check-input m-0", name: key, checked: !!p[key] }), label);
   const select = (key: string, options: Record<string, string>) =>
@@ -415,18 +438,25 @@ export function openPreferences(doc: Document, list: InboxList, t: Labels, save:
     "form",
     { class: "glpi-rt-prefs", role: "dialog", "aria-label": t.prefs },
     h("h2", { class: "h3", text: t.prefs }),
-    h("h3", { text: t.p.receive }),
-    h("table", {}, h("thead", {}, h("tr", {}, h("th"), h("th", { text: t.p.direct }), h("th", { text: t.p.group }))), h("tbody", {}, ...types)),
+    ...(helpdesk ? [] : [
+      h("h3", { text: t.p.receive }),
+      h("table", {}, h("thead", {}, h("tr", {}, h("th"), h("th", { text: t.p.direct }), h("th", { text: t.p.group }))), h("tbody", {}, ...types)),
+    ]),
     list.can_see_others ? box("notify_others", t.p.others) : null,
     h("h3", { text: t.p.sound }),
     box("sound_enabled", t.p.sound),
-    ...Object.entries(t.p.soundQueues).map(([k, l]) => box(k, l)),
+    ...(helpdesk ? [] : Object.entries(t.p.soundQueues).map(([k, l]) => box(k, l))),
+    desktopSupported(doc.defaultView ?? window)
+      ? h("label", {}, h("input", { type: "checkbox", class: "form-check-input m-0", "data-desktop": "1", checked: desktopEnabled(doc.defaultView ?? window) }), t.p.desktop)
+      : null,
     h("h3", { text: t.p.style }),
     select("update_message_style", t.p.styles),
-    h("h3", { text: t.p.ended }),
-    box("show_resolved", t.p.showResolved),
-    box("show_closed", t.p.showClosed),
-    select("resolved_closed_style", t.p.endedStyles),
+    ...(helpdesk ? [] : [
+      h("h3", { text: t.p.ended }),
+      box("show_resolved", t.p.showResolved),
+      box("show_closed", t.p.showClosed),
+      select("resolved_closed_style", t.p.endedStyles),
+    ]),
     h(
       "div",
       { class: "glpi-rt-buttons" },
@@ -441,6 +471,9 @@ export function openPreferences(doc: Document, list: InboxList, t: Labels, save:
     form.querySelectorAll<HTMLInputElement | HTMLSelectElement>("input[name], select[name]").forEach((el) => {
       out[el.name] = el instanceof HTMLInputElement ? el.checked : el.value;
     });
+    // Per browser (permission asked here, on a user action), not a GLPI preference.
+    const desk = form.querySelector<HTMLInputElement>("input[data-desktop]");
+    if (desk && desk.checked !== desktopEnabled(doc.defaultView ?? window)) void setDesktop(desk.checked, doc.defaultView ?? window);
     void save(out as Partial<Preferences>).finally(() => overlay.remove());
   });
   doc.body.appendChild(overlay);

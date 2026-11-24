@@ -21,6 +21,13 @@ final class Session
         return self::$uid;
     }
 
+    public static string $interface = 'central';
+
+    public static function getCurrentInterface(): string
+    {
+        return self::$interface;
+    }
+
     /** @var list<array{string, int}> */
     public static array $messages = [];
 
@@ -65,6 +72,11 @@ function __(string $str, string $domain = 'glpi'): string
     return $str;
 }
 
+function getUserName(int|string $id, int $link = 0, bool $disable_anon = false): string
+{
+    return User::$db[(int) $id]['name'] ?? '';
+}
+
 function htmlescape(mixed $str): string
 {
     return htmlspecialchars((string) $str, ENT_QUOTES);
@@ -72,7 +84,16 @@ function htmlescape(mixed $str): string
 
 final class Entity
 {
+    public const ANONYMIZE_DISABLED = 0;
+    public const ANONYMIZE_USE_GENERIC = 1;
+    public const ANONYMIZE_USE_NICKNAME = 2;
+    public static int $anonymize = self::ANONYMIZE_DISABLED;
     public static bool $initials = true;
+
+    public static function getAnonymizeConfig(?int $entities_id = null): int
+    {
+        return self::$anonymize;
+    }
 
     public static function getUsedConfig($fieldref, $entities_id, $fieldval = '', $default_value = -2)
     {
@@ -80,7 +101,7 @@ final class Entity
     }
 }
 
-final class User
+final class User extends CommonDBTM
 {
     /** @var array<int, array{name: string, picture: ?string}> */
     public static array $db = [];
@@ -108,6 +129,15 @@ final class User
     public function getUserInitials(bool $enable_anonymization = false): string
     {
         return strtoupper(substr($this->fields['name'], 0, 2));
+    }
+
+    public static function getAnonymizedNameForUser(int $users_id, ?int $entities_id = null): ?string
+    {
+        return match (Entity::$anonymize) {
+            Entity::ANONYMIZE_DISABLED => null,
+            Entity::ANONYMIZE_USE_NICKNAME => self::$db[$users_id]['nickname'] ?? '',
+            default => 'Helpdesk user',
+        };
     }
 
     public function getUserInitialsBgColor(bool $enable_anonymization = false): string
@@ -197,6 +227,12 @@ final class Ticket extends CommonITILObject
 
 final class Change extends CommonITILObject {}
 
+final class Profile_User extends CommonDBTM {}
+
+final class Profile extends CommonDBTM {}
+
+final class ProfileRight extends CommonDBTM {}
+
 final class Problem extends CommonITILObject {}
 
 final class ProjectTask extends CommonDBTM {}
@@ -243,7 +279,7 @@ final class Change_Group extends CommonITILActor {}
 
 final class Document_Item extends CommonDBTM {}
 
-final class Group_User
+final class Group_User extends CommonDBTM
 {
     /** @var array<int, list<int>> */
     public static array $members = [];

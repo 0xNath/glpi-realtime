@@ -3,6 +3,7 @@ import { RealtimeClient } from "./client.ts";
 import { Bell, InboxController } from "./bell.ts";
 import { InboxApi, labelsFor } from "./inbox.ts";
 import { FieldsEditor } from "./editor.ts";
+import { applyCatalog, needsCatalog } from "./i18n.ts";
 import { ListPresence } from "./list.ts";
 import { LiveTimeline, TIMELINE_EVENTS } from "./timeline.ts";
 import { Toasts } from "./notifications.ts";
@@ -39,6 +40,7 @@ function startInbox(client: RealtimeClient, rootDoc: string): void {
   const t = labelsFor(document.documentElement.lang || navigator.language || "en");
   void api.list().then((first) => {
     if (!first) {
+      // The bell could not load (plugin tables not created yet?): toasts at least.
       const toasts = new Toasts(document, rootDoc);
       client.on("notification", (msg) => {
         if (msg.t === "notification" && msg.alert && msg.kind !== "inbox") toasts.show(msg, client.user?.id);
@@ -66,8 +68,18 @@ function startInbox(client: RealtimeClient, rootDoc: string): void {
   });
 }
 
+/** Users who asked their system for less motion get no animation from us. */
+function reducedMotion(): void {
+  const style = document.createElement("style");
+  style.textContent = `@media (prefers-reduced-motion: reduce) {
+  [class*="glpi-rt-"], [class*="glpi-rt-"] *, .timeline-item.glpi-rt-new { animation: none !important; transition: none !important; }
+}`;
+  document.head.appendChild(style);
+}
+
 function boot(): void {
   if (window.glpiRealtime || !("WebSocket" in window)) return;
+  reducedMotion();
   const scheme = location.protocol === "https:" ? "wss:" : "ws:";
   const debug = localStorage?.getItem?.("glpi-realtime-debug") === "1" ? console.debug.bind(console) : undefined;
   const rootDoc: string = (window as any).CFG_GLPI?.root_doc ?? "";
@@ -177,8 +189,23 @@ function boot(): void {
   client.start();
 }
 
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", boot, { once: true });
-} else {
+/** Other languages than French and English: their texts, before anything is drawn. */
+async function start(): Promise<void> {
+  const lang = document.documentElement.lang || navigator.language || "en";
+  if (needsCatalog(lang)) {
+    const root: string = (window as any).CFG_GLPI?.root_doc ?? "";
+    try {
+      const resp = await fetch(`${root}/plugins/realtime/ajax/i18n.php`, { credentials: "same-origin" });
+      if (resp.ok) applyCatalog(await resp.json());
+    } catch {
+      /* English then */
+    }
+  }
   boot();
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", () => void start(), { once: true });
+} else {
+  void start();
 }

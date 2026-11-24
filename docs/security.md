@@ -77,6 +77,26 @@ neither run code in their page nor reveal them to a remote host. The server chec
 writer's and each follower's grant flags; drafts are capped at 48 KiB and expire 15 min
 after their last change.
 
+## Rights changes during a session
+
+Adding or removing a profile or a group to a user, or changing a profile's rights, deletes
+every grant of that user's sessions (indexes `rt:us:{uid}`, `rt:gs:{hash}`); their open
+tabs are told to regrant (only theirs). Deactivating, trashing or purging a user revokes
+their sessions: the server closes their connections.
+
+## Saving the fields
+
+The fields form carries the item's `date_mod` as displayed; GLPI (plugin
+`pre_item_update`) refuses to save it if the item changed meanwhile, and tells the user
+who changed it. This holds even for a browser without the client or a lock taken over.
+
+## Anonymized support agents
+
+When the entity anonymizes agents for self-service users, the plugin computes how each
+agent appears to them (GLPI's generic name or nickname, neutral initials, no picture).
+The server applies it to every frame sent to a self-service session of such an entity
+(presence, authors, lock holders, draft writers) and strips it from every other frame.
+
 ## Values displayed in other users' pages
 
 Names and avatars travel from one user's session to others' pages. Names are inserted as
@@ -99,11 +119,8 @@ systemd sandbox: dedicated user, no capabilities, read-only system, no home, pri
 
 ## Known limits
 
-- Support agent anonymization (`anonymize_support_agents`) is not applied to presence
-  yet: a Self-Service user who can see a ticket sees the names of the technicians on it.
-- Profile rights changes (e.g. an administrator removing "see private followups") are not
-  pushed: they apply at the user's next login, as in GLPI. Actor and entity changes are
-  re-evaluated live (`regrant`).
+- Anonymized agents are computed with the agent's own active entity (GLPI uses the
+  viewer's): with different settings per entity, the agent's entity decides.
 - During the regrant window (≤ 30 s) a member who lost access still appears in presence
   lists and sees them; they receive no event.
 - Approvals (`validation.*`) and documents are announced to every reader of the ticket

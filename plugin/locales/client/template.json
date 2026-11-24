@@ -1,0 +1,247 @@
+{
+  "drafts": {
+    "join": "Join",
+    "leave": "Leave",
+    "take": "Take over",
+    "left": "{1} draft left by {0}",
+    "taken": "{0} took over this draft: only send it if you are sure.",
+    "shared": "{0} already writes this shared draft: yours stays personal.",
+    "tooLarge": "Draft too large to be shared."
+  },
+  "drafts.kinds": {
+    "followup": "followup",
+    "task": "task",
+    "solution": "solution"
+  },
+  "editor": {
+    "other": "{0} is editing the fields of {2} {1}.",
+    "solution": "{0} is adding a solution: the status of {1} will change, its fields are locked until it is sent.",
+    "pending": "{0} is putting {1} on hold: its fields are locked until it is sent.",
+    "takeOver": "Take over",
+    "stale": "{0} changed {1}. Refresh before editing its fields.",
+    "mineStale": "{0} changed {1} while you were editing: check before saving.",
+    "lost": "{0} took over the fields. Your unsaved changes can no longer be saved.",
+    "refresh": "Refresh",
+    "since": "for {0} min"
+  },
+  "inbox": {
+    "title": "Notifications",
+    "tabs": {
+      "all": "All",
+      "new": "New",
+      "mine": "Mine",
+      "team": "Team",
+      "other": "Others",
+      "resolved": "Resolved",
+      "closed": "Closed",
+      "ended": "Ended"
+    },
+    "empty": "No notifications",
+    "markAll": "Mark all as read",
+    "showRead": "Show read",
+    "viewAll": "View all",
+    "prefs": "Preferences",
+    "close": "Close",
+    "minimize": "Minimize",
+    "read": "Mark as read",
+    "unread": "Mark as unread",
+    "assume": "Assume",
+    "assumed": "Ticket assumed",
+    "open": "Open",
+    "updates": "{0} updates",
+    "glpi": "GLPI",
+    "ago": {
+      "now": "just now",
+      "m": "{0} min ago",
+      "h": "{0} h ago",
+      "d": "{0} d ago"
+    },
+    "events": {
+      "created": "New item concerning you",
+      "created_new": "New unassigned ticket",
+      "assigned": "You have been assigned",
+      "assigned_group": "Your group has been assigned",
+      "commented": "New followup",
+      "task_added": "New task",
+      "solution": "Solution proposed",
+      "solution_refused": "Solution refused",
+      "status_changed": "Status changed",
+      "updated": "Item updated",
+      "validation_asked": "Approval requested",
+      "validation_accepted": "Approval accepted",
+      "validation_refused": "Approval refused",
+      "transferred": "Transferred to your entity"
+    },
+    "fields": {
+      "itilcategories_id": "Category changed",
+      "priority": "Priority changed",
+      "content": "Description updated",
+      "name": "Title changed",
+      "type": "Type changed",
+      "time_to_resolve": "Due date changed",
+      "plan_start_date": "Planning changed",
+      "multiple": "Multiple changes"
+    },
+    "columns": [
+      "Item",
+      "No.",
+      "Date",
+      "Status",
+      "Priority",
+      "Entity",
+      "Requester",
+      "Type",
+      "User",
+      "Event",
+      "Detail",
+      "Actions"
+    ],
+    "allStatuses": "All statuses",
+    "periods": {
+      "": "All periods",
+      "today": "Today",
+      "week": "Last 7 days",
+      "month": "Last 30 days"
+    },
+    "p": {
+      "receive": "Receive",
+      "direct": "Concerning me",
+      "group": "My groups",
+      "types": {
+        "ticket": "Tickets",
+        "change": "Changes",
+        "problem": "Problems",
+        "projecttask": "Project tasks"
+      },
+      "others": "Activity on tickets, changes and problems I can see (Others tab)",
+      "sound": "Sound",
+      "desktop": "Desktop notifications while GLPI is in the background (this browser)",
+      "soundQueues": {
+        "sound_new": "New",
+        "sound_mine": "Mine",
+        "sound_team": "Team",
+        "sound_other": "Others",
+        "sound_ended": "Resolved / closed"
+      },
+      "style": "Several changes",
+      "styles": {
+        "priority": "The most important",
+        "combined": "Combined",
+        "multiple": "\"Multiple changes\""
+      },
+      "showResolved": "Show resolved",
+      "showClosed": "Show closed",
+      "ended": "Resolved and closed",
+      "endedStyles": {
+        "separate": "Separate tabs",
+        "ended": "One \"Ended\" tab"
+      },
+      "save": "Save",
+      "cancel": "Cancel"
+    }
+  },
+  "notifications.items": {
+    "Ticket": "ticket",
+    "Change": "change",
+    "Problem": "problem"
+  },
+  "notifications.text": {
+    "assigned": "{0} assigned you {1}",
+    "created": "{0} created {1}",
+    "commented": "{0} added a followup on {1}",
+    "task_added": "{0} added a task on {1}",
+    "solution": "{0} proposed a solution for {1}",
+    "solution_refused": "{0} refused the solution of {1}",
+    "status_changed": "{0} changed the status of {1}",
+    "validation_asked": "{0} requests your approval on {1}",
+    "validation_done": "{0} answered the approval of {1}",
+    "transferred": "{0} transferred {1}",
+    "other": "{0} updated {1}"
+  },
+  "notifications.ui": {
+    "title": "Notification",
+    "open": "Open",
+    "close": "Close"
+  },
+  "presence": {
+    "also": "Also on %:",
+    "more": "and {0} more",
+    "active": "active on %",
+    "inactive": "inactive (tab in background or unused)"
+  },
+  "timeline": {
+    "composing": {
+      "followup": "{0} is writing a followup…",
+      "task": "{0} is writing a task…",
+      "solution": "{0} is writing a solution…",
+      "validation": "{0} is preparing an approval request…",
+      "document": "{0} is adding a document…"
+    },
+    "solutionBusy": "{0} is already writing a solution.",
+    "solutionDone": "{0} already proposed a solution. Refresh the page to see it.",
+    "solutionLost": "{0} took over the solution: yours cannot be saved.",
+    "fieldsBusy": "{0} is editing the fields of {1}: wait until they save before adding a solution or putting it on hold."
+  },
+  "updates.actions": {
+    "followup.add": "added a followup",
+    "followup.update": "edited a followup",
+    "followup.delete": "deleted a followup",
+    "task.add": "added a task",
+    "task.update": "edited a task",
+    "task.delete": "deleted a task",
+    "solution.add": "proposed a solution",
+    "solution.update": "updated the solution",
+    "solution.delete": "deleted the solution",
+    "validation.add": "requested an approval",
+    "validation.update": "updated an approval",
+    "validation.delete": "deleted an approval",
+    "document.add": "attached a document",
+    "document.delete": "removed a document",
+    "actor.add": "added an actor",
+    "actor.update": "changed an actor",
+    "actor.delete": "removed an actor"
+  },
+  "updates.fields": {
+    "status": "the status",
+    "priority": "the priority",
+    "urgency": "the urgency",
+    "impact": "the impact",
+    "name": "the title",
+    "content": "the description",
+    "itilcategories_id": "the category",
+    "type": "the type",
+    "time_to_resolve": "the due date",
+    "locations_id": "the location",
+    "entities_id": "the entity"
+  },
+  "updates.item": {
+    "item.update": "updated %",
+    "item.delete": "moved % to the trash",
+    "item.restore": "restored %",
+    "item.purge": "deleted %"
+  },
+  "updates.nouns": {
+    "Ticket": {
+      "the": "the ticket",
+      "this": "this ticket"
+    },
+    "Change": {
+      "the": "the change",
+      "this": "this change"
+    },
+    "Problem": {
+      "the": "the problem",
+      "this": "this problem"
+    }
+  },
+  "updates.text": {
+    "you": "You",
+    "glpi": "GLPI",
+    "changed": "changed {0}",
+    "and": " and ",
+    "more": " (+{0} more change)",
+    "refresh": "Refresh",
+    "dismiss": "Dismiss",
+    "lost": "You no longer have access to {0}."
+  }
+}

@@ -8,8 +8,12 @@
  */
 
 Session::checkLoginUser();
-Session::checkCentralAccess();
 
-Html::header(__('Notifications'), '', 'helpdesk', 'ticket');
+$helpdesk = Session::getCurrentInterface() === 'helpdesk';
+if ($helpdesk) {
+    Html::helpHeader(__('Notifications'));
+} else {
+    Html::header(__('Notifications'), '', 'helpdesk', 'ticket');
+}
 echo '<div id="glpi-rt-inbox-page" class="container-fluid"></div>';
-Html::footer();
+$helpdesk ? Html::helpFooter() : Html::footer();

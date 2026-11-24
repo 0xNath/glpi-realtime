@@ -37,3 +37,20 @@ test("the editor is found at once, or once it starts", async () => {
   assert.equal(await findEditor(block, 2000, late), ed, "waits for TinyMCE");
   assert.equal(await findEditor(block, 0, { get: () => null }), null);
 });
+
+test("GLPI images of a followed draft are inlined, nothing else", async () => {
+  const { imageSources, inlineImages } = await import("../src/drafts.ts");
+  const html = `<p><img src="/front/document.send.php?docid=3&amp;itemtype=Ticket"><img src="https://evil.example/x.png"><img src="//evil.example/y.png"></p>`;
+  assert.deepEqual(imageSources(html), ["/front/document.send.php?docid=3&itemtype=Ticket"], "same origin only");
+  const asked: string[] = [];
+  const fake = (async (url: string) => {
+    asked.push(url);
+    return { ok: true, blob: async () => new Blob([new Uint8Array([137, 80, 78, 71])], { type: "image/png" }) };
+  }) as unknown as typeof fetch;
+  const out = await inlineImages(html, new Map(), fake);
+  assert.match(out, /src="data:image\/png;base64,iVBORw=="/);
+  assert.ok(out.includes("https://evil.example/x.png"), "foreign images untouched (the frame's CSP blocks them)");
+  assert.deepEqual(asked, ["/front/document.send.php?docid=3&itemtype=Ticket"]);
+  const notImage = (async () => ({ ok: true, blob: async () => new Blob(["<html>"], { type: "text/html" }) })) as unknown as typeof fetch;
+  assert.ok((await inlineImages(html, new Map(), notImage)).includes('src="/front/document.send.php'), "not an image: left as is");
+});

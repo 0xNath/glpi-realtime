@@ -19,7 +19,7 @@ use tokio::sync::{mpsc, watch};
 use tracing::{debug, warn};
 use uuid::Uuid;
 
-use crate::avatar::Avatar;
+use crate::avatar::{Anon, Avatar};
 use crate::config::Config;
 use crate::protocol::{self, ByeReason, Room, ServerMsg};
 use crate::registry::Registry;
@@ -40,6 +40,8 @@ pub struct Entry {
     /// Answer being written in the timeline (`followup`, `solution`...).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub composing: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anon: Option<Anon>,
 }
 
 /// Kinds of answers a client may announce.
@@ -62,6 +64,9 @@ pub struct PresenceUser {
     /// What they are writing in the timeline, on any of their tabs.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub composing: Option<String>,
+    /// Applied for self-service viewers when agents are anonymized (see avatar::anonymize).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub anon: Option<Anon>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -126,6 +131,7 @@ pub fn aggregate(entries: impl IntoIterator<Item = Entry>) -> Vec<PresenceUser> 
                 active: e.active,
                 avatar: e.avatar,
                 composing: e.composing,
+                anon: e.anon,
             });
     }
     let mut users: Vec<_> = by_uid.into_values().collect();
@@ -392,6 +398,7 @@ mod tests {
             active: false,
             avatar: None,
             composing: None,
+            anon: None,
         }
     }
 
@@ -430,6 +437,7 @@ mod tests {
                     active: false,
                     avatar: None,
                     composing: None,
+                    anon: None,
                 },
                 PresenceUser {
                     id: 3,
@@ -438,6 +446,7 @@ mod tests {
                     active: false,
                     avatar: None,
                     composing: None,
+                    anon: None,
                 },
                 PresenceUser {
                     id: 1,
@@ -446,6 +455,7 @@ mod tests {
                     active: false,
                     avatar: None,
                     composing: None,
+                    anon: None,
                 },
             ]
         );

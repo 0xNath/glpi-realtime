@@ -16,6 +16,9 @@ url = "unix:///run/valkey/valkey.sock"   # unixsocket of valkey.conf (or redis:/
 db = 6                              # must match the plugin setting valkey_db
 pool_size = 8
 key_prefix = "rt:"                  # must match the plugin setting key_prefix
+# Valkey ACL user (see valkey.conf.example); or GLPI_RT_VALKEY__PASSWORD in the unit's environment.
+# username = "glpi-rt"
+# password = "..." 
 
 [security]
 cookie_name = "glpi_rt"             # must match the plugin setting cookie_name
@@ -27,6 +30,7 @@ allowed_itemtypes = ["Ticket", "Change", "Problem"]
 max_connections = 25000             # per instance
 max_connections_per_user = 10       # tabs
 max_watched_rooms = 200             # items whose presence a list page follows
+listen_backlog = 4096               # pending connections (bursts); capped by net.core.somaxconn
 max_message_bytes = 65536
 max_rooms_per_connection = 50
 messages_per_second = 20            # per connection

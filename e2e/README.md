@@ -23,6 +23,12 @@ RT_CAROL_PASSWORD=...
 RT_TICKET_ID=3
 ```
 
+## What is covered
+
+Connection and presence, followups appearing live in the timeline (no content on the
+WebSocket), the fields lock, "is writing" placeholders and shared drafts, the solution
+button while the fields are edited, presence on the ticket list.
+
 ## Run
 
 ```bash

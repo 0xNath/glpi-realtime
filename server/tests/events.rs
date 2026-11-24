@@ -350,3 +350,35 @@ async fn malformed_batches_are_dropped() {
     assert!(next(&mut ws).await.is_none());
     srv.stop().await.unwrap();
 }
+
+#[tokio::test]
+async fn a_regrant_can_target_some_sessions_only() {
+    let vk = valkey_or_skip!();
+    let (srv, addr) = start(config(&vk)).await;
+    let alice = session(&vk, 80, "Alice").await;
+    let bob = session(&vk, 81, "Bob").await;
+    grant(&vk, &alice, "Ticket:20", &[("read", "1")]).await;
+    grant(&vk, &bob, "Ticket:20", &[("read", "1")]).await;
+    let mut a = joined(addr, &alice, "Ticket:20").await;
+    let mut b = joined(addr, &bob, "Ticket:20").await;
+
+    // Bob's profile changed: only his sessions must get new grants.
+    publish(
+        &vk,
+        json!({"room":"Ticket:20","regrant":true,"sessions":[token_hash(&bob)]}),
+    )
+    .await;
+    assert_eq!(next(&mut b).await.unwrap()["t"], "regrant");
+    assert!(next(&mut a).await.is_none(), "Alice is not disturbed");
+    publish(
+        &vk,
+        json!({"room":"Ticket:20","events":[{"kind":"item.update"}]}),
+    )
+    .await;
+    assert_eq!(
+        next(&mut a).await.unwrap()["kind"],
+        "item.update",
+        "and keeps receiving events"
+    );
+    srv.stop().await.unwrap();
+}

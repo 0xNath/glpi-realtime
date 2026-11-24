@@ -41,6 +41,11 @@ final class Valkey
             $r = new Redis();
             $r->pconnect(Settings::get('valkey_socket'), 0, $timeout, 'glpi-realtime');
             $r->setOption(Redis::OPT_READ_TIMEOUT, $timeout);
+            $password = Settings::valkeyPassword();
+            if ($password !== '') {
+                $user = Settings::get('valkey_username');
+                $r->auth($user !== '' ? [$user, $password] : $password);
+            }
             $r->select((int) Settings::get('valkey_db'));
             return self::$client = $r;
         } catch (Throwable $e) {

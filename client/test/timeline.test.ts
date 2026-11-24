@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { ANSWER_KINDS, langOf, planSync, TIMELINE_EVENTS } from "../src/timeline.ts";
+import { ANSWER_KINDS, langOf, planSync, refreshDelay, TIMELINE_EVENTS } from "../src/timeline.ts";
 
 const none = new Set<string>();
 const content = new Set(["Ticket:1"]);
@@ -54,4 +54,9 @@ test("answer forms and events", () => {
   assert.ok(!TIMELINE_EVENTS.test("item.update") && !TIMELINE_EVENTS.test("actor.add"));
   assert.equal(langOf("fr_FR"), "fr");
   assert.equal(langOf("de"), "en");
+});
+
+test("reloads are grouped and spread", () => {
+  assert.equal(refreshDelay(0), 400);
+  assert.ok(refreshDelay(0.999) <= 1500);
 });

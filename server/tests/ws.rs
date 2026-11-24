@@ -340,3 +340,45 @@ async fn health_endpoint() {
     assert_eq!(v["valkey"], true);
     srv.stop().await.unwrap();
 }
+
+/// Valkey protected by an ACL user: the server authenticates, the anonymous default user
+/// is disabled.
+#[tokio::test]
+async fn valkey_acl_user() {
+    let Some(vk) = valkey_with(
+        &[
+            "--user",
+            "default",
+            "off",
+            "--user",
+            "glpi-rt",
+            "on",
+            ">s3cret",
+            "~rt:*",
+            "&rt:*",
+            "&__keyspace@*__:rt:*",
+            "+@all",
+        ],
+        Some(("glpi-rt", "s3cret")),
+    )
+    .await
+    else {
+        return eprintln!("valkey-server not found: test skipped");
+    };
+    let mut cfg = config(&vk);
+    cfg.valkey.username = Some("glpi-rt".into());
+    cfg.valkey.password = Some("s3cret".into());
+    let (srv, addr) = start(cfg).await;
+    let tok = session(&vk, 5, "Alice").await;
+    let mut ws = connect(addr, Some(ORIGIN), Some(&tok)).await.unwrap();
+    assert_eq!(recv(&mut ws).await["t"], "hello");
+    srv.stop().await.unwrap();
+
+    let mut bad = config(&vk);
+    bad.valkey.username = Some("glpi-rt".into());
+    bad.valkey.password = Some("wrong".into());
+    assert!(
+        glpi_realtime::server::start(bad, None).await.is_err(),
+        "wrong password: refused at start"
+    );
+}

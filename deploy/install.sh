@@ -6,8 +6,10 @@
 # unit, the system user, the web server (vhost), PHP and Valkey are yours to set up once,
 # from deploy/examples/ (see README, "Install").
 #
-# Build first, as your user:  (cd server && cargo build --release) && (cd client && npm ci && npm run build)
-# Then, as root:              sudo deploy/install.sh
+# From the repository, build first, as your user:
+#   (cd server && cargo build --release) && (cd client && npm ci && npm run build)
+# or use a release archive (scripts/release.sh), which holds the built files. Then, as root:
+#   sudo deploy/install.sh
 #
 # Settings (environment variables), with their defaults:
 #   GLPI_DIR=/var/www/glpi            GLPI installation (contains bin/console)
@@ -19,6 +21,13 @@
 #   SERVICE=glpi-realtime             systemd unit restarted if it exists ("" to skip)
 #   SKIP_PLUGIN_UPGRADE=0             1: copy the plugin files only (run GLPI's
 #                                     plugin install/upgrade yourself)
+#   RELOAD_PHP=                       command reloading GLPI's PHP once the files are copied, so
+#                                     that opcache serves no old file next to new ones, e.g.
+#                                     "systemctl reload php-fpm", "systemctl reload uwsgi@glpi",
+#                                     "systemctl reload apache2" (empty: the script waits until
+#                                     PHP revalidates, see OPCACHE_WAIT)
+#   OPCACHE_WAIT=65                   seconds waited without RELOAD_PHP (opcache.revalidate_freq + 5;
+#                                     0 when opcache.validate_timestamps revalidates every request)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -28,7 +37,12 @@ CONFIG="${CONFIG:-/etc/glpi-realtime/config.toml}"
 PHP="${PHP:-php}"
 SERVICE="${SERVICE-glpi-realtime}"
 SKIP_PLUGIN_UPGRADE="${SKIP_PLUGIN_UPGRADE:-0}"
-BIN="$ROOT/server/target/release/glpi-realtime"
+# From a release archive (bin/glpi-realtime, no sources) or from the repository (built).
+if [[ -x "$ROOT/bin/glpi-realtime" && ! -d "$ROOT/server" ]]; then
+    BIN="$ROOT/bin/glpi-realtime"
+else
+    BIN="${BIN:-$ROOT/server/target/release/glpi-realtime}"
+fi
 DEST="$PREFIX/bin/glpi-realtime"
 
 die() { echo "!! $*" >&2; exit 1; }
@@ -37,11 +51,11 @@ die() { echo "!! $*" >&2; exit 1; }
 [[ -x "$BIN" ]] || die "missing $BIN: run 'cargo build --release' in server/ first"
 [[ -f "$ROOT/plugin/public/realtime.js" ]] || die "missing client bundle: run 'npm run build' in client/ first"
 [[ -f "$GLPI_DIR/bin/console" ]] || die "no GLPI in $GLPI_DIR (set GLPI_DIR)"
-# Refuse stale builds: sources newer than what would be installed.
-if [[ -n "$(find "$ROOT/server/src" "$ROOT/server/Cargo.toml" "$ROOT/server/Cargo.lock" -newer "$BIN" -print -quit)" ]]; then
+# From the repository: refuse stale builds (sources newer than what would be installed).
+if [[ -d "$ROOT/server/src" ]] && [[ -n "$(find "$ROOT/server/src" "$ROOT/server/Cargo.toml" "$ROOT/server/Cargo.lock" -newer "$BIN" -print -quit)" ]]; then
     die "$BIN is older than server/ sources: run 'cargo build --release' in server/ first"
 fi
-if [[ -n "$(find "$ROOT/client/src" -newer "$ROOT/plugin/public/realtime.js" -print -quit)" ]]; then
+if [[ -d "$ROOT/client/src" ]] && [[ -n "$(find "$ROOT/client/src" -newer "$ROOT/plugin/public/realtime.js" -print -quit)" ]]; then
     die "plugin/public/realtime.js is older than client/src: run 'npm run build' in client/ first"
 fi
 
@@ -63,7 +77,7 @@ NEW="$GLPI_DIR/plugins/realtime.new"
 rm -rf "$NEW"
 mkdir "$NEW"
 cp -r "$ROOT/plugin/setup.php" "$ROOT/plugin/hook.php" "$ROOT/plugin/src" "$ROOT/plugin/ajax" \
-    "$ROOT/plugin/front" "$ROOT/plugin/public" "$NEW/"
+    "$ROOT/plugin/front" "$ROOT/plugin/locales" "$ROOT/plugin/public" "$NEW/"
 # Read-only for the web server, like GLPI's own code.
 chown -R root:root "$NEW"
 find "$NEW" -type d -exec chmod 755 {} + -o -type f -exec chmod 644 {} +
@@ -71,6 +85,17 @@ rm -rf "$GLPI_DIR/plugins/realtime.old"
 [[ -d "$GLPI_DIR/plugins/realtime" ]] && mv "$GLPI_DIR/plugins/realtime" "$GLPI_DIR/plugins/realtime.old"
 mv "$NEW" "$GLPI_DIR/plugins/realtime"
 rm -rf "$GLPI_DIR/plugins/realtime.old"
+
+# PHP's opcache may keep serving old plugin files for opcache.revalidate_freq seconds: the
+# upgrade (and its activation) must only happen once PHP sees the new files only.
+if [[ -n "${RELOAD_PHP:-}" ]]; then
+    echo "==> Reloading PHP: $RELOAD_PHP"
+    # shellcheck disable=SC2086
+    $RELOAD_PHP
+elif [[ "$SKIP_PLUGIN_UPGRADE" != 1 && "${OPCACHE_WAIT:-65}" -gt 0 ]]; then
+    echo "==> Waiting ${OPCACHE_WAIT:-65} s for PHP's opcache to see the new files (set RELOAD_PHP to skip)"
+    sleep "${OPCACHE_WAIT:-65}"
+fi
 
 if [[ "$SKIP_PLUGIN_UPGRADE" != 1 ]]; then
     # GLPI's console must run as the user owning GLPI's writable files.

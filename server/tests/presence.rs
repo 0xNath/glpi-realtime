@@ -280,3 +280,74 @@ async fn avatars_are_relayed_and_sanitized() {
     assert_eq!(users[1]["avatar"]["initials"], "i");
     srv.stop().await.unwrap();
 }
+
+#[tokio::test]
+async fn self_service_users_see_agents_anonymized() {
+    let vk = valkey_or_skip!();
+    let (srv, addr) = start(config(&vk)).await;
+    let tech = session(&vk, 40, "Alice Martin").await;
+    let colleague = session(&vk, 42, "Bob").await;
+    let requester = session(&vk, 41, "Rita").await;
+    use glpi_realtime::auth::token_hash;
+    // As the plugin writes them: the agent's anonymized identity, the requester's view.
+    let _: () = vk
+        .client
+        .hset(
+            format!("rt:s:{}", token_hash(&tech)),
+            [
+                ("anon", r##"{"name":"Helpdesk user","avatar":{"picture":"","initials":"HE","color":"#667382","fg":"#ffffff"}}"##),
+                ("avatar", r##"{"picture":"/front/document.send.php?file=_pictures/a.png","initials":"AM","color":"#123456","fg":"#ffffff"}"##),
+            ],
+        )
+        .await
+        .unwrap();
+    let _: () = vk
+        .client
+        .hset(
+            format!("rt:s:{}", token_hash(&requester)),
+            ("anon_view", "1"),
+        )
+        .await
+        .unwrap();
+    for t in [&tech, &colleague, &requester] {
+        grant(&vk, t, "Ticket:30", &[("read", "1")]).await;
+    }
+    let mut a = joined(addr, &tech, "Ticket:30").await;
+    recv_presence(&mut a, "Ticket:30").await;
+    let mut c = joined(addr, &colleague, "Ticket:30").await;
+    let mut r = joined(addr, &requester, "Ticket:30").await;
+
+    let seen = recv_matching(&mut r, Duration::from_secs(5), |m| {
+        m["t"] == "presence" && m["users"].as_array().unwrap().len() == 3
+    })
+    .await
+    .unwrap();
+    let alice = seen["users"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|u| u["id"] == 40)
+        .unwrap()
+        .clone();
+    assert_eq!(alice["name"], "Helpdesk user");
+    assert_eq!(alice["avatar"]["initials"], "HE");
+    assert!(
+        !seen.to_string().contains("Alice") && !seen.to_string().contains("a.png"),
+        "nothing identifying"
+    );
+    assert!(
+        !seen.to_string().contains("\"anon\""),
+        "the anon object itself is never sent"
+    );
+
+    let p = recv_matching(&mut c, Duration::from_secs(5), |m| {
+        m["t"] == "presence" && m["users"].as_array().unwrap().len() == 3
+    })
+    .await
+    .unwrap();
+    assert!(
+        p.to_string().contains("Alice Martin") && !p.to_string().contains("\"anon\""),
+        "technicians see the names"
+    );
+    srv.stop().await.unwrap();
+}

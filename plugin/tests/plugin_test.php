@@ -120,6 +120,20 @@ ob_start();
 Grants::onPostItemForm(['item' => new Ticket(), 'options' => []]);
 check(ob_get_clean() === '', 'nothing printed on the creation form');
 
+// --- Anonymized support agents -----------------------------------------------------
+$k = SessionToken::sessionKey($h3);
+check($r->hGet($k, 'anon') === '' && $r->hGet($k, 'anon_view') === '0', 'no anonymization by default');
+Entity::$anonymize = Entity::ANONYMIZE_USE_GENERIC;
+SessionToken::ensure(9);
+$anon = json_decode((string) $r->hGet($k, 'anon'), true);
+check(($anon['name'] ?? '') === 'Helpdesk user' && $anon['avatar']['picture'] === '' && $anon['avatar']['initials'] === 'HE', 'technician: generic name, no picture');
+Session::$interface = 'helpdesk';
+SessionToken::ensure(9);
+check($r->hGet($k, 'anon_view') === '1' && $r->hGet($k, 'anon') === '', 'self-service session: sees agents anonymized, is not anonymized itself');
+Session::$interface = 'central';
+Entity::$anonymize = Entity::ANONYMIZE_DISABLED;
+SessionToken::ensure(9);
+
 // --- Logout ------------------------------------------------------------------------
 SessionToken::revoke();
 check($r->exists(SessionToken::sessionKey($h3)) === 0 && SessionToken::currentHash() === null, 'logout revokes the token');

@@ -47,18 +47,24 @@ final class SessionToken
 
         if (is_array($state) && ($state['uid'] ?? null) === $uid && isset($state['hash'])) {
             // Slide the TTL; if the key vanished (Valkey restart, revocation), issue a new one.
-            $alive = Valkey::run(fn(Redis $r) => (bool) $r->expire(self::sessionKey($state['hash']), $ttl), null);
+            $alive = Valkey::run(function (Redis $r) use ($state, $uid, $ttl) {
+                $ok = (bool) $r->expire(self::sessionKey($state['hash']), $ttl);
+                if ($ok) {
+                    $r->expire(Valkey::key('us:' . $uid), $ttl);
+                }
+                return $ok;
+            }, null);
             if ($alive === true && !isset($state['avatar'])) {
                 // Session opened before avatars existed: add it once.
                 $avatar = json_encode(self::avatar($uid));
                 Valkey::run(fn(Redis $r) => $r->hSet(self::sessionKey($state['hash']), 'avatar', $avatar));
                 $_SESSION[self::SESSION_KEY]['avatar'] = true;
             }
-            $groups = self::groups();
-            if ($alive === true && ($state['groups'] ?? null) !== $groups) {
-                // New session, or GLPI changed the user's groups (profile or entity switch).
-                Valkey::run(fn(Redis $r) => $r->hSet(self::sessionKey($state['hash']), 'groups', $groups));
-                $_SESSION[self::SESSION_KEY]['groups'] = $groups;
+            $facts = self::facts($uid);
+            if ($alive === true && ($state['facts'] ?? null) !== $facts) {
+                // New session, or GLPI changed the user's groups, interface or entity.
+                Valkey::run(fn(Redis $r) => $r->hMSet(self::sessionKey($state['hash']), $facts));
+                $_SESSION[self::SESSION_KEY]['facts'] = $facts;
             }
             if ($alive !== false) {
                 return; // alive, or Valkey down (fail open: keep the current cookie)
@@ -77,13 +83,16 @@ final class SessionToken
         $hash = hash('sha256', $token);
         $name = (string) ($_SESSION['glpifriendlyname'] ?? $_SESSION['glpiname'] ?? '');
         $avatar = json_encode(self::avatar($uid));
-        $groups = self::groups();
+        $facts = self::facts($uid);
 
-        $ok = Valkey::run(function (Redis $r) use ($hash, $uid, $name, $avatar, $groups, $ttl) {
+        $ok = Valkey::run(function (Redis $r) use ($hash, $uid, $name, $avatar, $facts, $ttl) {
             $key = self::sessionKey($hash);
+            $mine = Valkey::key('us:' . $uid); // sessions of this user (rights changes)
             $r->multi(Redis::PIPELINE)
-                ->hMSet($key, ['uid' => (string) $uid, 'name' => $name, 'avatar' => $avatar, 'groups' => $groups])
+                ->hMSet($key, ['uid' => (string) $uid, 'name' => $name, 'avatar' => $avatar] + $facts)
                 ->expire($key, $ttl)
+                ->sAdd($mine, $hash)
+                ->expire($mine, $ttl)
                 ->exec();
             return true;
         }, false);
@@ -91,7 +100,7 @@ final class SessionToken
             return;
         }
 
-        $_SESSION[self::SESSION_KEY] = ['uid' => $uid, 'hash' => $hash, 'avatar' => true, 'groups' => $groups];
+        $_SESSION[self::SESSION_KEY] = ['uid' => $uid, 'hash' => $hash, 'avatar' => true, 'facts' => $facts];
         $options = [
             'expires'  => 0,
             'path'     => Settings::get('ws_path'),
@@ -103,6 +112,66 @@ final class SessionToken
             (self::$cookieSink)(Settings::get('cookie_name'), $token, $options);
         } elseif (!headers_sent()) {
             setcookie(Settings::get('cookie_name'), $token, $options);
+        }
+    }
+
+    /**
+     * What may change during a session, refreshed on each request:
+     * - `groups`: the user's GLPI groups as JSON (private tasks of "my groups");
+     * - `anon_view`: "1" when this session must see support agents anonymized
+     *   (self-service interface, entity setting `anonymize_support_agents`);
+     * - `anon`: how this user appears to such sessions (JSON, "" when not anonymized).
+     *
+     * @return array{groups: string, anon_view: string, anon: string}
+     */
+    private static function facts(int $uid): array
+    {
+        $anon = self::anonymous($uid);
+        return [
+            'groups'    => self::groups(),
+            'anon_view' => self::anonView() ? '1' : '0',
+            'anon'      => $anon === null ? '' : (string) json_encode($anon),
+        ];
+    }
+
+    /** Self-service session in an entity that anonymizes support agents. */
+    public static function anonView(): bool
+    {
+        try {
+            return Session::getCurrentInterface() === 'helpdesk'
+                && \Entity::getAnonymizeConfig() !== \Entity::ANONYMIZE_DISABLED;
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    /**
+     * How a support agent appears to self-service users when their entity anonymizes
+     * agents (GLPI's generic name or nickname; initials on a neutral color, no picture).
+     * Null for self-service users and when anonymization is disabled.
+     *
+     * @return array{name: string, avatar: array{picture: string, initials: string, color: string, fg: string}}|null
+     */
+    public static function anonymous(int $uid): ?array
+    {
+        try {
+            if (Session::getCurrentInterface() !== 'central') {
+                return null;
+            }
+            $entity = (int) ($_SESSION['glpiactive_entity'] ?? 0);
+            $name = \User::getAnonymizedNameForUser($uid, $entity);
+            if ($name === null) {
+                return null;
+            }
+            $name = $name !== '' ? $name : __('Helpdesk user');
+            return ['name' => $name, 'avatar' => [
+                'picture'  => '',
+                'initials' => mb_strtoupper(mb_substr($name, 0, 2)),
+                'color'    => '#667382',
+                'fg'       => '#ffffff',
+            ]];
+        } catch (\Throwable) {
+            return null;
         }
     }
 

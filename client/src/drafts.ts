@@ -1,3 +1,4 @@
+import { register } from "./i18n.ts";
 import { h, icon } from "./dom.ts";
 import type { Holder } from "./protocol.ts";
 
@@ -47,18 +48,66 @@ export function cleanHtml(html: string): string {
 export function frameDoc(html: string): string {
   return (
     "<!doctype html><html><head><meta charset=utf-8>" +
-    `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">` +
+    // Images only as data: URLs, inlined by the page from GLPI (see inlineImages).
+    `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:">` +
     "<style>body{font:14px/1.4 system-ui,sans-serif;margin:.5rem;color:#1d273b;word-wrap:break-word}img{max-width:100%}</style>" +
     `</head><body>${html}</body></html>`
   );
 }
 
+/** Same-origin image sources of a draft (documents uploaded to GLPI). */
+export function imageSources(html: string): string[] {
+  const out = new Set<string>();
+  for (const m of html.matchAll(/<img\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/gi)) {
+    const src = m[1].replace(/&amp;/g, "&");
+    if (/^\/(?!\/)[A-Za-z0-9/._~?=&%+-]*$/.test(src)) out.add(src);
+  }
+  return [...out];
+}
+
+/** Largest image inlined in a followed draft. */
+const MAX_IMAGE = 2 * 1024 * 1024;
+
+/**
+ * The sandboxed frame cannot load anything: the page fetches the draft's GLPI images itself
+ * (same origin, the user's session, so GLPI's rights on the documents apply) and puts
+ * them in as data: URLs. Cached per source.
+ */
+export async function inlineImages(html: string, cache: Map<string, Promise<string | null>>, fetchFn: typeof fetch = (...a) => fetch(...a)): Promise<string> {
+  let out = html;
+  for (const src of imageSources(html)) {
+    let p = cache.get(src);
+    if (!p) {
+      p = (async () => {
+        try {
+          const resp = await fetchFn(src, { credentials: "same-origin" });
+          const blob = resp.ok ? await resp.blob() : null;
+          if (!blob || !blob.type.startsWith("image/") || blob.size > MAX_IMAGE) return null;
+          const bytes = new Uint8Array(await blob.arrayBuffer());
+          let bin = "";
+          for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+          return `data:${blob.type};base64,${btoa(bin)}`;
+        } catch {
+          return null;
+        }
+      })();
+      cache.set(src, p);
+    }
+    const data = await p;
+    if (data) {
+      const esc = src.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      out = out.replace(new RegExp(`(src\\s*=\\s*["'])${esc.replace(/&/g, "(?:&|&amp;)")}(["'])`, "g"), `$1${data}$2`);
+    }
+  }
+  return out;
+}
+
 type Lang = "fr" | "en";
-const KIND_NAME: Record<Lang, Record<DraftKind, string>> = {
+const KIND_NAME = register<Record<Lang, Record<DraftKind, string>>>("drafts.kinds", {
   fr: { followup: "suivi", task: "tâche", solution: "solution" },
   en: { followup: "followup", task: "task", solution: "solution" },
-};
-const TEXT = {
+});
+const TEXT = register("drafts", {
   fr: {
     join: "Rejoindre",
     leave: "Quitter",
@@ -77,7 +126,7 @@ const TEXT = {
     shared: (n: string) => `${n} already writes this shared draft: yours stays personal.`,
     tooLarge: "Draft too large to be shared.",
   },
-};
+});
 
 const STYLE = `
 .glpi-rt-draft-view { margin-top:.5rem; }
@@ -125,6 +174,7 @@ export class SharedDrafts {
   private watching: DraftKind | null = null;
   private readonly frames = new Map<DraftKind, HTMLIFrameElement>();
   private readonly pending = new Map<number, DraftKind>();
+  private readonly images = new Map<string, Promise<string | null>>();
   /** Called when placeholders must be drawn again (infos changed). */
   onChange: () => void = () => {};
 
@@ -169,7 +219,16 @@ export class SharedDrafts {
         return;
       }
       const frame = this.frames.get(m.kind);
-      if (frame) frame.srcdoc = frameDoc(m.draft?.html ?? "");
+      if (frame) {
+        const html = m.draft?.html ?? "";
+        frame.srcdoc = frameDoc(html);
+        // Then with GLPI's images, once fetched (only if no newer version arrived).
+        if (imageSources(html).length) {
+          void inlineImages(html, this.images).then((full) => {
+            if (this.frames.get(m.kind) === frame && full !== html) frame.srcdoc = frameDoc(full);
+          });
+        }
+      }
       if (!m.draft && this.watching === m.kind) this.unwatch();
     });
     client.on("error", (m) => {
@@ -313,6 +372,11 @@ export class SharedDrafts {
     const box = block.querySelector<HTMLInputElement>("input[name='is_private']");
     if (box && box.checked !== priv) box.click();
     this.writing = { kind, block, shared: true };
+    // A solution taken over brings its locks along (same rules: the writer was away).
+    if (kind === "solution") {
+      this.client.send({ t: "lock", room: this.room, scope: "solution", force: true });
+      this.client.send({ t: "lock", room: this.room, force: true, reason: "solution" });
+    }
   }
 
   private note(block: Element, text: string): void {

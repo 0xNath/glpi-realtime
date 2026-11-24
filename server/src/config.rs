@@ -4,7 +4,7 @@ use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 
 use figment::Figment;
-use figment::providers::{Env, Format, Serialized, Toml};
+use figment::providers::{Env, Format, Toml};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -66,6 +66,9 @@ pub struct ValkeyConfig {
     pub pool_size: usize,
     /// Prefix of every key written by the plugin and read by the server.
     pub key_prefix: String,
+    /// Valkey ACL user and password (`AUTH`), when Valkey requires them.
+    pub username: Option<String>,
+    pub password: Option<String>,
 }
 
 impl Default for ValkeyConfig {
@@ -75,6 +78,8 @@ impl Default for ValkeyConfig {
             db: 6,
             pool_size: 8,
             key_prefix: "rt:".into(),
+            username: None,
+            password: None,
         }
     }
 }
@@ -110,6 +115,9 @@ pub struct Limits {
     pub max_rooms_per_connection: usize,
     /// Items whose presence a list page may follow (`watch`).
     pub max_watched_rooms: usize,
+    /// Pending connections the listening socket queues (bursts: nginx reconnecting every
+    /// client after a restart). Capped by the kernel (`net.core.somaxconn`).
+    pub listen_backlog: u32,
     /// Token bucket per connection.
     pub messages_per_second: u32,
     pub burst: u32,
@@ -132,6 +140,7 @@ impl Default for Limits {
             max_message_bytes: 64 * 1024,
             max_rooms_per_connection: 50,
             max_watched_rooms: 200,
+            listen_backlog: 4096,
             messages_per_second: 20,
             burst: 40,
             user_messages_per_second: 50,
@@ -263,7 +272,9 @@ impl Default for LogConfig {
 
 impl Config {
     pub fn load(path: Option<&Path>) -> Result<Self, Box<figment::Error>> {
-        let mut fig = Figment::from(Serialized::defaults(Config::default()));
+        // No serialized defaults: every section has `#[serde(default)]`, and merging the
+        // default unix listener into `listen = { type = "tcp", ... }` would add unix fields.
+        let mut fig = Figment::new();
         if let Some(p) = path {
             fig = fig.merge(Toml::file_exact(p));
         }
@@ -344,6 +355,23 @@ mod tests {
             _ => panic!("expected unix"),
         }
         assert_eq!(c.valkey.db, 6);
+    }
+
+    #[test]
+    fn tcp_listener_from_toml() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("c.toml");
+        std::fs::write(
+            &p,
+            "[listen]\ntype = \"tcp\"\naddr = \"127.0.0.1:8090\"\n[security]\nallowed_origins = [\"https://g\"]\n",
+        )
+        .unwrap();
+        let c = Config::load(Some(&p)).unwrap();
+        assert!(matches!(c.listen, Listen::Tcp { .. }));
+        assert_eq!(
+            c.limits.listen_backlog, 4096,
+            "other sections keep their defaults"
+        );
     }
 
     #[test]

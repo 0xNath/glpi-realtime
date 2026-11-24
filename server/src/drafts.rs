@@ -179,8 +179,10 @@ impl Drafts {
         };
         let stored = self.store_draft(room, kind, &draft, false).await?;
         if stored.writer.conn != draft.writer.conn {
+            metrics::counter!("rt_drafts_total", "op" => "locked").increment(1);
             return Err(DraftError::Locked(Box::new(stored)));
         }
+        metrics::counter!("rt_drafts_total", "op" => "write").increment(1);
         self.changed(room, kind).await;
         Ok(())
     }
@@ -249,6 +251,7 @@ impl Drafts {
         }
         d.writer = me;
         d.updated = now();
+        metrics::counter!("rt_drafts_total", "op" => "take").increment(1);
         let stored = self.store_draft(room, kind, &d, true).await?;
         self.changed(room, kind).await;
         Ok(Some(stored))

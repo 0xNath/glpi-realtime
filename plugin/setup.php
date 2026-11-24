@@ -12,12 +12,13 @@
  */
 
 use Glpi\Plugin\Hooks;
+use GlpiPlugin\Realtime\ConcurrencyGuard;
 use GlpiPlugin\Realtime\Events;
 use GlpiPlugin\Realtime\Grants;
 use GlpiPlugin\Realtime\SessionToken;
 use GlpiPlugin\Realtime\SolutionGuard;
 
-define('PLUGIN_REALTIME_VERSION', '0.3.0');
+define('PLUGIN_REALTIME_VERSION', '0.4.0');
 define('PLUGIN_REALTIME_MIN_GLPI', '12.0.0');
 define('PLUGIN_REALTIME_MAX_GLPI', '12.0.99');
 
@@ -65,21 +66,38 @@ function plugin_init_realtime(): void
 {
     global $PLUGIN_HOOKS;
 
-    // Session token: issued, slid and revoked on regular GLPI requests (no extra request).
-    $PLUGIN_HOOKS[Hooks::POST_INIT]['realtime'] = [SessionToken::class, 'onPostInit'];
-
-    // Per-item grants, computed by GLPI when the item form is displayed.
-    $PLUGIN_HOOKS[Hooks::POST_ITEM_FORM]['realtime'] = [Grants::class, 'onPostItemForm'];
-
-    // Live events and notifications: item_add, item_update, ... on tickets, changes, problems
-    // and their sub-items.
-    foreach (Events::hooks() as $hook => $byClass) {
-        $PLUGIN_HOOKS[$hook]['realtime'] = $byClass;
-    }
-
-    // One solution at a time, enforced by GLPI.
-    $PLUGIN_HOOKS[Hooks::PRE_ITEM_ADD]['realtime'] = ['ITILSolution' => [SolutionGuard::class, 'onPreAdd']];
-
     // Browser client (served from public/realtime.js).
     $PLUGIN_HOOKS[Hooks::ADD_JAVASCRIPT]['realtime'] = ['realtime.js'];
+
+    // Valkey password encrypted with GLPI's key (and re-encrypted by glpi:security:changekey).
+    // Written here rather than read from a class: nothing may fail before the try below.
+    $PLUGIN_HOOKS[Hooks::SECURED_CONFIGS]['realtime'] = ['valkey_password'];
+
+    // GLPI deactivates a plugin for good when its init throws. Right after an upgrade, PHP's
+    // opcache may still serve some old files next to new ones (opcache.revalidate_freq):
+    // never let that disable the plugin; the next requests, once files are revalidated, work.
+    try {
+        // Session token: issued, slid and revoked on regular GLPI requests (no extra request).
+        $PLUGIN_HOOKS[Hooks::POST_INIT]['realtime'] = [SessionToken::class, 'onPostInit'];
+
+        // Per-item grants, computed by GLPI when the item form is displayed.
+        $PLUGIN_HOOKS[Hooks::POST_ITEM_FORM]['realtime'] = [Grants::class, 'onPostItemForm'];
+
+        // Live events and notifications: item_add, item_update, ... on tickets, changes,
+        // problems and their sub-items.
+        foreach (Events::hooks() as $hook => $byClass) {
+            $PLUGIN_HOOKS[$hook]['realtime'] = $byClass;
+        }
+
+        // One solution at a time, enforced by GLPI.
+        $PLUGIN_HOOKS[Hooks::PRE_ITEM_ADD]['realtime'] = ['ITILSolution' => [SolutionGuard::class, 'onPreAdd']];
+
+        // Never save a fields form older than the database (whatever the browsers do).
+        $PLUGIN_HOOKS[Hooks::PRE_ITEM_UPDATE]['realtime'] = array_fill_keys(
+            ['Ticket', 'Change', 'Problem'],
+            [ConcurrencyGuard::class, 'onPreUpdate']
+        );
+    } catch (\Throwable $e) {
+        Toolbox::logInFile('realtime', 'plugin init skipped (files being upgraded?): ' . $e->getMessage() . "\n");
+    }
 }

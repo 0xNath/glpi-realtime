@@ -59,6 +59,7 @@ async fn health(State(app): State<AppState>) -> impl IntoResponse {
         "status": if valkey { "ok" } else { "degraded" },
         "valkey": valkey,
         "connections": app.registry.len(),
+        "version": env!("CARGO_PKG_VERSION"),
     });
     let code = if valkey {
         StatusCode::OK
@@ -188,9 +189,16 @@ pub async fn start(cfg: Config, metrics: Option<PrometheusHandle>) -> anyhow::Re
     let (local_addr, join): (Option<SocketAddr>, JoinHandle<anyhow::Result<()>>) = match &cfg.listen
     {
         Listen::Tcp { addr } => {
-            let l = tokio::net::TcpListener::bind(addr)
-                .await
+            let sock = if addr.is_ipv4() {
+                tokio::net::TcpSocket::new_v4()?
+            } else {
+                tokio::net::TcpSocket::new_v6()?
+            };
+            sock.set_reuseaddr(true)?;
+            sock.bind(*addr)
                 .with_context(|| format!("binding {addr}"))?;
+            // Rust's default backlog (128) drops connections in bursts.
+            let l = sock.listen(cfg.limits.listen_backlog)?;
             let local = l.local_addr()?;
             info!(%local, "listening (tcp)");
             let reg = Arc::clone(&registry);
@@ -204,7 +212,7 @@ pub async fn start(cfg: Config, metrics: Option<PrometheusHandle>) -> anyhow::Re
             )
         }
         Listen::Unix { path, mode, group } => {
-            let l = bind_unix(path, *mode, group.as_deref())?;
+            let l = bind_unix(path, *mode, group.as_deref(), cfg.limits.listen_backlog)?;
             info!(path = %path.display(), "listening (unix)");
             let reg = Arc::clone(&registry);
             let path = path.clone();
@@ -240,6 +248,7 @@ fn bind_unix(
     path: &Path,
     mode: u32,
     group: Option<&str>,
+    backlog: u32,
 ) -> anyhow::Result<tokio::net::UnixListener> {
     use std::os::unix::fs::{FileTypeExt, PermissionsExt};
     if let Ok(meta) = std::fs::symlink_metadata(path) {
@@ -250,8 +259,13 @@ fn bind_unix(
         );
         std::fs::remove_file(path)?;
     }
-    let l = tokio::net::UnixListener::bind(path)
+    // Through socket2 to choose the backlog (std/tokio use 128).
+    let sock = socket2::Socket::new(socket2::Domain::UNIX, socket2::Type::STREAM, None)?;
+    sock.bind(&socket2::SockAddr::unix(path)?)
         .with_context(|| format!("binding {}", path.display()))?;
+    sock.listen(backlog.min(i32::MAX as u32) as i32)?;
+    sock.set_nonblocking(true)?;
+    let l = tokio::net::UnixListener::from_std(std::os::unix::net::UnixListener::from(sock))?;
     if let Some(g) = group {
         let gid = gid_of(g, &std::fs::read_to_string("/etc/group")?)
             .with_context(|| format!("unknown group {g}"))?;

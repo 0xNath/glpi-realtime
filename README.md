@@ -34,6 +34,27 @@ Browser ──wss /ws──► nginx ──unix socket──► glpi-realtime (R
 | 5 | Shared answer drafts: follow live, take over | done |
 | 6 | Load test at 20 000 connections, hardening | — |
 
+## Performance
+
+Measured with the load test tool on one machine (16 threads, server as its own process,
+Valkey on a unix socket, version 0.4.0):
+
+| | 20 000 connections on 2 000 items |
+|---|---|
+| Connecting all of them | 1.6 s, no failure; handshake + subscription p99 122 ms |
+| One event in every item, published at once | all delivered, p99 149 ms |
+| One newcomer in every item | every member told, p99 389 ms |
+| Server memory | 541 MiB (≈ 25 KiB per connection) |
+| Server CPU for the whole run | 10 s |
+
+```bash
+cd server && cargo run --release --example loadtest -- --valkey unix:///path/to/valkey.sock \
+    --connections 20000 --rooms 2000 [--addr 127.0.0.1:8090]   # without --addr: starts its own server
+```
+
+It uses Valkey db 6 with the `rt:` prefix (sessions `rt:s:5eed…`) and removes its keys at
+the end: point it to a test Valkey, not production's.
+
 ## Build and test
 
 Requirements: Rust ≥ 1.85, Node ≥ 22.6, `valkey-server` (integration tests),
@@ -65,12 +86,17 @@ Settings are environment variables (defaults in brackets): `GLPI_DIR` [`/var/www
 `PREFIX` [`/usr/local`, binary in `$PREFIX/bin`], `CONFIG`
 [`/etc/glpi-realtime/config.toml`, only read to validate it before switching binaries],
 `PHP` [`php`], `GLPI_USER` [owner of `$GLPI_DIR/files`], `SERVICE` [`glpi-realtime`,
-restarted if the unit exists], `SKIP_PLUGIN_UPGRADE=1` to only copy the plugin files.
+restarted if the unit exists], `SKIP_PLUGIN_UPGRADE=1` to only copy the plugin files,
+`RELOAD_PHP` [command reloading GLPI's PHP after the copy, e.g. `systemctl reload
+php-fpm`; without it the script waits `OPCACHE_WAIT`, 65 s, for opcache to revalidate].
+PHP's opcache can otherwise serve old plugin files next to new ones for a while after an
+upgrade.
 For example:
 
 ```bash
 sudo GLPI_DIR=/usr/share/glpi PHP=php8.3 deploy/install.sh                       # Debian-like
-sudo PHP="env PHP_INI_SCAN_DIR=:/etc/webapps/glpi/php-cli php-legacy" deploy/install.sh   # Arch
+sudo PHP="env PHP_INI_SCAN_DIR=:/etc/webapps/glpi/php-cli php-legacy" \
+     RELOAD_PHP="systemctl reload uwsgi@glpi" deploy/install.sh                        # Arch, uWSGI
 ```
 
 The script copies the plugin into `$GLPI_DIR/plugins/realtime` (read-only for the web
@@ -98,6 +124,13 @@ path if `PREFIX` is not `/usr/local`, then `systemctl daemon-reload && systemctl
 filter) and raises `LimitNOFILE` for 20 000 connections.
 
 ### 3. Valkey (once)
+
+Protect it: whoever can write to Valkey can forge sessions. Give the server and GLPI an
+ACL user limited to `rt:*` keys and channels (`valkey.conf.example`); set its password in
+`config.toml` (`[valkey] username`, `password`) and in GLPI with
+`bin/console glpi:config:set --context=plugin:realtime valkey_password '…'` (encrypted
+with GLPI's key).
+
 
 See `deploy/examples/valkey.conf.example`: a unix socket readable by its group (add the
 `glpi-realtime` user and the user running PHP to that group), and
@@ -141,9 +174,18 @@ For 20 000 WebSockets, raise the web server's limits (nginx: `worker_rlimit_nofi
 `worker_connections`; Apache event MPM: `MaxRequestWorkers` and related), as noted in the
 examples.
 
+### Releases
+
+`scripts/release.sh` builds `dist/glpi-realtime-<version>-linux-<arch>.tar.gz` (the
+binary, static when the `x86_64-unknown-linux-musl` target is installed, plus `deploy/`,
+the plugin and the docs: run `deploy/install.sh` from it, nothing to compile) and
+`dist/glpi-plugin-realtime-<version>.tar.bz2` (the plugin alone). The CI workflow
+(`.github/workflows/ci.yml`) runs every suite and the dependency audits, and publishes
+those archives for `v*` tags.
+
 ### Upgrading
 
-Run step 1 again. Configuration is never changed by an upgrade; notes for versions that
+Run step 1 again (see [CHANGELOG.md](CHANGELOG.md) for what to edit yourself). Configuration is never changed by an upgrade; notes for versions that
 need you to edit it:
 
 - **0.3.0**: changes and problems have every feature: add `"Change", "Problem"` to
@@ -156,6 +198,15 @@ See [`deploy/examples/config.toml.example`](deploy/examples/config.toml.example)
 with `GLPI_RT_<SECTION>__<KEY>`. Plugin settings (Valkey socket and db, key prefix, cookie
 name, enabled item types) are in GLPI's configuration table, context `plugin:realtime`,
 and must match the server.
+
+## Translations
+
+- Plugin messages: GLPI's gettext, domain `realtime` (`plugin/locales/*.po`, compiled
+  `.mo`). Maintainers: `scripts/i18n.py` extracts the strings and compiles.
+- Browser texts: French and English are built in. Any other language:
+  `cd client && npm run i18n-template` writes `plugin/locales/client/template.json`; copy it
+  to `<lang>.json` (`de_DE.json` or `de.json`, after GLPI's language codes), translate
+  the texts (`{0}`, `{1}`… are values), and deploy: no rebuild.
 
 ## Operations
 

@@ -58,6 +58,9 @@ grant is gone, removes the connection from the room and answers `forbidden`.
 | `draft_info` | `room`, `kind`, `writer` or `null`, `private`, `updated`, `away` | to members allowed to follow it, after `subscribed` and on change |
 | `notification` | `nid`, `kind`, `room`, `by{id,name}`, `alert` | the user's notifications changed |
 
+Self-service sessions of entities that anonymize support agents receive agents' names
+and avatars anonymized in every frame (see the security model).
+
 Error codes: `bad_request`, `unsupported_version`, `forbidden`, `rate_limited`,
 `too_many_rooms`, `locked`, `too_large`, `internal`.
 
@@ -109,6 +112,10 @@ clients show "Bob added a followup" and the user reloads from GLPI.
 session's grant and groups from the session key, both written by GLPI.
 
 ### Regrant
+
+A batch may carry `sessions` (token hashes): the regrant then concerns those sessions
+only (their user's profile, groups or rights changed), the other members keep their
+grants and keep receiving events.
 
 Removing or changing an actor, or moving the ticket to another entity, may remove
 someone's access. The plugin then deletes **every** grant on the item (index

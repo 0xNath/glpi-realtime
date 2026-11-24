@@ -1,3 +1,4 @@
+import { register } from "./i18n.ts";
 import { type DraftKind, SharedDrafts } from "./drafts.ts";
 import { h, icon } from "./dom.ts";
 import { noun } from "./updates.ts";
@@ -32,7 +33,7 @@ export const ANSWER_KINDS: Record<string, string> = {
 /** Item events that change the timeline (the others change the fields). */
 export const TIMELINE_EVENTS = /^(followup|task|solution|validation|document)\.(add|update|delete)$/;
 
-const TEXT = {
+const TEXT = register("timeline", {
   fr: {
     composing: {
       followup: (n: string) => `${n} rédige un suivi…`,
@@ -59,7 +60,7 @@ const TEXT = {
     solutionLost: (n: string) => `${n} took over the solution: yours cannot be saved.`,
     fieldsBusy: (n: string, it: string) => `${n} is editing the fields of ${it}: wait until they save before adding a solution or putting it on hold.`,
   },
-};
+});
 
 export function langOf(raw: string): Lang {
   return raw.slice(0, 2).toLowerCase() === "fr" ? "fr" : "en";
@@ -93,6 +94,11 @@ function newItemsPlace(timeline: Element): [Element, Node | null] {
   }
   const last = list[list.length - 1] ?? content;
   return [timeline, last ? last.nextSibling : null];
+}
+
+/** Delay before reloading the tab: 400 ms to group a burst of events, plus up to 1.1 s. */
+export function refreshDelay(random: number): number {
+  return 400 + Math.floor(random * 1100);
 }
 
 export interface SyncResult {
@@ -225,6 +231,8 @@ export class LiveTimeline {
   private pending = new Set<string>();
   private timer: ReturnType<typeof setTimeout> | null = null;
   private users: PresenceUser[] = [];
+  /** Events arrived while the tab was hidden: reload when it is shown. */
+  private dirty = false;
   /** Shared answer drafts (step 5): Join / Take over on the placeholders. */
   readonly drafts: SharedDrafts;
 
@@ -246,6 +254,12 @@ export class LiveTimeline {
     doc.addEventListener("shown.bs.collapse", (e) => this.onAnswer(e.target as Element, true));
     doc.addEventListener("hidden.bs.collapse", (e) => this.onAnswer(e.target as Element, false));
     doc.addEventListener("submit", (e) => this.onSubmit(e), true);
+    doc.addEventListener("visibilitychange", () => {
+      if (doc.visibilityState === "visible" && this.dirty) {
+        this.dirty = false;
+        this.schedule();
+      }
+    });
     doc.addEventListener("click", (e) => this.onClick(e), true);
 
     client.on("presence", (m) => {
@@ -495,9 +509,19 @@ export class LiveTimeline {
     }
   }
 
+  /**
+   * Reloads the tab soon. A tab in the background waits until it is shown again (one
+   * reload, however many events); visible tabs are spread over 1.5 s so that the people
+   * on a ticket do not all ask GLPI at the same instant.
+   */
   private schedule(): void {
     if (this.timer) clearTimeout(this.timer);
-    this.timer = setTimeout(() => void this.refresh(), 400);
+    this.timer = null;
+    if (this.doc.visibilityState === "hidden") {
+      this.dirty = true;
+      return;
+    }
+    this.timer = setTimeout(() => void this.refresh(), refreshDelay(Math.random()));
   }
 
   /** Fetches the tab as GLPI renders it now and merges its timeline into the page. */

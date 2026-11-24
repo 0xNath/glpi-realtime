@@ -16,6 +16,11 @@ final class Settings
     public const DEFAULTS = [
         'valkey_socket'      => '/run/valkey/valkey.sock',
         'valkey_db'          => '6',
+        // Valkey ACL user and password (empty: no AUTH). The password is stored encrypted
+        // with GLPI's key (secured config): set it with
+        //   bin/console glpi:config:set --context=plugin:realtime valkey_password '...'
+        'valkey_username'    => '',
+        'valkey_password'    => '',
         'key_prefix'         => 'rt:',
         'cookie_name'        => 'glpi_rt',
         'ws_path'            => '/ws',
@@ -41,6 +46,23 @@ final class Settings
             self::$values = array_merge(self::DEFAULTS, array_filter($stored, static fn($v) => $v !== null && $v !== ''));
         }
         return (string) self::$values[$name];
+    }
+
+    /** Settings stored encrypted by GLPI (secured configs). */
+    public const SECURED = ['valkey_password'];
+
+    /** Valkey password, decrypted (GLPI encrypts secured configs but returns them as stored). */
+    public static function valkeyPassword(): string
+    {
+        $raw = self::get('valkey_password');
+        if ($raw === '') {
+            return '';
+        }
+        try {
+            return (string) (new \GLPIKey())->decrypt($raw);
+        } catch (\Throwable) {
+            return '';
+        }
     }
 
     /** @return list<string> */

@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # Valkey >= 9.0 (hash field TTLs): its binary, from the official image.
+      - name: Valkey
+        run: |
+          id=$(docker create valkey/valkey:9.0)
+          sudo docker cp "$id":/usr/local/bin/valkey-server /usr/local/bin/valkey-server
+          docker rm "$id"
+          valkey-server --version
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: server
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: redis, igbinary
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - run: npm ci
+        working-directory: client
+
+      - name: Format
+        run: cargo fmt --check
+        working-directory: server
+      - name: Translations template up to date
+        run: python3 scripts/i18n.py --check
+      - name: All suites (Rust, PHP plugin, client)
+        run: scripts/test-all.sh
+      - name: Bundle up to date
+        run: |
+          (cd client && npm run -s build)
+          git diff --exit-code -- plugin/public/realtime.js || { echo "run 'npm run build' in client/ and commit"; exit 1; }
+
+  audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@cargo-audit
+      - name: Rust dependencies
+        run: cargo audit
+        working-directory: server
+      - name: npm dependencies (build tools only)
+        run: npm audit --audit-level=high
+        working-directory: client
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [test, audit]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Valkey
+        run: |
+          id=$(docker create valkey/valkey:9.0)
+          sudo docker cp "$id":/usr/local/bin/valkey-server /usr/local/bin/valkey-server
+          docker rm "$id"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+          components: clippy
+      - run: sudo apt-get install -y musl-tools
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: redis, igbinary
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: scripts/release.sh
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.tar.*
+            dist/SHA256SUMS

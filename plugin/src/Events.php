@@ -80,7 +80,7 @@ final class Events
     {
         $out = [];
         foreach (self::HOOKS as $hook => $method) {
-            foreach (array_unique([...self::CLASSES, ...Inbox::CLASSES]) as $class) {
+            foreach (array_unique([...self::CLASSES, ...Inbox::CLASSES, ...RightsWatch::CLASSES]) as $class) {
                 $out[$hook][$class] = [self::class, $method];
             }
         }
@@ -128,6 +128,11 @@ final class Events
             Inbox::record($item, $action);
         } catch (Throwable $e) {
             \Toolbox::logInFile('realtime', 'notification not recorded: ' . $e->getMessage() . "\n");
+        }
+        try {
+            RightsWatch::record($item, $action);
+        } catch (Throwable $e) {
+            \Toolbox::logInFile('realtime', 'rights change not recorded: ' . $e->getMessage() . "\n");
         }
     }
 
@@ -274,7 +279,8 @@ final class Events
         } catch (Throwable $e) {
             \Toolbox::logInFile('realtime', 'notifications not written: ' . $e->getMessage() . "\n");
         }
-        if ($pending === [] && $pushes === []) {
+        $rights = RightsWatch::pending();
+        if ($pending === [] && $pushes === [] && $rights['regrant'] === [] && $rights['revoke'] === []) {
             return;
         }
         $uid = Session::getLoginUserID();
@@ -282,6 +288,11 @@ final class Events
             'id'   => is_numeric($uid) ? (int) $uid : 0, // 0: cron, mail collector
             'name' => (string) ($_SESSION['glpifriendlyname'] ?? $_SESSION['glpiname'] ?? ''),
         ];
+        // How the author appears to self-service users when agents are anonymized.
+        $anon = $by['id'] > 0 ? SessionToken::anonymous($by['id']) : null;
+        if ($anon !== null) {
+            $by['anon'] = $anon;
+        }
         Valkey::run(function (Redis $r) use ($pending, $pushes, $by) {
             foreach ($pending as $room => $b) {
                 if ($b['regrant']) {
@@ -293,6 +304,12 @@ final class Events
             }
             foreach (self::notices($by, $pushes) as $message) {
                 $r->publish(Valkey::key('ev'), $message);
+            }
+            // Rights changed: only the sessions concerned get new grants.
+            foreach (RightsWatch::flush($r) as $room => $hashes) {
+                foreach (array_chunk(array_values(array_unique($hashes)), self::MAX_RECIPIENTS) as $chunk) {
+                    $r->publish(Valkey::key('ev'), json_encode(['room' => $room, 'by' => $by, 'regrant' => true, 'sessions' => $chunk]));
+                }
             }
         });
     }

@@ -1,3 +1,4 @@
+import { register } from "./i18n.ts";
 /**
  * The notification inbox ("bell"): data from GLPI (ajax/inbox.php), grouping and texts.
  * Queues, events and preferences follow the Notifier+ plugin.
@@ -50,6 +51,8 @@ export interface InboxList {
   counts: Record<Tab, number>;
   preferences: Preferences;
   can_see_others: boolean;
+  /** "helpdesk" for self-service users: one "All" tab. */
+  interface?: "central" | "helpdesk";
 }
 
 export interface Group {
@@ -64,7 +67,7 @@ export interface Group {
 
 type Lang = "fr" | "en";
 
-export const LABELS = {
+export const LABELS = register("inbox", {
   fr: {
     title: "Notifications",
     tabs: { all: "Tous", new: "Nouveaux", mine: "Mes tickets", team: "Équipe", other: "Autres", resolved: "Résolus", closed: "Clos", ended: "Terminés" },
@@ -119,6 +122,7 @@ export const LABELS = {
       types: { ticket: "Tickets", change: "Changements", problem: "Problèmes", projecttask: "Tâches de projet" } as Record<string, string>,
       others: "Activité des tickets, changements et problèmes que je peux voir (onglet Autres)",
       sound: "Son",
+      desktop: "Notifications du bureau quand GLPI est en arrière-plan (ce navigateur)",
       soundQueues: { sound_new: "Nouveaux", sound_mine: "Mes tickets", sound_team: "Équipe", sound_other: "Autres", sound_ended: "Résolus / clos" } as Record<string, string>,
       style: "Plusieurs modifications",
       styles: { priority: "La plus importante", combined: "Combinées", multiple: "« Modifications multiples »" } as Record<string, string>,
@@ -184,6 +188,7 @@ export const LABELS = {
       types: { ticket: "Tickets", change: "Changes", problem: "Problems", projecttask: "Project tasks" } as Record<string, string>,
       others: "Activity on tickets, changes and problems I can see (Others tab)",
       sound: "Sound",
+      desktop: "Desktop notifications while GLPI is in the background (this browser)",
       soundQueues: { sound_new: "New", sound_mine: "Mine", sound_team: "Team", sound_other: "Others", sound_ended: "Resolved / closed" } as Record<string, string>,
       style: "Several changes",
       styles: { priority: "The most important", combined: "Combined", multiple: "\"Multiple changes\"" } as Record<string, string>,
@@ -195,7 +200,7 @@ export const LABELS = {
       cancel: "Cancel",
     },
   },
-};
+});
 
 export type Labels = (typeof LABELS)["en"];
 
@@ -203,8 +208,9 @@ export function labelsFor(lang: string): Labels {
   return (lang.slice(0, 2).toLowerCase() === "fr" ? LABELS.fr : LABELS.en) as Labels;
 }
 
-/** Tabs shown, per preferences and rights. */
-export function tabs(prefs: Preferences, canSeeOthers: boolean): Tab[] {
+/** Tabs shown, per preferences and rights. Self-service users have one. */
+export function tabs(prefs: Preferences, canSeeOthers: boolean, iface: "central" | "helpdesk" = "central"): Tab[] {
+  if (iface === "helpdesk") return ["all"];
   const out: Tab[] = ["all", "new", "mine", "team"];
   if (canSeeOthers) out.push("other");
   const resolved = !!prefs.show_resolved;

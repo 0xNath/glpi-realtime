@@ -20,10 +20,6 @@ header('Content-Type: application/json; charset=UTF-8');
 header('Cache-Control: no-store');
 
 $uid = (int) Session::getLoginUserID();
-if (Session::getCurrentInterface() !== 'central') {
-    echo json_encode(['enabled' => false]); // self-service: live toasts only
-    return;
-}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $in = json_decode((string) file_get_contents('php://input'), true);
@@ -52,7 +48,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-echo json_encode(['enabled' => true] + InboxStore::list(
+// Self-service users get the bell too, with a single "All" tab (queues are technicians').
+echo json_encode(['enabled' => true, 'interface' => Session::getCurrentInterface()] + InboxStore::list(
     $uid,
     withRead: ($_GET['read'] ?? '0') === '1',
     full: ($_GET['full'] ?? '0') === '1',

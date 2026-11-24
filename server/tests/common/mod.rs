@@ -37,6 +37,11 @@ impl Drop for Valkey {
 
 /// Starts a private `valkey-server`; returns None (test skipped) when the binary is missing.
 pub async fn valkey() -> Option<Valkey> {
+    valkey_with(&[], None).await
+}
+
+/// A private Valkey with extra settings; `auth` (user, password) for the test client.
+pub async fn valkey_with(extra: &[&str], auth: Option<(&str, &str)>) -> Option<Valkey> {
     let bin = ["valkey-server", "redis-server"].into_iter().find(|b| {
         Command::new(b)
             .arg("--version")
@@ -53,6 +58,7 @@ pub async fn valkey() -> Option<Valkey> {
         .arg(&socket)
         .arg("--dir")
         .arg(dir.path())
+        .args(extra)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
@@ -66,6 +72,10 @@ pub async fn valkey() -> Option<Valkey> {
     let mut cfg =
         fred::prelude::Config::from_url_unix(&format!("unix://{}", socket.display())).unwrap();
     cfg.database = Some(6);
+    if let Some((u, p)) = auth {
+        cfg.username = Some(u.into());
+        cfg.password = Some(p.into());
+    }
     let client = Builder::from_config(cfg).build().unwrap();
     client.init().await.unwrap();
     Some(Valkey {

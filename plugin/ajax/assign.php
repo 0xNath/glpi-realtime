@@ -43,7 +43,7 @@ $uid = (int) Session::getLoginUserID();
 [$userLink, , $fk] = GlpiDirectory::LINKS[$type];
 $link = new $userLink();
 if ($link->find([$fk => $id, 'users_id' => $uid, 'type' => CommonITILActor::ASSIGN]) !== []) {
-    $reply(true, __('Already assigned'));
+    $reply(true, __('You are already assigned to this item.', 'realtime'));
     return;
 }
 $ok = (bool) $link->add([$fk => $id, 'users_id' => $uid, 'type' => CommonITILActor::ASSIGN, 'use_notification' => 1]);

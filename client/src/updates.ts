@@ -1,3 +1,4 @@
+import { register } from "./i18n.ts";
 import type { Actor, ItemEvent } from "./protocol.ts";
 
 /**
@@ -9,7 +10,7 @@ import type { Actor, ItemEvent } from "./protocol.ts";
 type Lang = "fr" | "en";
 
 /** "le ticket", "this change"...: every message names the kind of item it is about. */
-const NOUNS: Record<Lang, Record<string, { the: string; this: string }>> = {
+const NOUNS = register<Record<Lang, Record<string, { the: string; this: string }>>>("updates.nouns", {
   fr: {
     Ticket: { the: "le ticket", this: "ce ticket" },
     Change: { the: "le changement", this: "ce changement" },
@@ -20,19 +21,19 @@ const NOUNS: Record<Lang, Record<string, { the: string; this: string }>> = {
     Change: { the: "the change", this: "this change" },
     Problem: { the: "the problem", this: "this problem" },
   },
-};
+});
 
 export function noun(itemtype: string, l: Lang): { the: string; this: string } {
   return NOUNS[l][itemtype] ?? NOUNS[l].Ticket;
 }
 
 /** Changes of the item itself; `%` is replaced by its noun ("le ticket"). */
-const ITEM_ACTIONS: Record<Lang, Record<string, string>> = {
+const ITEM_ACTIONS = register<Record<Lang, Record<string, string>>>("updates.item", {
   fr: { "item.update": "a modifié %", "item.delete": "a mis % à la corbeille", "item.restore": "a restauré %", "item.purge": "a supprimé %" },
   en: { "item.update": "updated %", "item.delete": "moved % to the trash", "item.restore": "restored %", "item.purge": "deleted %" },
-};
+});
 
-const ACTIONS: Record<Lang, Record<string, string>> = {
+const ACTIONS = register<Record<Lang, Record<string, string>>>("updates.actions", {
   fr: {
     "followup.add": "a ajouté un suivi",
     "followup.update": "a modifié un suivi",
@@ -71,10 +72,10 @@ const ACTIONS: Record<Lang, Record<string, string>> = {
     "actor.update": "changed an actor",
     "actor.delete": "removed an actor",
   },
-};
+});
 
 /** Names of the ticket fields users care about, for `item.update`. */
-const FIELDS: Record<Lang, Record<string, string>> = {
+const FIELDS = register<Record<Lang, Record<string, string>>>("updates.fields", {
   fr: {
     status: "le statut",
     priority: "la priorité",
@@ -101,9 +102,9 @@ const FIELDS: Record<Lang, Record<string, string>> = {
     locations_id: "the location",
     entities_id: "the entity",
   },
-};
+});
 
-const TEXT = {
+const TEXT = register("updates.text", {
   fr: {
     you: "Vous",
     glpi: "GLPI",
@@ -124,7 +125,7 @@ const TEXT = {
     dismiss: "Dismiss",
     lost: (n: string) => `You no longer have access to ${n}.`,
   },
-};
+});
 
 export function lang(raw: string): Lang {
   return raw.slice(0, 2).toLowerCase() === "fr" ? "fr" : "en";
