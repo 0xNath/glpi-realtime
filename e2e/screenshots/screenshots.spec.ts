@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url";
 
 import type { Locator, Page } from "@playwright/test";
 
-import { closeAnswer, expect, login, openAnswer, openTicketAsAllowed, room, test, typeAnswer, waitForFrame } from "../tests/helpers.ts";
+import { closeAnswer, expect, items, login, openAnswer, openTicketAsAllowed, room, test, typeAnswer, waitForFrame } from "../tests/helpers.ts";
 
 const out = (name: string) => fileURLToPath(new URL(`../../docs/img/${name}.png`, import.meta.url));
 
@@ -69,12 +69,40 @@ test("presence, user card, fields lock, writing", async ({ browser }) => {
   await closeAnswer(carol.page, "ITILFollowup"); // ends the shared draft: the tests start clean
 });
 
-test("bell", async ({ browser }) => {
+test("bell, with a mention", async ({ browser }) => {
   const alice = await login(browser, "alice");
+  const bob = await login(browser, "bob");
+  const aliceId = (await waitForFrame(alice, (f) => f.t === "hello", "hello")).user.id;
+  // Bob mentions Alice in a followup.
+  await openTicketAsAllowed(bob);
+  await openAnswer(bob.page, "ITILFollowup");
+  await expect.poll(() => bob.page.evaluate(() => {
+    const area = document.querySelector<HTMLTextAreaElement>("#new-ITILFollowup-block textarea[name='content']");
+    return !!(area && (window as any).tinymce?.get(area.id)?.initialized);
+  })).toBe(true);
+  await bob.page.evaluate((uid) => {
+    const area = document.querySelector<HTMLTextAreaElement>("#new-ITILFollowup-block textarea[name='content']")!;
+    (window as any).tinymce.get(area.id).setContent(`<p><span data-user-mention="true" data-user-id="${uid}">@Alice Martin</span> could you check the toner?</p>`);
+  }, aliceId);
+  await bob.page.locator("#new-ITILFollowup-block button[type=submit][name=add]").click();
+  await waitForFrame(alice, (f) => f.t === "notification" && JSON.stringify(f).includes("mentioned"), "the mention");
   await alice.page.locator(".glpi-rt-bell-button").click();
   const panel = alice.page.locator(".glpi-rt-bell-panel");
-  await expect(panel.locator(".glpi-rt-n").first()).toBeVisible();
+  await expect(panel.locator(".glpi-rt-n").first()).toContainText(/mentioned|mentionné/i);
   await shoot(alice.page, "bell", [panel, alice.page.locator(".glpi-rt-bell-button")], 24);
+});
+
+test("asset: presence and the single editor", async ({ browser }) => {
+  const alice = await login(browser, "alice");
+  const bob = await login(browser, "bob");
+  const id = items.computer;
+  for (const s of [alice, bob]) await s.page.goto(`/front/computer.form.php?id=${id}`);
+  await waitForFrame(alice, (f) => f.t === "presence" && f.room === `Computer:${id}` && f.users.length >= 2, "both");
+  const form = bob.page.locator("form").filter({ has: bob.page.locator(`input[name='id'][value='${id}']`) }).filter({ has: bob.page.locator("[name='update']") });
+  await form.locator("input[name='name']").focus();
+  await expect(alice.page.locator(".glpi-rt-editor")).toContainText(/bob/i);
+  await alice.page.mouse.move(0, 819);
+  await alice.page.screenshot({ path: out("asset"), clip: { x: 0, y: 0, width: 1360, height: 520 } });
 });
 
 test("list", async ({ browser }) => {

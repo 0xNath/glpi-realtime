@@ -59,6 +59,7 @@ php bin/console plugin:activate realtime
 
 | Symptom | Cause | Fix |
 |---|---|---|
+| Nobody shown on a computer, project or other item (tickets work) | Its type is not enabled: an upgraded install keeps its item types | The "Item types" check lists what is available, with the plugin command and the `config.toml` line to enable them (both sides, then restart the server). |
 | Someone stays shown after closing their tab | The browser did not close the connection (sleep, network loss) | They disappear after `limits.idle_timeout_secs` (90 s by default). |
 | A self-service user sees support agents' names | The entity does not anonymize them | GLPI's entity setting "Anonymize support agents": the real-time layer applies it too. |
 

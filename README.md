@@ -2,32 +2,36 @@
 
 [![CI](https://github.com/0xNath/glpi-realtime/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/0xNath/glpi-realtime/actions/workflows/ci.yml)
 
-Optional real-time layer for GLPI 11 and 12. On tickets, changes and problems: presence,
-typing indicators, live updates of the item and its timeline, instant notifications
-(mentions included), a single editor for the fields, one solution at a time, and shared
-answer drafts. On projects, project tasks and assets (any GLPI item can be enabled):
-presence and a single editor of the form.
+Optional real-time layer for GLPI 11 and 12: who is on an item, who is writing, changes
+shown live, one editor at a time, and instant notifications.
 
-- `server/`: WebSocket server in Rust (tokio, axum, fred/Valkey).
-- `plugin/`: GLPI plugin `realtime` (PHP): issues session tokens and per-item grants.
-- `client/`: browser client in TypeScript, bundled into `plugin/public/realtime.js`.
-- `deploy/`: `install.sh` (installs and upgrades the binary and the plugin), and
-  `examples/`: configuration, systemd unit, system user, Valkey, nginx and Apache vhosts.
-- `e2e/`: end-to-end tests in a real Chromium, against your GLPI or a disposable one
-  (`e2e/env/`, containers) ([setup](e2e/README.md)).
-- `docs/`: [protocol](docs/protocol.md), [security model](docs/security.md),
-  [troubleshooting](docs/troubleshooting.md).
+| | Tickets, changes, problems | Projects, project tasks, assets (and any GLPI item) |
+|---|---|---|
+| Presence on the item and on the lists (GLPI's avatars and user card) | ✓ | ✓ |
+| Single editor of the fields, take over from an inactive tab | ✓ | ✓ |
+| GLPI refuses to save a form older than the item | ✓ | ✓ |
+| "Refresh" when someone else changed the item | ✓ | ✓ |
+| Timeline updated live; who is writing a followup, task or solution | ✓ | |
+| Shared answer drafts: follow them live, take them over | ✓ | |
+| One solution at a time (enforced by GLPI) | ✓ | |
+| Bell: queues, read/unread, assume, preferences, sound, desktop notifications | ✓ | project tasks |
+| Mentions ("@name") notified at once | ✓ | |
 
-GLPI works unchanged when the server, Valkey or the plugin is absent.
+GLPI works unchanged when the server, Valkey or the plugin is absent. Documentation:
+[install](#install), [troubleshooting](docs/troubleshooting.md),
+[security model](docs/security.md), [protocol](docs/protocol.md),
+[changes](CHANGELOG.md).
 
 | | |
 |---|---|
 | ![Who else is on the ticket, with GLPI's user card](docs/img/presence.png) | ![The bell: queues, read and unread, assume](docs/img/bell.png) |
-| Who else is on the item, with GLPI's user card on hover | Notifications: queues, read/unread, assume, preferences |
+| Who else is on the item, with GLPI's user card on hover | Notifications, mentions included: queues, read/unread, assume |
 | ![One editor of the fields at a time](docs/img/fields-lock.png) | ![Following a colleague's draft live](docs/img/draft.png) |
 | One editor of the fields at a time | Who is writing, and their draft followed live |
-| ![Presence on the ticket list](docs/img/list.png) | ![The plugin's checks](docs/img/checks.png) |
-| Who is on each row of the lists | Checks of the whole setup, with how to fix |
+| ![Presence on the ticket list](docs/img/list.png) | ![A computer edited by a colleague](docs/img/asset.png) |
+| Who is on each row of the lists | Assets and projects: presence and one editor |
+| ![The plugin's checks](docs/img/checks.png) | |
+| Checks of the whole setup, with how to fix | |
 
 ## Architecture
 
@@ -122,7 +126,7 @@ with the checks of step 6 (errors are expected on a first install, before steps 
 sudo useradd --system --no-create-home --shell /usr/sbin/nologin glpi-realtime
 sudo install -d -m 750 -o root -g glpi-realtime /etc/glpi-realtime
 sudo install -m 640 -o root -g glpi-realtime deploy/examples/config.toml.example /etc/glpi-realtime/config.toml
-sudoedit /etc/glpi-realtime/config.toml      # allowed_origins, listen.group, valkey.url
+sudoedit /etc/glpi-realtime/config.toml      # allowed_origins, listen.group, valkey.url, allowed_itemtypes
 glpi-realtime --config /etc/glpi-realtime/config.toml --check
 
 sudo cp deploy/examples/glpi-realtime.service /etc/systemd/system/
@@ -131,6 +135,8 @@ sudo systemctl daemon-reload && sudo systemctl enable --now glpi-realtime
 ```
 
 - `allowed_origins`: GLPI's address, e.g. `["https://glpi.example.org"]`.
+- `allowed_itemtypes`: the item types with real-time features, the same as the plugin's
+  `enabled_itemtypes` ([Item types](#item-types)); the example lists the defaults.
 - `listen.group` and the unit's `SupplementaryGroups`: the web server's group
   (Debian/Ubuntu: `www-data`, RHEL/Fedora: `nginx` or `apache`), so that only it can open
   the socket (`0660`); add Valkey's socket group to `SupplementaryGroups`.
@@ -225,10 +231,29 @@ causes.
 Download the new release (step 1) and run step 2 again. Configuration is never changed
 by an upgrade; [CHANGELOG.md](CHANGELOG.md) says when you have to edit it, e.g.:
 
-- **0.6.0**: projects and assets are opt-in for existing installs: see the CHANGELOG.
+- **0.6.0**: projects, project tasks and assets get presence and a single editor; an
+  existing install keeps its item types (the checks list what is available). To enable
+  them, on both sides (as the user running GLPI, in GLPI's directory):
+
+  ```bash
+  php bin/console config:set --context=plugin:realtime enabled_itemtypes \
+    '["Ticket","Change","Problem","Project","ProjectTask","Computer","Monitor","NetworkEquipment","Peripheral","Phone","Printer"]'
+  ```
+
+  and the same list in `config.toml`, `[security] allowed_itemtypes`, then restart the
+  server.
 - **0.3.0**: add `"Change", "Problem"` to `security.allowed_itemtypes` in `config.toml`.
 
 ## Build and test
+
+- `server/`: WebSocket server in Rust (tokio, axum, fred/Valkey).
+- `plugin/`: GLPI plugin `realtime` (PHP): issues session tokens and per-item grants.
+- `client/`: browser client in TypeScript, bundled into `plugin/public/realtime.js`.
+- `deploy/`: `install.sh` (installs and upgrades the binary and the plugin), and
+  `examples/`: configuration, systemd unit, system user, Valkey, nginx and Apache vhosts.
+- `e2e/`: end-to-end tests in a real Chromium, against your GLPI or a disposable one
+  (`e2e/env/`, containers) ([setup](e2e/README.md)).
+- `docs/`: protocol, security model, troubleshooting; `docs/img/`: the screenshots.
 
 Requirements: Rust ≥ 1.85, Node ≥ 22.6, `valkey-server` (integration tests),
 `php-legacy` with the `redis` extension (plugin and interop tests).
@@ -267,10 +292,22 @@ with `GLPI_RT_<SECTION>__<KEY>`. Plugin settings (Valkey socket and db, key pref
 name, enabled item types) are in GLPI's configuration table, context `plugin:realtime`,
 and must match the server.
 
-Item types: `enabled_itemtypes` (plugin) and `[security] allowed_itemtypes` (server) list
-the same classes. Tickets, changes and problems get every feature; any other GLPI item
-with a standard form (projects, project tasks, assets, custom assets of GLPI 11+ such as
-`Glpi\CustomAsset\ServerAsset`) gets presence and the single editor of its form.
+### Item types
+
+`enabled_itemtypes` (plugin) and `[security] allowed_itemtypes` (server) list the same
+classes; the checks warn while they differ. Default: tickets, changes, problems, projects,
+project tasks, computers, monitors, network devices, peripherals, phones and printers.
+Tickets, changes and problems get every feature; any other GLPI item with a standard form
+gets presence and the single editor of its form, custom assets of GLPI 11+ included, by
+class (e.g. `Glpi\CustomAsset\ServerAsset`).
+
+### Mentions
+
+Mentions are GLPI's: typing "@" in a description, followup, task, solution or approval
+offers the users to mention, if the author's profile allows it (Administration >
+Profiles > a profile > Assistance, "Mentions configuration"). GLPI makes the mentioned
+users observers and mails them; the bell tells them at once, unless they turned off
+"When I am mentioned (@)" in its preferences.
 
 ## Translations
 
