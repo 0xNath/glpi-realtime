@@ -1,7 +1,9 @@
 import { expect, login, openAnswer, openTicketAsAllowed, room, test, ticketId, waitForFrame } from "./helpers.ts";
 
 test("a mention in a followup notifies the mentioned user at once", async ({ browser }) => {
-  const alice = await login(browser, "alice");
+  // Alice's browser is in UTC+14, far from GLPI's timezone (UTC here, Europe/Paris on the
+  // maintainer's instance): the notification's age must not depend on it (issue #6).
+  const alice = await login(browser, "alice", { timezoneId: "Pacific/Kiritimati" });
   const bob = await login(browser, "bob");
   const aliceId = (await waitForFrame(alice, (f) => f.t === "hello", "hello")).user.id;
   await openTicketAsAllowed(bob);
@@ -26,4 +28,5 @@ test("a mention in a followup notifies the mentioned user at once", async ({ bro
   await alice.page.locator(".glpi-rt-bell-button").click();
   const row = alice.page.locator(`.glpi-rt-bell-panel .glpi-rt-n[data-key="Ticket:${ticketId}"]`);
   await expect(row).toContainText(/mentioned in a followup|mentionné dans un suivi/i);
+  await expect(row).toContainText(/just now|à l'instant/i);
 });

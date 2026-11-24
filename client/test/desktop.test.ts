@@ -13,7 +13,7 @@ const list = {
   preferences: { update_message_style: "priority", resolved_closed_style: "separate" },
   can_see_others: false,
 } as unknown as InboxList;
-const item = { id: 1, key: "Ticket:4", event: "assigned", channel: "direct", detail: null, is_read: false, actor: 0, date: "", queue: "mine" } as const;
+const item = { id: 1, key: "Ticket:4", event: "assigned", channel: "direct", detail: null, is_read: false, actor: 0, date: "", ts: 0, queue: "mine" } as const;
 
 test("text of a desktop notification", () => {
   assert.deepEqual(desktopText(list, { ...item }, LABELS.fr), {
