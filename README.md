@@ -284,6 +284,16 @@ cd server && cargo run --release --example loadtest -- --valkey unix:///path/to/
 cargo +nightly fuzz run message --fuzz-dir fuzz     # and room, batch, handshake (cargo-fuzz)
 ```
 
+The examples of `deploy/` run through the software they are written for (server,
+Valkey, nginx, Apache httpd, Caddy, compose), in the CI and with
+`scripts/check-examples.sh` (Docker or Podman).
+
+Claude Code: `CLAUDE.md` holds the project's rules and how to verify a change; the
+`/release` skill (`.claude/skills/release/`) prepares a release;
+`.github/workflows/claude.yml` answers "@claude" from maintainers, triages new issues
+and reviews pull requests once enabled (repository variable `CLAUDE_ENABLED=true`, secret
+`ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN`, the [Claude GitHub app](https://github.com/apps/claude) installed).
+
 Release archives (what users install): `scripts/release.sh` builds
 `dist/glpi-realtime-<version>-linux-<arch>.tar.gz` (static binary when the
 `x86_64-unknown-linux-musl` target is installed, plugin, `deploy/`, docs),

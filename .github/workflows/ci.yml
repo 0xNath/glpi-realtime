@@ -137,6 +137,23 @@ jobs:
             e2e/playwright-report/
           retention-days: 7
 
+  # The examples of deploy/ (and of the README), run through the software they are for:
+  # server configurations, Valkey, nginx, Apache httpd, Caddy, compose.
+  examples:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # stable branch, 2026-10-15
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: server
+      - run: scripts/check-examples.sh
+        env:
+          CONTAINER: docker
+          COMPOSE: docker compose
+
   # Regression guard: 2 000 connections on 200 items; every connection, event and presence
   # update must go through, each p99 under 1 s, the load test + server under 768 MiB.
   load:
@@ -208,7 +225,7 @@ jobs:
   # (gh attestation verify <archive> --repo <owner>/glpi-realtime).
   release-build:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [test, audit, e2e, load, fuzz]
+    needs: [test, audit, e2e, load, fuzz, examples]
     strategy:
       matrix:
         runner: [ubuntu-24.04, ubuntu-24.04-arm]

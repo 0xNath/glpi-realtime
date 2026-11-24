@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run -s typecheck)",
+      "Bash(npm test)",
+      "Bash(npm test --silent)",
+      "Bash(journalctl *)",
+      "Bash(command -v *)",
+      "Bash(shellcheck *)",
+      "Bash(cargo fmt --check)",
+      "Bash(systemctl status *)",
+      "Bash(podman logs *)",
+      "Bash(podman ps)",
+      "Bash(podman ps *)",
+      "Bash(podman search *)",
+      "Bash(podman image inspect *)",
+      "Bash(podman inspect *)",
+      "Bash(rustup target list *)",
+      "Bash(rustup toolchain list)",
+      "Bash(npm audit --audit-level=high)",
+      "Bash(git check-ignore *)"
+    ]
+  }
+}
