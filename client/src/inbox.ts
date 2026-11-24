@@ -18,8 +18,10 @@ export interface InboxItem {
   detail: { fields?: string[]; status?: number; in?: string } | null;
   is_read: boolean;
   actor: number;
-  /** "YYYY-MM-DD HH:MM:SS", GLPI server time. */
+  /** "YYYY-MM-DD HH:MM:SS", in GLPI's timezone (shown as is). */
   date: string;
+  /** The same instant, Unix seconds: ages, periods and order come from it. */
+  ts: number;
   queue: Queue;
 }
 
@@ -64,6 +66,7 @@ export interface Group {
   unread: boolean;
   queue: Queue;
   date: string;
+  ts: number;
 }
 
 type Lang = "fr" | "en";
@@ -310,14 +313,14 @@ export function groups(list: InboxList, tab: Tab, withRead = false): Group[] {
     const object = list.objects[it.key];
     if (!object || !inTab(it.queue, tab) || (!withRead && it.is_read)) continue;
     let g = by.get(it.key);
-    if (!g) by.set(it.key, (g = { key: it.key, object, events: [], unread: false, queue: it.queue, date: it.date }));
+    if (!g) by.set(it.key, (g = { key: it.key, object, events: [], unread: false, queue: it.queue, date: it.date, ts: it.ts }));
     g.events.push(it);
     g.unread ||= !it.is_read;
-    if (it.date > g.date) g.date = it.date;
+    if (it.ts > g.ts) Object.assign(g, { date: it.date, ts: it.ts });
   }
   const out = [...by.values()];
-  for (const g of out) g.events.sort((a, b) => (a.date < b.date ? 1 : -1));
-  return out.sort((a, b) => (a.date < b.date ? 1 : -1));
+  for (const g of out) g.events.sort((a, b) => b.ts - a.ts);
+  return out.sort((a, b) => b.ts - a.ts);
 }
 
 /** Unread items that were not unread before: they make the bell ring. */
@@ -333,10 +336,9 @@ export function shouldRing(items: InboxItem[], prefs: Preferences): boolean {
   return items.some((i) => !!prefs[i.queue === "resolved" || i.queue === "closed" ? "sound_ended" : `sound_${i.queue}`]);
 }
 
-/** GLPI dates are server local time without zone: compare as local time. */
-export function timeAgo(date: string, now: Date, t: Labels): string {
-  const d = new Date(date.replace(" ", "T"));
-  const s = Math.max(0, (now.getTime() - d.getTime()) / 1000);
+/** How long before `now` the instant `ts` (Unix seconds) was, whatever the timezones. */
+export function timeAgo(ts: number, now: Date, t: Labels): string {
+  const s = Math.max(0, now.getTime() / 1000 - ts);
   if (Number.isNaN(s) || s < 60) return t.ago.now;
   if (s < 3600) return t.ago.m(Math.floor(s / 60));
   if (s < 86400) return t.ago.h(Math.floor(s / 3600));

@@ -345,7 +345,7 @@ export class Bell {
             "ul",
             { class: "glpi-rt-n-sub", hidden: true },
             ...g.events.map((e) =>
-              h("li", { text: `${groupText({ ...g, events: [e] }, style, t)} · ${actorName(list, e.actor, t)} · ${timeAgo(e.date, new Date(), t)}` }),
+              h("li", { text: `${groupText({ ...g, events: [e] }, style, t)} · ${actorName(list, e.actor, t)} · ${timeAgo(e.ts, new Date(), t)}` }),
             ),
           )
         : null;
@@ -377,7 +377,7 @@ export class Bell {
           { class: "glpi-rt-n-meta" },
           g.object.status_label ? h("span", { class: "badge glpi-rt-status", text: g.object.status_label }) : null,
           h("span", { text: actorName(list, latest.actor, t) }),
-          h("span", { text: timeAgo(g.date, new Date(), t), title: g.date }),
+          h("span", { text: timeAgo(g.ts, new Date(), t), title: g.date }),
         ),
         sub,
       ),

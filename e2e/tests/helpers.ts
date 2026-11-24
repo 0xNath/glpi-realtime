@@ -1,4 +1,4 @@
-import { test as base, type Browser, type BrowserContext, expect, type Page } from "@playwright/test";
+import { test as base, type Browser, type BrowserContext, type BrowserContextOptions, expect, type Page } from "@playwright/test";
 
 export { expect };
 
@@ -60,9 +60,9 @@ function password(who: Who): string {
   return p;
 }
 
-/** Logs a test account in, in its own isolated browser context. */
-export async function login(browser: Browser, who: Who): Promise<Session> {
-  const context = await browser.newContext();
+/** Logs a test account in, in its own isolated browser context (`options`: its timezone...). */
+export async function login(browser: Browser, who: Who, options: BrowserContextOptions = {}): Promise<Session> {
+  const context = await browser.newContext(options);
   open.add(context);
   context.on("close", () => open.delete(context));
   const page = await focusedPage(context);

@@ -2,10 +2,10 @@ import { eventIcon, ensureStyle, type InboxController, openPreferences } from ".
 import { h, icon, safeHref } from "./dom.ts";
 import { actorName, eventText, type Group, groups, groupText, type InboxApi, type InboxList, type Labels, type Tab, tabs } from "./inbox.ts";
 
-/** "today" | "week" | "month" | "" */
-export function inPeriod(date: string, period: string, now: Date): boolean {
+/** "today" | "week" | "month" | "" ("today": the browser's day), for the instant `ts` (Unix seconds). */
+export function inPeriod(ts: number, period: string, now: Date): boolean {
   if (!period) return true;
-  const d = new Date(date.replace(" ", "T"));
+  const d = new Date(ts * 1000);
   if (period === "today") return d.toDateString() === now.toDateString();
   const days = period === "week" ? 7 : 30;
   return now.getTime() - d.getTime() <= days * 86400_000;
@@ -49,7 +49,7 @@ export class InboxPage {
     const statuses = new Map<number, string>();
     for (const g of groups(list, "all", true)) if (g.object.status_label) statuses.set(g.object.status, g.object.status_label);
     const now = new Date();
-    const rows = all.filter((g) => (!this.status || String(g.object.status) === this.status) && inPeriod(g.date, this.period, now));
+    const rows = all.filter((g) => (!this.status || String(g.object.status) === this.status) && inPeriod(g.ts, this.period, now));
 
     const select = (value: string, options: Array<[string, string]>, onchange: (v: string) => void) =>
       h(

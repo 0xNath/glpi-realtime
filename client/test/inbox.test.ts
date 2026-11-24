@@ -33,7 +33,7 @@ const prefs: Preferences = {
 };
 
 function item(p: Partial<InboxItem>): InboxItem {
-  return { id: 1, key: "Ticket:1", event: "commented", channel: "direct", detail: null, is_read: false, actor: 7, date: "2026-11-24 10:00:00", queue: "mine", ...p };
+  return { id: 1, key: "Ticket:1", event: "commented", channel: "direct", detail: null, is_read: false, actor: 7, date: "2026-11-24 10:00:00", ts: Date.UTC(2026, 10, 24, 10) / 1000, queue: "mine", ...p };
 }
 
 function list(items: InboxItem[], p: Partial<Preferences> = {}): InboxList {
@@ -66,13 +66,15 @@ test("event texts depend on channel and status", () => {
 
 test("grouped per item, most important event first", () => {
   const l = list([
-    item({ id: 1, event: "commented", date: "2026-11-24 10:00:00" }),
-    item({ id: 2, event: "solution_refused", date: "2026-11-24 09:00:00" }),
-    item({ id: 3, key: "Ticket:2", event: "task_added", date: "2026-11-24 11:00:00", queue: "team" }),
+    item({ id: 1, event: "commented", date: "2026-11-24 10:00:00", ts: 1_000 }),
+    item({ id: 2, event: "solution_refused", date: "2026-11-24 09:00:00", ts: 900 }),
+    // Ordered by the instant, not the text (a DST change makes wall-clock text go back).
+    item({ id: 3, key: "Ticket:2", event: "task_added", date: "2026-11-24 08:00:00", ts: 1_100, queue: "team" }),
     item({ id: 4, key: "Ticket:3", event: "assigned", is_read: true }),
   ]);
   const gs = groups(l, "all");
   assert.deepEqual(gs.map((g) => g.key), ["Ticket:2", "Ticket:1"], "newest first, read hidden");
+  assert.deepEqual([gs[1].date, gs[1].ts], ["2026-11-24 10:00:00", 1_000], "a group shows its newest event's date");
   assert.equal(groupText(gs[1], "priority", en), "Solution refused");
   assert.equal(groupText(gs[1], "combined", en), "Solution refused + New followup");
   assert.equal(groupText(gs[1], "multiple", en), "2 updates");
@@ -92,14 +94,19 @@ test("only new unread arrivals ring, per queue sound preference", () => {
 });
 
 test("time ago and periods", () => {
-  const now = new Date("2026-11-24T12:00:00");
-  assert.equal(timeAgo("2026-11-24 11:59:30", now, en), "just now");
-  assert.equal(timeAgo("2026-11-24 11:15:00", now, en), "45 min ago");
-  assert.equal(timeAgo("2026-11-22 12:00:00", now, LABELS.fr), "il y a 2 j");
-  assert.ok(inPeriod("2026-11-24 01:00:00", "today", now));
-  assert.ok(!inPeriod("2026-11-10 01:00:00", "week", now));
-  assert.ok(inPeriod("2026-11-10 01:00:00", "month", now));
-  assert.ok(inPeriod("2020-01-01 00:00:00", "", now));
+  const now = new Date("2026-11-24T12:00:00Z");
+  const at = (iso: string) => Date.parse(iso) / 1000;
+  assert.equal(timeAgo(at("2026-11-24T11:59:30Z"), now, en), "just now");
+  assert.equal(timeAgo(at("2026-11-24T11:15:00Z"), now, en), "45 min ago");
+  assert.equal(timeAgo(at("2026-11-22T12:00:00Z"), now, LABELS.fr), "il y a 2 j");
+  // A GLPI in UTC+14 (its `date` "2026-11-25 01:59:30") and a browser elsewhere: the
+  // instant decides, not the wall-clock text (issue #6: it said "1 h ago" off by an hour).
+  assert.equal(timeAgo(at("2026-11-25T01:59:30+14:00"), now, en), "just now");
+  assert.equal(timeAgo(at("2026-11-24T12:00:05Z"), now, en), "just now", "a server clock slightly ahead");
+  assert.ok(inPeriod(now.getTime() / 1000 - 60, "today", now));
+  assert.ok(!inPeriod(at("2026-11-10T01:00:00Z"), "week", now));
+  assert.ok(inPeriod(at("2026-11-10T01:00:00Z"), "month", now));
+  assert.ok(inPeriod(0, "", now));
 });
 
 test("controller: one request per burst, rings only on alert with arrivals", async () => {

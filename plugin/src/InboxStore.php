@@ -122,6 +122,8 @@ final class InboxStore
                 'is_read' => (bool) $r['is_read'],
                 'actor'   => $actor,
                 'date'    => (string) $r['date_creation'],
+                // The instant, unambiguous: `date` is in GLPI's timezone, without the zone.
+                'ts'      => (int) strtotime((string) $r['date_creation']),
                 'queue'   => $queue,
             ];
         }
