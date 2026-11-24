@@ -462,7 +462,22 @@ final class Health
             $missing = [...$missing, ...array_diff($enabled, (array) ($s['allowed_itemtypes'] ?? []))];
         }
         $missing = array_values(array_unique($missing));
-        $out[] = $missing === []
+        // Types of the default list this install does not have (upgrades keep their list).
+        $available = array_values(array_diff(json_decode(Settings::DEFAULTS['enabled_itemtypes'], true), $enabled));
+        $all = json_encode([...$enabled, ...$available]);
+        $out[] = $missing === [] && $available !== []
+            ? self::check(
+                'itemtypes',
+                __('Item types', 'realtime'),
+                self::INFO,
+                sprintf(__('Enabled: %s. Also available (presence and a single editor of their form): %s.', 'realtime'), implode(', ', $enabled), implode(', ', $available)),
+                sprintf(
+                    __('To enable them, on both sides: bin/console config:set --context=plugin:realtime enabled_itemtypes \'%s\' (as the user running GLPI), and allowed_itemtypes = %s in [security] of config.toml, then restart the server.', 'realtime'),
+                    $all,
+                    '["' . implode('", "', [...$enabled, ...$available]) . '"]'
+                )
+            )
+            : ($missing === []
             ? self::check('itemtypes', __('Item types', 'realtime'), self::OK, implode(', ', $enabled))
             : self::check(
                 'itemtypes',
@@ -470,7 +485,7 @@ final class Health
                 self::WARNING,
                 sprintf(__('Enabled in GLPI but refused by the server: %s.', 'realtime'), implode(', ', $missing)),
                 sprintf(__('Add them to [security] allowed_itemtypes in config.toml (%s), then restart the server.', 'realtime'), '"' . implode('", "', $missing) . '"')
-            );
+            ));
 
         $s = $statuses[0];
         if (empty($s['keyspace_events'])) {

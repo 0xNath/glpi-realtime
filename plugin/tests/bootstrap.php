@@ -8,6 +8,7 @@
 declare(strict_types=1);
 
 define('READ', 1);
+define('UPDATE', 2);
 define('ERROR', 1);
 
 final class Session
@@ -155,6 +156,7 @@ abstract class CommonDBTM
 {
     public array $fields = [];
     public array $updates = [];
+    public array $oldvalues = [];
     public mixed $input = [];
     public bool $readable = true;
 

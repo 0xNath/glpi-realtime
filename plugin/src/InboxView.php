@@ -16,6 +16,9 @@ final class InboxView
     /** Rows hidden by the user's "which notifications" preferences. */
     public static function wanted(array $row, array $prefs): bool
     {
+        if (($row['event'] ?? '') === Inbox::MENTIONED) {
+            return (bool) ($prefs['notify_mentions'] ?? true);
+        }
         $slug = strtolower((string) $row['itemtype']);
         $channel = (string) $row['channel'];
         if (in_array($channel, ['direct', 'group'], true)) {

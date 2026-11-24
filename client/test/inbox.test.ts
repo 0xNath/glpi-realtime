@@ -119,3 +119,9 @@ test("controller: one request per burst, rings only on alert with arrivals", asy
   assert.equal(calls, 3, "initial + one debounced + explicit");
   assert.deepEqual(rings, [false, true, false]);
 });
+
+test("mentions say where, and come before most other events", () => {
+  assert.equal(eventText(item({ event: "mentioned", detail: { in: "followup" } }), "priority", en), "You were mentioned in a followup");
+  assert.equal(eventText(item({ event: "mentioned", detail: { in: "solution" } }), "priority", LABELS.fr), "Vous avez été mentionné dans une solution");
+  assert.equal(eventText(item({ event: "mentioned", detail: null }), "priority", en), "You were mentioned");
+});

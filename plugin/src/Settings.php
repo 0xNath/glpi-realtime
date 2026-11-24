@@ -26,7 +26,11 @@ final class Settings
         'ws_path'            => '/ws',
         // Valkey timeout for every plugin call, in seconds: GLPI must never wait on us.
         'valkey_timeout'     => '0.05',
-        'enabled_itemtypes'  => '["Ticket","Change","Problem"]',
+        // Items with presence and the single editor of their fields (any GLPI item with a
+        // standard form, custom assets included); tickets, changes and problems also get
+        // the live timeline, drafts and notifications. The server must allow the same
+        // ([security] allowed_itemtypes). Upgrades keep the list an install already has.
+        'enabled_itemtypes'  => '["Ticket","Change","Problem","Project","ProjectTask","Computer","Monitor","NetworkEquipment","Peripheral","Phone","Printer"]',
     ];
 
     /** Default of versions before 0.3.0, replaced on upgrade (changes and problems). */
@@ -69,7 +73,11 @@ final class Settings
     public static function enabledItemtypes(): array
     {
         $list = json_decode(self::get('enabled_itemtypes'), true);
-        return is_array($list) ? array_values(array_filter($list, 'is_string')) : ['Ticket', 'Change', 'Problem'];
+        if (!is_array($list)) {
+            return ['Ticket', 'Change', 'Problem'];
+        }
+        // Classes that exist and are GLPI items (a misspelt or removed one is ignored).
+        return array_values(array_filter($list, static fn($t) => is_string($t) && is_a($t, \CommonDBTM::class, true)));
     }
 
     /** Lifetime of the token: the PHP session lifetime, slid on each GLPI request. */

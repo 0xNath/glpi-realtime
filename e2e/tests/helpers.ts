@@ -35,10 +35,13 @@ export const items = {
   solutionTicket: Number(process.env.RT_SOLUTION_TICKET_ID ?? 0),
   change: Number(process.env.RT_CHANGE_ID ?? 0),
   problem: Number(process.env.RT_PROBLEM_ID ?? 0),
+  computer: Number(process.env.RT_COMPUTER_ID ?? 0),
+  project: Number(process.env.RT_PROJECT_ID ?? 0),
+  projectTask: Number(process.env.RT_PROJECT_TASK_ID ?? 0),
 };
 
 /** Opens an item's form; returns the HTTP status. */
-export async function openItem(s: Session, itemtype: "Ticket" | "Change" | "Problem", id: number): Promise<number> {
+export async function openItem(s: Session, itemtype: string, id: number): Promise<number> {
   const resp = await s.page.goto(`/front/${itemtype.toLowerCase()}.form.php?id=${id}`);
   return resp?.status() ?? 0;
 }

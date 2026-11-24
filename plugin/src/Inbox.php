@@ -41,6 +41,8 @@ final class Inbox
     public const VALIDATION_ASKED = 'validation_asked';
     public const VALIDATION_DONE = 'validation_done';
     public const TRANSFERRED = 'transferred';
+    /** Someone wrote "@user" (GLPI's mentions) in a description, followup, task, solution or approval. */
+    public const MENTIONED = 'mentioned';
 
     /** Updated fields worth a notification ("updated" event). */
     public const WATCHED_FIELDS = ['name', 'content', 'priority', 'urgency', 'impact', 'itilcategories_id', 'type', 'time_to_resolve'];
@@ -70,6 +72,8 @@ final class Inbox
         'notify_projecttask_group'  => true,
         // Activity on items one can see without being an actor (STEAL right only).
         'notify_others'             => false,
+        // "@me" in a description, followup, task, solution or approval.
+        'notify_mentions'           => true,
         // Sound, globally and per queue.
         'sound_enabled'             => true,
         'sound_new'                 => true,
@@ -170,6 +174,7 @@ final class Inbox
 
     public static function record(CommonDBTM $item, string $action): void
     {
+        self::onMentions($item, $action);
         $class = $item::class;
         $f = $item->fields;
         $updates = $item->updates;
@@ -193,6 +198,76 @@ final class Inbox
         } elseif ($class === 'ProjectTaskTeam') {
             self::onProjectTaskTeam($f, $action);
         }
+    }
+
+    /**
+     * Users newly mentioned ("@name", GLPI's rich text mentions) in what was added or
+     * changed: told directly, whatever their role on the item. GLPI makes them observers
+     * and mails them; the bell tells them at once.
+     */
+    private static function onMentions(CommonDBTM $item, string $action): void
+    {
+        if ($action !== 'add' && $action !== 'update') {
+            return;
+        }
+        $class = $item::class;
+        $f = $item->fields;
+        $fields = ['content'];
+        if (in_array($class, self::ITIL, true)) {
+            [$type, $id, $where] = [$class, (int) ($f['id'] ?? 0), 'description'];
+        } elseif ($class === 'ITILFollowup' || $class === 'ITILSolution') {
+            [$type, $id, $where] = [(string) ($f['itemtype'] ?? ''), (int) ($f['items_id'] ?? 0), $class === 'ITILFollowup' ? 'followup' : 'solution'];
+        } elseif (isset(self::TASKS[$class])) {
+            $type = self::TASKS[$class];
+            [$id, $where] = [(int) ($f[GlpiDirectory::LINKS[$type][2]] ?? 0), 'task'];
+        } elseif (isset(self::VALIDATIONS[$class])) {
+            $type = self::VALIDATIONS[$class];
+            [$id, $where] = [(int) ($f[GlpiDirectory::LINKS[$type][2]] ?? 0), 'validation'];
+            $fields = ['comment_submission', 'comment_validation'];
+        } else {
+            return;
+        }
+        if ($id <= 0 || !in_array($type, self::ITIL, true)) {
+            return;
+        }
+        $now = [];
+        $before = [];
+        foreach ($fields as $field) {
+            $value = (string) ($f[$field] ?? '');
+            $now = [...$now, ...self::mentions($value)];
+            if ($action === 'update') {
+                // Unchanged field: whoever it mentions was already told.
+                $old = array_key_exists($field, $item->oldvalues) ? (string) $item->oldvalues[$field] : $value;
+                $before = [...$before, ...self::mentions($old)];
+            }
+        }
+        foreach (array_diff(array_unique($now), $before) as $uid) {
+            self::add($uid, $type, $id, self::MENTIONED, 'direct', ['in' => $where], $f);
+        }
+    }
+
+    /**
+     * Ids of the users mentioned in rich text: GLPI writes
+     * `<span data-user-mention="true" data-user-id="5">@Name</span>`.
+     *
+     * @return list<int>
+     */
+    public static function mentions(string $html): array
+    {
+        if (!str_contains($html, 'data-user-mention')) {
+            return [];
+        }
+        if (!str_contains($html, '<') && str_contains($html, '&lt;')) {
+            $html = html_entity_decode($html, ENT_QUOTES | ENT_HTML5); // stored encoded (older GLPI)
+        }
+        $ids = [];
+        preg_match_all('/<[a-z][^>]*\bdata-user-mention\s*=\s*["\']true["\'][^>]*>/i', $html, $tags);
+        foreach ($tags[0] as $tag) {
+            if (preg_match('/\bdata-user-id\s*=\s*["\']?(\d+)/i', $tag, $m) && (int) $m[1] > 0) {
+                $ids[] = (int) $m[1];
+            }
+        }
+        return array_values(array_unique($ids));
     }
 
     private static function author(array $f = []): int

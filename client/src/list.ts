@@ -14,10 +14,13 @@ export const MAX_AVATARS = 3;
 
 const FORM_TYPES: Record<string, string> = { ticket: "Ticket", change: "Change", problem: "Problem" };
 
-/** "Ticket:42" for a search result row, from its massive action box or its form link. */
+/**
+ * "Ticket:42", "Computer:7"... for a search result row, from its massive action box (any
+ * item type: GLPI says which are enabled) or, for tickets, changes and problems, its link.
+ */
 export function rowKey(row: Element): string | null {
   const box = row.querySelector<HTMLInputElement>("input.massive_action_checkbox[name^='item[']");
-  const m = box?.name.match(/^item\[(Ticket|Change|Problem)\]\[([1-9][0-9]*)\]$/);
+  const m = box?.name.match(/^item\[([A-Za-z_][A-Za-z0-9_\\]*)\]\[([1-9][0-9]*)\]$/);
   if (m) return `${m[1]}:${m[2]}`;
   for (const a of Array.from(row.querySelectorAll<HTMLAnchorElement>("a[href*='.form.php']"))) {
     const l = (a.getAttribute("href") ?? "").match(/\/front\/(ticket|change|problem)\.form\.php\?(?:.*&)?id=([1-9][0-9]*)/);

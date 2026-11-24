@@ -70,7 +70,15 @@
       "validation_asked": "Approval requested",
       "validation_accepted": "Approval accepted",
       "validation_refused": "Approval refused",
-      "transferred": "Transferred to your entity"
+      "transferred": "Transferred to your entity",
+      "mentioned": "You were mentioned"
+    },
+    "mentionIn": {
+      "description": "in the description",
+      "followup": "in a followup",
+      "task": "in a task",
+      "solution": "in a solution",
+      "validation": "in an approval"
     },
     "fields": {
       "itilcategories_id": "Category changed",
@@ -114,6 +122,7 @@
         "projecttask": "Project tasks"
       },
       "others": "Activity on tickets, changes and problems I can see (Others tab)",
+      "mentions": "When I am mentioned (@)",
       "sound": "Sound",
       "desktop": "Desktop notifications while GLPI is in the background (this browser)",
       "soundQueues": {
@@ -232,6 +241,42 @@
     "Problem": {
       "the": "the problem",
       "this": "this problem"
+    },
+    "Project": {
+      "the": "the project",
+      "this": "this project"
+    },
+    "ProjectTask": {
+      "the": "the project task",
+      "this": "this project task"
+    },
+    "Computer": {
+      "the": "the computer",
+      "this": "this computer"
+    },
+    "Monitor": {
+      "the": "the monitor",
+      "this": "this monitor"
+    },
+    "NetworkEquipment": {
+      "the": "the network device",
+      "this": "this network device"
+    },
+    "Peripheral": {
+      "the": "the device",
+      "this": "this device"
+    },
+    "Phone": {
+      "the": "the phone",
+      "this": "this phone"
+    },
+    "Printer": {
+      "the": "the printer",
+      "this": "this printer"
+    },
+    "_item": {
+      "the": "the item",
+      "this": "this item"
     }
   },
   "updates.text": {

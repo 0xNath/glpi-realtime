@@ -91,7 +91,7 @@ pub struct SecurityConfig {
     pub cookie_name: String,
     /// Exact `Origin` values accepted on the handshake (scheme://host[:port]).
     pub allowed_origins: Vec<String>,
-    /// Item types a client may subscribe to (`Ticket:42`).
+    /// Item types a client may subscribe to (`Ticket:42`): the plugin's `enabled_itemtypes`.
     pub allowed_itemtypes: Vec<String>,
 }
 
@@ -100,7 +100,22 @@ impl Default for SecurityConfig {
         Self {
             cookie_name: "glpi_rt".into(),
             allowed_origins: vec![],
-            allowed_itemtypes: vec!["Ticket".into(), "Change".into(), "Problem".into()],
+            // The plugin's default `enabled_itemtypes`.
+            allowed_itemtypes: [
+                "Ticket",
+                "Change",
+                "Problem",
+                "Project",
+                "ProjectTask",
+                "Computer",
+                "Monitor",
+                "NetworkEquipment",
+                "Peripheral",
+                "Phone",
+                "Printer",
+            ]
+            .map(String::from)
+            .to_vec(),
         }
     }
 }

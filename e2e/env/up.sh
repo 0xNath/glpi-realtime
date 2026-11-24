@@ -89,6 +89,9 @@ for table, n in before["tables"].items():
     assert after["tables"].get(table, 0) >= n, f"{table}: {n} rows before, {after['tables'].get(table)} after"
 print(f"   upgraded to {version}, active, data kept")
 PY
+    # As the CHANGELOG asks of upgraders: the item types of 0.6.0 (projects, assets).
+    console config:set --context=plugin:realtime enabled_itemtypes \
+        '["Ticket","Change","Problem","Project","ProjectTask","Computer","Monitor","NetworkEquipment","Peripheral","Phone","Printer"]'
 else
     echo "==> Install with deploy/install.sh"
     install_plugin
@@ -107,6 +110,9 @@ RT_ASSIGN_TICKET_ID=$(id assign_ticket)
 RT_SOLUTION_TICKET_ID=$(id solution_ticket)
 RT_CHANGE_ID=$(id change)
 RT_PROBLEM_ID=$(id problem)
+RT_COMPUTER_ID=$(id computer)
+RT_PROJECT_ID=$(id project)
+RT_PROJECT_TASK_ID=$(id project_task)
 E2E_INSECURE=1
 ENV
 echo "   settings of the tests: $ENV_FILE"

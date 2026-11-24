@@ -57,6 +57,9 @@ RT_ASSIGN_TICKET_ID=4      # unassigned, rt-alice may assign herself (the test d
 RT_SOLUTION_TICKET_ID=5    # assigned to rt-alice, unsolved (the test solves it, for good)
 RT_CHANGE_ID=1
 RT_PROBLEM_ID=1
+RT_COMPUTER_ID=1           # the tests rename it and change its comment
+RT_PROJECT_ID=1            # renamed by the tests
+RT_PROJECT_TASK_ID=1       # renamed by the tests
 ```
 
 ## What is covered
@@ -65,7 +68,9 @@ Connection, presence and revocation at logout; followups appearing live in the t
 (no content on the WebSocket); the fields lock, on tickets, changes and problems; "is
 writing" placeholders, shared drafts followed live and taken over; the solution button
 while the fields are edited, and GLPI refusing a second solution whatever the browser
-does; presence on the ticket list; the bell (read and unread, preferences, assume); the
+does; presence on the ticket list; the bell (read and unread, preferences, assume) and
+mentions notified at once; projects, project tasks and assets (presence, the single
+editor of their form, GLPI refusing an outdated form, presence on the asset list); the
 configuration page; accessibility (axe-core, WCAG 2.1 AA) of the real-time layer's
 elements.
 

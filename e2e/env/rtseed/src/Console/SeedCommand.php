@@ -13,7 +13,10 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Change;
+use Computer;
 use Problem;
+use Project;
+use ProjectTask;
 use Ticket;
 use User;
 
@@ -105,6 +108,17 @@ final class SeedCommand extends AbstractCommand
                 'entities_id'         => 0,
                 '_users_id_requester' => $requester,
             ]);
+            if ($id <= 0) {
+                throw new \RuntimeException("Cannot create the $key");
+            }
+            $output->writeln("$key=$id");
+        }
+
+        // Items other than tickets, changes and problems: presence and the fields lock.
+        $computer = (int) (new Computer())->add(['name' => 'glpi-realtime e2e computer', 'entities_id' => 0]);
+        $project = (int) (new Project())->add(['name' => 'glpi-realtime e2e project', 'entities_id' => 0, 'content' => 'Project of the end-to-end tests.']);
+        $task = (int) (new ProjectTask())->add(['name' => 'glpi-realtime e2e project task', 'projects_id' => $project, 'entities_id' => 0]);
+        foreach (['computer' => $computer, 'project' => $project, 'project_task' => $task] as $key => $id) {
             if ($id <= 0) {
                 throw new \RuntimeException("Cannot create the $key");
             }

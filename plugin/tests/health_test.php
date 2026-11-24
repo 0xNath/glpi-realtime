@@ -58,7 +58,7 @@ check($res['keyspace'][0] === Health::WARNING && str_contains($res['keyspace'][2
 // A good one.
 $r->set(Valkey::key('srv:a'), json_encode([
     'version' => '0.4.0', 'instance' => 'a', 'connections' => 0, 'cookie_name' => 'glpi_rt',
-    'allowed_origins' => ['https://glpi.example.org/'], 'allowed_itemtypes' => ['Ticket', 'Change', 'Problem'],
+    'allowed_origins' => ['https://glpi.example.org/'], 'allowed_itemtypes' => GlpiPlugin\Realtime\Settings::enabledItemtypes(),
     'keyspace_events' => true, 'keyspace_config' => 'ok',
 ]));
 $res = results();
@@ -73,6 +73,17 @@ check($res['url_base'][0] === Health::WARNING && str_contains($res['url_base'][2
 Health::$requestOrigin = 'http://glpi.example.org';
 $res = results();
 check($res['https'][0] === Health::ERROR, 'page served over plain HTTP: error');
+
+// An install that kept its item types on upgrade: told what else is available, and how.
+Health::$urlBase = 'https://glpi.example.org/';
+Health::$requestOrigin = 'https://glpi.example.org';
+Config::$values = ['enabled_itemtypes' => '["Ticket","Change","Problem"]'];
+GlpiPlugin\Realtime\Settings::reset();
+$res = results();
+check($res['itemtypes'][0] === Health::INFO && str_contains($res['itemtypes'][1], 'Computer'), 'other item types available: info, naming them');
+check(str_contains($res['itemtypes'][2], 'enabled_itemtypes \'["Ticket","Change","Problem","Project"') && str_contains($res['itemtypes'][2], 'allowed_itemtypes = ["Ticket", "Change", "Problem", "Project"'), 'with the plugin command and the config.toml line');
+Config::$values = [];
+GlpiPlugin\Realtime\Settings::reset();
 
 // Command line: no request, GLPI's URL is what browsers use; the web server is requested.
 Health::$requestOrigin = '';

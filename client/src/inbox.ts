@@ -15,7 +15,7 @@ export interface InboxItem {
   key: string;
   event: string;
   channel: string;
-  detail: { fields?: string[]; status?: number } | null;
+  detail: { fields?: string[]; status?: number; in?: string } | null;
   is_read: boolean;
   actor: number;
   /** "YYYY-MM-DD HH:MM:SS", GLPI server time. */
@@ -102,6 +102,14 @@ export const LABELS = register("inbox", {
       validation_accepted: "Validation acceptée",
       validation_refused: "Validation refusée",
       transferred: "Transféré dans votre entité",
+      mentioned: "Vous avez été mentionné",
+    } as Record<string, string>,
+    mentionIn: {
+      description: "dans la description",
+      followup: "dans un suivi",
+      task: "dans une tâche",
+      solution: "dans une solution",
+      validation: "dans une validation",
     } as Record<string, string>,
     fields: {
       itilcategories_id: "Catégorie modifiée",
@@ -122,6 +130,7 @@ export const LABELS = register("inbox", {
       group: "Mes groupes",
       types: { ticket: "Tickets", change: "Changements", problem: "Problèmes", projecttask: "Tâches de projet" } as Record<string, string>,
       others: "Activité des tickets, changements et problèmes que je peux voir (onglet Autres)",
+      mentions: "Quand on me mentionne (@)",
       sound: "Son",
       desktop: "Notifications du bureau quand GLPI est en arrière-plan (ce navigateur)",
       soundQueues: { sound_new: "Nouveaux", sound_mine: "Mes tickets", sound_team: "Équipe", sound_other: "Autres", sound_ended: "Résolus / clos" } as Record<string, string>,
@@ -168,6 +177,14 @@ export const LABELS = register("inbox", {
       validation_accepted: "Approval accepted",
       validation_refused: "Approval refused",
       transferred: "Transferred to your entity",
+      mentioned: "You were mentioned",
+    } as Record<string, string>,
+    mentionIn: {
+      description: "in the description",
+      followup: "in a followup",
+      task: "in a task",
+      solution: "in a solution",
+      validation: "in an approval",
     } as Record<string, string>,
     fields: {
       itilcategories_id: "Category changed",
@@ -188,6 +205,7 @@ export const LABELS = register("inbox", {
       group: "My groups",
       types: { ticket: "Tickets", change: "Changes", problem: "Problems", projecttask: "Project tasks" } as Record<string, string>,
       others: "Activity on tickets, changes and problems I can see (Others tab)",
+      mentions: "When I am mentioned (@)",
       sound: "Sound",
       desktop: "Desktop notifications while GLPI is in the background (this browser)",
       soundQueues: { sound_new: "New", sound_mine: "Mine", sound_team: "Team", sound_other: "Others", sound_ended: "Resolved / closed" } as Record<string, string>,
@@ -231,7 +249,7 @@ export function inTab(queue: Queue, tab: Tab): boolean {
 
 /** Most important first: what the bell says when an item has several events. */
 const IMPORTANCE = [
-  "solution_refused", "validation_asked", "assigned", "transferred", "created", "solution",
+  "solution_refused", "validation_asked", "mentioned", "assigned", "transferred", "created", "solution",
   "validation_done", "commented", "task_added", "status_changed", "updated",
 ];
 
@@ -253,6 +271,10 @@ export function eventText(it: InboxItem, style: Preferences["update_message_styl
       return it.channel === "group" ? t.events.assigned_group : t.events.assigned;
     case "validation_done":
       return it.detail?.status === 4 ? t.events.validation_refused : t.events.validation_accepted;
+    case "mentioned": {
+      const where = t.mentionIn[String(it.detail?.in ?? "")];
+      return where ? `${t.events.mentioned} ${where}` : t.events.mentioned;
+    }
     case "updated": {
       const fields = it.detail?.fields ?? [];
       const texts = [...new Set([...fields].sort((a, b) => rank(FIELD_ORDER, a) - rank(FIELD_ORDER, b)).map((f) => fieldText(f, t)))];

@@ -80,7 +80,8 @@ final class Events
     {
         $out = [];
         foreach (self::HOOKS as $hook => $method) {
-            foreach (array_unique([...self::CLASSES, ...Inbox::CLASSES, ...RightsWatch::CLASSES]) as $class) {
+            // Other enabled items (projects, assets...): changes to the item itself.
+            foreach (array_unique([...self::CLASSES, ...Inbox::CLASSES, ...RightsWatch::CLASSES, ...Settings::enabledItemtypes()]) as $class) {
                 $out[$hook][$class] = [self::class, $method];
             }
         }
@@ -145,8 +146,8 @@ final class Events
 
         $class = $item::class;
 
-        // The item itself: field changes, trash, restore, purge.
-        if (in_array($class, self::ITIL, true)) {
+        // The item itself (any enabled type): field changes, trash, restore, purge.
+        if (in_array($class, self::ITIL, true) || in_array($class, Settings::enabledItemtypes(), true)) {
             if ($action === 'add') {
                 return; // nobody is on an item that did not exist
             }
@@ -163,7 +164,7 @@ final class Events
         }
 
         if ($class === 'ITILFollowup') {
-            $room = self::room((string) ($f['itemtype'] ?? ''), (int) ($f['items_id'] ?? 0));
+            $room = self::itilRoom((string) ($f['itemtype'] ?? ''), (int) ($f['items_id'] ?? 0));
             $private = (bool) ($f['is_private'] ?? false);
             self::event($room, [
                 'kind' => 'followup.' . $sub,
@@ -176,7 +177,7 @@ final class Events
         if (isset(self::TASKS[$class])) {
             [$parent, $fk] = self::TASKS[$class];
             $tech = (int) ($f['users_id_tech'] ?? 0);
-            self::event(self::room($parent, (int) ($f[$fk] ?? 0)), [
+            self::event(self::itilRoom($parent, (int) ($f[$fk] ?? 0)), [
                 'kind' => 'task.' . $sub,
                 'item' => ['type' => $class, 'id' => $id],
                 'vis'  => [
@@ -190,14 +191,14 @@ final class Events
         }
 
         if ($class === 'ITILSolution') {
-            $room = self::room((string) ($f['itemtype'] ?? ''), (int) ($f['items_id'] ?? 0));
+            $room = self::itilRoom((string) ($f['itemtype'] ?? ''), (int) ($f['items_id'] ?? 0));
             self::event($room, ['kind' => 'solution.' . $sub, 'item' => ['type' => 'ITILSolution', 'id' => $id]]);
             return;
         }
 
         if (isset(self::VALIDATIONS[$class])) {
             [$parent, $fk] = self::VALIDATIONS[$class];
-            self::event(self::room($parent, (int) ($f[$fk] ?? 0)), ['kind' => 'validation.' . $sub, 'item' => ['type' => $class, 'id' => $id]]);
+            self::event(self::itilRoom($parent, (int) ($f[$fk] ?? 0)), ['kind' => 'validation.' . $sub, 'item' => ['type' => $class, 'id' => $id]]);
             return;
         }
 
@@ -207,7 +208,7 @@ final class Events
             if (!in_array($parent, self::ITIL, true)) {
                 return;
             }
-            self::event(self::room($parent, (int) ($f['items_id'] ?? 0)), ['kind' => 'document.' . $sub, 'item' => ['type' => 'Document', 'id' => (int) ($f['documents_id'] ?? 0)]]);
+            self::event(self::itilRoom($parent, (int) ($f['items_id'] ?? 0)), ['kind' => 'document.' . $sub, 'item' => ['type' => 'Document', 'id' => (int) ($f['documents_id'] ?? 0)]]);
             return;
         }
 
@@ -217,11 +218,17 @@ final class Events
                 return; // e.g. notification settings of the actor
             }
             // Removing or demoting an actor may remove their access: grants are recomputed.
-            self::event(self::room($parent, (int) ($f[$fk] ?? 0)), ['kind' => 'actor.' . $sub], $action !== 'add');
+            self::event(self::itilRoom($parent, (int) ($f[$fk] ?? 0)), ['kind' => 'actor.' . $sub], $action !== 'add');
         }
     }
 
-    /** Room of an ITIL object, or null when its type is not enabled. */
+    /** Room of a ticket, change or problem (followups, tasks... belong to those only). */
+    private static function itilRoom(string $itemtype, int $id): ?string
+    {
+        return in_array($itemtype, self::ITIL, true) ? self::room($itemtype, $id) : null;
+    }
+
+    /** Room of an enabled item, or null when its type is not enabled. */
     private static function room(string $itemtype, int $id): ?string
     {
         return $id > 0 && in_array($itemtype, Settings::enabledItemtypes(), true) ? $itemtype . ':' . $id : null;

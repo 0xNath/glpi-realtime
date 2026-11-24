@@ -15,16 +15,35 @@ const NOUNS = register<Record<Lang, Record<string, { the: string; this: string }
     Ticket: { the: "le ticket", this: "ce ticket" },
     Change: { the: "le changement", this: "ce changement" },
     Problem: { the: "le problème", this: "ce problème" },
+    Project: { the: "le projet", this: "ce projet" },
+    ProjectTask: { the: "la tâche de projet", this: "cette tâche de projet" },
+    Computer: { the: "l'ordinateur", this: "cet ordinateur" },
+    Monitor: { the: "le moniteur", this: "ce moniteur" },
+    NetworkEquipment: { the: "le matériel réseau", this: "ce matériel réseau" },
+    Peripheral: { the: "le périphérique", this: "ce périphérique" },
+    Phone: { the: "le téléphone", this: "ce téléphone" },
+    Printer: { the: "l'imprimante", this: "cette imprimante" },
+    _item: { the: "l'élément", this: "cet élément" },
   },
   en: {
     Ticket: { the: "the ticket", this: "this ticket" },
     Change: { the: "the change", this: "this change" },
     Problem: { the: "the problem", this: "this problem" },
+    Project: { the: "the project", this: "this project" },
+    ProjectTask: { the: "the project task", this: "this project task" },
+    Computer: { the: "the computer", this: "this computer" },
+    Monitor: { the: "the monitor", this: "this monitor" },
+    NetworkEquipment: { the: "the network device", this: "this network device" },
+    Peripheral: { the: "the device", this: "this device" },
+    Phone: { the: "the phone", this: "this phone" },
+    Printer: { the: "the printer", this: "this printer" },
+    _item: { the: "the item", this: "this item" },
   },
 });
 
 export function noun(itemtype: string, l: Lang): { the: string; this: string } {
-  return NOUNS[l][itemtype] ?? NOUNS[l].Ticket;
+  // Any other enabled item (custom assets...): "this item".
+  return NOUNS[l][itemtype] ?? NOUNS[l]._item;
 }
 
 /** Changes of the item itself; `%` is replaced by its noun ("le ticket"). */

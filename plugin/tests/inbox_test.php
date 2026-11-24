@@ -177,4 +177,30 @@ check($c['all'] === 3 && $c['mine'] === 1 && $c['new'] === 1 && $c['closed'] ===
 check(InboxView::counts($items, ['show_closed' => false] + $prefs)['all'] === 2, 'hidden queues are not counted');
 check(InboxView::inTab('closed', 'ended') && InboxView::inTab('new', 'all') && !InboxView::inTab('new', 'mine'), 'tabs');
 
+// --- Mentions ("@name", GLPI's rich text) ------------------------------------------------
+$mention = static fn(int $uid, string $name) => sprintf('<span data-user-mention="true" data-user-id="%d">@%s</span>', $uid, $name);
+check(Inbox::mentions('<p>Hello ' . $mention(30, 'Ann') . ' and ' . $mention(41, 'Bob') . $mention(30, 'Ann') . '</p>') === [30, 41], 'mentioned users, once each');
+check(Inbox::mentions(htmlspecialchars('<p>' . $mention(42, 'Cy') . '</p>')) === [42], 'content stored encoded (older GLPI)');
+check(Inbox::mentions('<p>data-user-id="9" in text, no mention</p>') === [], 'only GLPI\'s mention markup counts');
+
+[$rows] = request(fn() => Events::onAdd(new ITILFollowup(['id' => 3, 'itemtype' => 'Ticket', 'items_id' => 5, 'is_private' => 0,
+    'content' => '<p>' . $mention(40, 'Dee') . ' ' . $mention(7, 'Me') . ' ' . $mention(11, 'Req') . '</p>'])));
+$mentioned = array_values(array_filter(summary($rows), fn($r) => str_contains($r, 'mentioned')));
+check($mentioned === ['11:mentioned:direct', '40:mentioned:direct'], 'followup: mentioned users told directly (actors or not), never the author');
+$detail = array_values(array_filter($rows, fn($r) => $r['event'] === 'mentioned'))[0]['detail'] ?? '';
+check($detail === '{"in":"followup"}', 'where the mention is');
+
+$t = new Ticket(['id' => 5, 'entities_id' => 0, 'content' => '<p>' . $mention(30, 'Ann') . ' ' . $mention(41, 'Bob') . '</p>'], ['content']);
+$t->oldvalues = ['content' => '<p>' . $mention(30, 'Ann') . '</p>'];
+[$rows] = request(fn() => Events::onUpdate($t));
+check(in_array('41:mentioned:direct', summary($rows), true) && !in_array('30:mentioned:direct', summary($rows), true), 'description edited: only the newly mentioned');
+
+$t = new Ticket(['id' => 5, 'entities_id' => 0, 'priority' => 5, 'content' => '<p>' . $mention(30, 'Ann') . '</p>'], ['priority']);
+[$rows] = request(fn() => Events::onUpdate($t));
+check(!in_array('30:mentioned:direct', summary($rows), true), 'another field changed: mentions already there are not told again');
+
+$row = ['itemtype' => 'Ticket', 'channel' => 'direct', 'event' => 'mentioned'];
+check(InboxView::wanted($row, Inbox::DEFAULT_PREFERENCES) === true, 'mentions shown by default');
+check(InboxView::wanted($row, ['notify_mentions' => false, 'notify_ticket_direct' => true] + Inbox::DEFAULT_PREFERENCES) === false, 'unless the user turned them off');
+
 exit($GLOBALS['failures'] === 0 ? 0 : 1);

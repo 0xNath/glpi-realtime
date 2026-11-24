@@ -3,6 +3,26 @@
 Server and plugin share one version number. Upgrades never change your configuration:
 "Configuration" lists what to edit yourself.
 
+## 0.6.0
+
+- Mentions: a user mentioned with "@" (GLPI's mentions) in a description, followup, task,
+  solution or approval is notified at once in the bell (and on the desktop), whatever
+  their role on the item; preference "When I am mentioned (@)". Only new mentions count.
+- Projects, project tasks and assets get presence (on the item and on the lists) and the
+  single editor of their form, with GLPI refusing to save a form older than the item; any
+  GLPI item with a standard form can be enabled, custom assets included.
+
+Configuration (upgrades keep the item types an install already has): to get projects and
+assets, enable them on both sides, e.g.
+
+```bash
+php bin/console config:set --context=plugin:realtime enabled_itemtypes \
+  '["Ticket","Change","Problem","Project","ProjectTask","Computer","Monitor","NetworkEquipment","Peripheral","Phone","Printer"]'
+```
+
+and the same list in `config.toml`, `[security] allowed_itemtypes` (restart the server).
+The plugin's checks warn while the two differ.
+
 ## 0.5.0
 
 - GLPI 11 is supported (11.0.0 or later). Fixed for it: list presence, the bell's actions,

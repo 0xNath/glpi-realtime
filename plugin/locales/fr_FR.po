@@ -27,7 +27,7 @@ msgstr ""
 msgid "%s (as %s): %s"
 msgstr "%s (en tant que %s) : %s"
 
-#: src/ConcurrencyGuard.php:60
+#: src/ConcurrencyGuard.php:59
 #, php-format
 msgid ""
 "%s changed this item while you were editing it: your changes were not saved. "
@@ -36,14 +36,14 @@ msgstr ""
 "%s a modifié cet élément pendant que vous l'éditiez : vos modifications "
 "n'ont pas été enregistrées. Actualisez la page et recommencez."
 
-#: src/Health.php:540
+#: src/Health.php:555
 #, php-format
 msgid ""
 "%s is answered by GLPI itself (HTTP %d): the web server does not forward it."
 msgstr ""
 "%s est servi par GLPI lui-même (HTTP %d) : le serveur web ne le transmet pas."
 
-#: src/Health.php:548
+#: src/Health.php:563
 #, php-format
 msgid "%s reaches glpi-realtime (HTTP %d)."
 msgstr "%s atteint glpi-realtime (HTTP %d)."
@@ -69,7 +69,7 @@ msgstr ""
 "Une solution a déjà été proposée pour cet élément. Actualisez la page pour "
 "la voir."
 
-#: src/Health.php:456 src/Health.php:560
+#: src/Health.php:456 src/Health.php:575
 #, php-format
 msgid ""
 "Add \"%s\" to [security] allowed_origins in config.toml, then restart the "
@@ -78,7 +78,7 @@ msgstr ""
 "Ajoutez \"%s\" à [security] allowed_origins dans config.toml, puis "
 "redémarrez le serveur."
 
-#: front/config.php:102 src/Health.php:540
+#: front/config.php:102 src/Health.php:555
 msgid ""
 "Add the /ws location to the GLPI vhost (README, \"Web server\": nginx "
 "location or Apache ProxyPass), then reload the web server."
@@ -86,7 +86,7 @@ msgstr ""
 "Ajoutez la location /ws au vhost de GLPI (README, \"Web server\" : location "
 "nginx ou ProxyPass Apache), puis rechargez le serveur web."
 
-#: src/Health.php:472
+#: src/Health.php:487
 #, php-format
 msgid ""
 "Add them to [security] allowed_itemtypes in config.toml (%s), then restart "
@@ -120,7 +120,7 @@ msgstr ""
 "Construisez-le (cd client && npm ci && npm run build) puis lancez deploy/"
 "install.sh, ou installez une archive de version."
 
-#: src/Health.php:483
+#: src/Health.php:498
 msgid ""
 "Cannot be verified: Valkey refuses CONFIG GET to the server (ACL). Make sure "
 "notify-keyspace-events contains K, g and x."
@@ -144,7 +144,7 @@ msgstr ""
 "Vérifie tout ce dont la couche temps réel a besoin (code de sortie : 0 ok, 1 "
 "avertissements, 2 erreurs)"
 
-#: src/Health.php:537
+#: src/Health.php:552
 msgid ""
 "Check that GLPI's URL can be reached from this machine (DNS, firewall, "
 "certificate)."
@@ -196,10 +196,18 @@ msgstr "Ne pas interroger l'URL de GLPI (vérifications du serveur web)"
 msgid "Enable it in Setup > Automatic actions (\"inboxpurge\")."
 msgstr "Activez-la dans Configuration > Actions automatiques (\"inboxpurge\")."
 
-#: src/Health.php:471
+#: src/Health.php:486
 #, php-format
 msgid "Enabled in GLPI but refused by the server: %s."
 msgstr "Activés dans GLPI mais refusés par le serveur : %s."
+
+#: src/Health.php:473
+#, php-format
+msgid ""
+"Enabled: %s. Also available (presence and a single editor of their form): %s."
+msgstr ""
+"Activés : %s. Également disponibles (présence et un seul éditeur de leur "
+"formulaire) : %s."
 
 #: front/config.php:29 src/Console/CheckCommand.php:64
 msgid "Error"
@@ -214,7 +222,7 @@ msgstr "Tout ce dont le temps réel a besoin est disponible."
 msgid "Files are revalidated every %d s."
 msgstr "Les fichiers sont revérifiés toutes les %d s."
 
-#: src/Health.php:477
+#: src/Health.php:492
 msgid ""
 "For instant revocation: notify-keyspace-events Kgx in valkey.conf, and "
 "keyspace_events = true in config.toml."
@@ -241,7 +249,7 @@ msgstr ""
 "des notifications de GLPI pointent là-bas, et le serveur temps réel "
 "refuserait les navigateurs venant de cette adresse."
 
-#: src/Health.php:531
+#: src/Health.php:546
 msgid "GLPI's URL is not set."
 msgstr "L'URL de GLPI n'est pas définie."
 
@@ -300,15 +308,15 @@ msgstr ""
 msgid "Instances: %d, connections: %d."
 msgstr "Instances : %d, connexions : %d."
 
-#: src/Health.php:477 src/Health.php:479 src/Health.php:481 src/Health.php:483
+#: src/Health.php:492 src/Health.php:494 src/Health.php:496 src/Health.php:498
 msgid "Instant logout"
 msgstr "Déconnexion immédiate"
 
-#: src/Health.php:466 src/Health.php:469
+#: src/Health.php:471 src/Health.php:481 src/Health.php:484
 msgid "Item types"
 msgstr "Types d'éléments"
 
-#: src/Health.php:479
+#: src/Health.php:494
 msgid "Keyspace notifications are on."
 msgstr "Les notifications keyspace sont actives."
 
@@ -331,7 +339,7 @@ msgstr "Plus de détails sur chaque problème : %s."
 msgid "Never run."
 msgstr "Jamais exécutée."
 
-#: src/Health.php:537
+#: src/Health.php:552
 #, php-format
 msgid "No answer from %s: %s"
 msgstr "Pas de réponse de %s : %s"
@@ -370,7 +378,7 @@ msgstr "Tâche de purge des notifications"
 msgid "OK"
 msgstr "OK"
 
-#: src/Health.php:477
+#: src/Health.php:492
 msgid ""
 "Off ([revocation] keyspace_events = false): a closed GLPI session is noticed "
 "within 15 s."
@@ -416,7 +424,7 @@ msgstr ""
 msgid "Plugin tables"
 msgstr "Tables du plugin"
 
-#: src/Health.php:562
+#: src/Health.php:577
 msgid "Rate-limited by the web server (HTTP 429): try again in a minute."
 msgstr "Limité par le serveur web (HTTP 429) : réessayez dans une minute."
 
@@ -488,7 +496,7 @@ msgstr ""
 "Indiquez \"%s\" dans Configuration > Générale > Configuration générale "
 "(\"URL de l'application\")."
 
-#: src/Health.php:481
+#: src/Health.php:496
 msgid ""
 "Set \"notify-keyspace-events Kgx\" in valkey.conf (or CONFIG SET notify-"
 "keyspace-events Kgx) and restart Valkey."
@@ -496,7 +504,7 @@ msgstr ""
 "Mettez \"notify-keyspace-events Kgx\" dans valkey.conf (ou CONFIG SET notify-"
 "keyspace-events Kgx) et redémarrez Valkey."
 
-#: src/Health.php:531
+#: src/Health.php:546
 msgid "Set it in Setup > General > General setup (\"URL of the application\")."
 msgstr ""
 "Définissez-la dans Configuration > Générale > Configuration générale (« URL "
@@ -513,7 +521,7 @@ msgstr ""
 "indique pourquoi il s'est arrêté). Son config.toml doit utiliser le même "
 "Valkey que GLPI : [valkey] url, db = %d, key_prefix = \"%s\"."
 
-#: front/config.php:104 src/Health.php:543
+#: front/config.php:104 src/Health.php:558
 msgid ""
 "Start the server (systemctl status glpi-realtime). With a unix socket, the "
 "web server's user must be in the socket's group: [listen] group in "
@@ -562,7 +570,7 @@ msgstr "Le temps réel fonctionne, avec des limites : voir les avertissements."
 msgid "The request reached glpi-realtime (HTTP %s)."
 msgstr "La requête est arrivée à glpi-realtime (HTTP %s)."
 
-#: src/Health.php:560
+#: src/Health.php:575
 #, php-format
 msgid "The server refuses the origin %s."
 msgstr "Le serveur refuse l'origine %s."
@@ -576,12 +584,12 @@ msgstr ""
 msgid "The task is not registered."
 msgstr "La tâche n'est pas enregistrée."
 
-#: src/Health.php:561
+#: src/Health.php:576
 #, php-format
 msgid "The upgrade headers do not reach the server (HTTP %d: %s)."
 msgstr "Les en-têtes d'upgrade n'atteignent pas le serveur (HTTP %d : %s)."
 
-#: src/Health.php:559
+#: src/Health.php:574
 msgid ""
 "The upgrade reaches the server, which accepts GLPI's origin (and asks for a "
 "session: expected here)."
@@ -600,7 +608,7 @@ msgstr ""
 "ajoutez-le au groupe du socket (valkey ou redis, voir \"unixsocketperm\" "
 "dans valkey.conf) et redémarrez PHP."
 
-#: front/config.php:103 src/Health.php:543
+#: front/config.php:103 src/Health.php:558
 #, php-format
 msgid "The web server cannot reach glpi-realtime (HTTP %s)."
 msgstr "Le serveur web ne joint pas glpi-realtime (HTTP %s)."
@@ -614,12 +622,25 @@ msgstr ""
 "Cette page est servie en %s : le cookie du WebSocket est \"Secure\" et les "
 "navigateurs ne l'envoient qu'en HTTPS."
 
-#: src/Health.php:546
+#: src/Health.php:475
+#, php-format
+msgid ""
+"To enable them, on both sides: bin/console config:set --"
+"context=plugin:realtime enabled_itemtypes '%s' (as the user running GLPI), "
+"and allowed_itemtypes = %s in [security] of config.toml, then restart the "
+"server."
+msgstr ""
+"Pour les activer, des deux côtés : bin/console config:set --"
+"context=plugin:realtime enabled_itemtypes '%s' (avec l'utilisateur de GLPI), "
+"et allowed_itemtypes = %s dans [security] de config.toml, puis redémarrez le "
+"serveur."
+
+#: src/Health.php:561
 #, php-format
 msgid "Unexpected answer from %s: HTTP %d."
 msgstr "Réponse inattendue de %s : HTTP %d."
 
-#: src/Health.php:563
+#: src/Health.php:578
 #, php-format
 msgid "Unexpected answer: HTTP %d."
 msgstr "Réponse inattendue : HTTP %d."
@@ -679,7 +700,7 @@ msgstr ""
 "L'ACL de Valkey doit autoriser à l'utilisateur du plugin les clés et canaux "
 "\"%s*\" (voir deploy/examples/valkey.conf.example)."
 
-#: src/Health.php:481
+#: src/Health.php:496
 #, php-format
 msgid ""
 "Valkey's notify-keyspace-events is %s: logouts are only noticed within 15 s."
@@ -704,7 +725,7 @@ msgstr "Serveur web"
 msgid "Web server and browser"
 msgstr "Serveur web et navigateur"
 
-#: front/config.php:99 src/Health.php:529
+#: front/config.php:99 src/Health.php:544
 msgid "Web server forwards /ws"
 msgstr "Le serveur web transmet /ws"
 
@@ -712,7 +733,7 @@ msgstr "Le serveur web transmet /ws"
 msgid "WebSocket from this browser"
 msgstr "WebSocket depuis ce navigateur"
 
-#: src/Health.php:550
+#: src/Health.php:565
 msgid "WebSocket upgrade"
 msgstr "Upgrade WebSocket"
 
@@ -752,7 +773,7 @@ msgstr ""
 msgid "glpi-realtime server"
 msgstr "Serveur glpi-realtime"
 
-#: src/Health.php:561
+#: src/Health.php:576
 msgid ""
 "nginx: proxy_http_version 1.1, proxy_set_header Upgrade $http_upgrade and "
 "Connection \"upgrade\"; Apache: upgrade=websocket on the ProxyPass (README, "

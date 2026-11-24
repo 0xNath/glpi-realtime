@@ -14,7 +14,10 @@ function row(box: string | null, hrefs: string[]): Element {
 test("rows are recognized by their massive action box", () => {
   assert.equal(rowKey(row("item[Ticket][42]", [])), "Ticket:42");
   assert.equal(rowKey(row("item[Problem][7]", [])), "Problem:7");
-  assert.equal(rowKey(row("item[Computer][3]", [])), null, "other item types are not followed");
+  // Any item type: GLPI's grants.php says which are enabled and readable.
+  assert.equal(rowKey(row("item[Computer][3]", [])), "Computer:3");
+  assert.equal(rowKey(row("item[Glpi\\CustomAsset\\ServerAsset][4]", [])), "Glpi\\CustomAsset\\ServerAsset:4", "custom assets");
+  assert.equal(rowKey(row("item[Computer][0]", [])), null, "no id");
 });
 
 test("or by their form link when there is no box (self-service, no rights)", () => {

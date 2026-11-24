@@ -137,20 +137,22 @@ final class Grants
     public static function flags(CommonDBTM $item): array
     {
         $flags = ['read' => true];
-        if ($item instanceof CommonITILObject) {
-            $flags += [
-                'update'                  => $item->canUpdateItem(),
-                'see_public_followup'     => Session::haveRight(ITILFollowup::$rightname, ITILFollowup::SEEPUBLIC),
-                'see_public_task'         => Session::haveRight(CommonITILTask::$rightname, CommonITILTask::SEEPUBLIC),
-                'add_followup'            => $item->canAddFollowups(),
-                'add_task'                => $item->canAddTasks(),
-                'solve'                   => $item->canSolve(),
-                'see_private_followup'    => Session::haveRight(ITILFollowup::$rightname, ITILFollowup::SEEPRIVATE),
-                'see_private_followup_groups' => Session::haveRight(ITILFollowup::$rightname, ITILFollowup::SEEPRIVATEGROUPS),
-                'see_private_task'        => Session::haveRight(CommonITILTask::$rightname, CommonITILTask::SEEPRIVATE),
-                'see_private_task_groups' => Session::haveRight(CommonITILTask::$rightname, CommonITILTask::SEEPRIVATEGROUPS),
-            ];
+        if (!$item instanceof CommonITILObject) {
+            // Other items: presence, and the single editor of their form.
+            return $flags + ['update' => $item->can($item->getID(), UPDATE)];
         }
+        $flags += [
+            'update'                  => $item->canUpdateItem(),
+            'see_public_followup'     => Session::haveRight(ITILFollowup::$rightname, ITILFollowup::SEEPUBLIC),
+            'see_public_task'         => Session::haveRight(CommonITILTask::$rightname, CommonITILTask::SEEPUBLIC),
+            'add_followup'            => $item->canAddFollowups(),
+            'add_task'                => $item->canAddTasks(),
+            'solve'                   => $item->canSolve(),
+            'see_private_followup'    => Session::haveRight(ITILFollowup::$rightname, ITILFollowup::SEEPRIVATE),
+            'see_private_followup_groups' => Session::haveRight(ITILFollowup::$rightname, ITILFollowup::SEEPRIVATEGROUPS),
+            'see_private_task'        => Session::haveRight(CommonITILTask::$rightname, CommonITILTask::SEEPRIVATE),
+            'see_private_task_groups' => Session::haveRight(CommonITILTask::$rightname, CommonITILTask::SEEPRIVATEGROUPS),
+        ];
         return $flags;
     }
 

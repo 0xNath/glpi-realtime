@@ -110,7 +110,13 @@ check(!Grants::write($hidden) && $r->exists(Valkey::key('g:' . $h3 . ':Ticket:43
 
 $pc = new Computer();
 $pc->fields['id'] = 1;
-check(!Grants::write($pc), 'no grant for item types that are not enabled');
+check(Grants::write($pc), 'assets are enabled by default');
+check($r->hGetAll(Valkey::key('g:' . $h3 . ':Computer:1')) === ['read' => '1', 'update' => '1'], 'other items: read, and update for the single editor of their form');
+$pc->readable = false;
+check(!Grants::write($pc), 'and checked by GLPI like the others');
+$u = new User();
+$u->fields['id'] = 3;
+check(!Grants::write($u), 'no grant for item types that are not enabled');
 
 ob_start();
 Grants::onPostItemForm(['item' => $t, 'options' => []]);

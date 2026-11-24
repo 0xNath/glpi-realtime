@@ -10,11 +10,12 @@ use CommonDBTM;
 use Session;
 
 /**
- * Refuses, in GLPI, to save a ticket, change or problem form whose values are older than
- * the database (optimistic concurrency): the browsers' single-editor lock is advisory, this
- * is not.
+ * Refuses, in GLPI, to save an item's form whose values are older than the database
+ * (optimistic concurrency), for every enabled item type with a `date_mod`: the browsers'
+ * single-editor lock is advisory, this is not.
  *
- * - `post_item_form` puts the item's `date_mod` in the fields form (`form#itil-form`).
+ * - `post_item_form` puts the item's `date_mod` in its form (`form#itil-form` for tickets,
+ *   changes and problems, the main form otherwise).
  * - `pre_item_update` compares it with the current one: if someone (or GLPI itself: a
  *   followup changing the status) updated the item since the form was displayed, the
  *   update is cancelled and the user told to refresh.
@@ -25,12 +26,10 @@ use Session;
 final class ConcurrencyGuard
 {
     public const FIELD = '_glpi_rt_date_mod';
-    public const ITEMTYPES = ['Ticket', 'Change', 'Problem'];
-
-    /** Hidden field for the fields form of an ITIL object. */
+    /** Hidden field for the form of an enabled item. */
     public static function field(CommonDBTM $item): string
     {
-        if (!in_array($item::class, self::ITEMTYPES, true) || $item->isNewItem()) {
+        if ($item->isNewItem() || !in_array($item::class, Settings::enabledItemtypes(), true) || !array_key_exists('date_mod', $item->fields)) {
             return '';
         }
         return sprintf(
@@ -40,7 +39,7 @@ final class ConcurrencyGuard
         );
     }
 
-    /** Hook pre_item_update on Ticket, Change, Problem. */
+    /** Hook pre_item_update on the enabled item types. */
     public static function onPreUpdate(mixed $item): void
     {
         if (!$item instanceof CommonDBTM || !is_array($item->input) || !array_key_exists(self::FIELD, $item->input)) {

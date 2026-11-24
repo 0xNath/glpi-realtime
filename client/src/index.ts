@@ -3,7 +3,7 @@ import { glpiHeaders } from "./http.ts";
 import { RealtimeClient } from "./client.ts";
 import { Bell, InboxController } from "./bell.ts";
 import { InboxApi, labelsFor } from "./inbox.ts";
-import { FieldsEditor } from "./editor.ts";
+import { FieldsEditor, targetFor } from "./editor.ts";
 import { applyCatalog, needsCatalog } from "./i18n.ts";
 import { ListPresence } from "./list.ts";
 import { LiveTimeline, TIMELINE_EVENTS } from "./timeline.ts";
@@ -148,11 +148,9 @@ function boot(): void {
   });
   startInbox(client, rootDoc);
 
-  // Single editor for the ticket fields, on the item form only (GLPI's own lock, when
-  // enabled, removes the Save button: then there is nothing to coordinate).
-  // Single editor for the ticket fields. The ticket form arrives with its tab, after the
-  // page (and again when the tab reloads): created when it appears, then follows it.
-  // GLPI's own lock, when enabled, removes the Save button: nothing to coordinate then.
+  // Single editor of the item's fields. The form arrives with its tab, after the page (and
+  // again when the tab reloads): created when it appears, then follows it. GLPI's own lock,
+  // when enabled, removes the Save button: nothing to coordinate then.
   let editor: FieldsEditor | null = null;
   let timeline: LiveTimeline | null = null;
   const followForm = () => {
@@ -162,9 +160,14 @@ function boot(): void {
       if (room) timeline = new LiveTimeline(document, client, room, document.documentElement.lang || navigator.language || "en");
     }
     if (editor) return editor.attach();
-    if (!document.getElementById("itil-form") || !document.querySelector("button[name='update'][form='itil-form']")) return;
     const room = roomsIn(document)[0];
-    if (room) editor = new FieldsEditor(document, client, room, document.documentElement.lang || navigator.language || "en");
+    if (!room) return;
+    // Tickets, changes, problems: the fields panel; other items: their main form.
+    const target = targetFor(document, room);
+    const form = target.form();
+    const save = form && (form.querySelector("button[name='update'], input[name='update']") ?? target.outside().find((b) => b.matches("[name='update']")));
+    if (!save) return;
+    editor = new FieldsEditor(document, client, room, document.documentElement.lang || navigator.language || "en", target);
   };
   followForm();
 

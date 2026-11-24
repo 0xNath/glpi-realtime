@@ -16,9 +16,10 @@ use GlpiPlugin\Realtime\ConcurrencyGuard;
 use GlpiPlugin\Realtime\Events;
 use GlpiPlugin\Realtime\Grants;
 use GlpiPlugin\Realtime\SessionToken;
+use GlpiPlugin\Realtime\Settings;
 use GlpiPlugin\Realtime\SolutionGuard;
 
-define('PLUGIN_REALTIME_VERSION', '0.5.0');
+define('PLUGIN_REALTIME_VERSION', '0.6.0');
 define('PLUGIN_REALTIME_MIN_GLPI', '11.0.0');
 define('PLUGIN_REALTIME_MAX_GLPI', '12.0.99');
 
@@ -93,8 +94,9 @@ function plugin_init_realtime(): void
         $PLUGIN_HOOKS[Hooks::PRE_ITEM_ADD]['realtime'] = ['ITILSolution' => [SolutionGuard::class, 'onPreAdd']];
 
         // Never save a fields form older than the database (whatever the browsers do).
+        // (Updates without the form's hidden date, or of items without one, pass.)
         $PLUGIN_HOOKS[Hooks::PRE_ITEM_UPDATE]['realtime'] = array_fill_keys(
-            ['Ticket', 'Change', 'Problem'],
+            Settings::enabledItemtypes(),
             [ConcurrencyGuard::class, 'onPreUpdate']
         );
 

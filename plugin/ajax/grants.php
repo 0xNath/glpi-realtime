@@ -27,7 +27,7 @@ const MAX_ITEMS = 200;
 $in = json_decode((string) file_get_contents('php://input'), true);
 $items = is_array($in['items'] ?? null) ? array_slice(array_unique($in['items']), 0, MAX_ITEMS) : [];
 $enabled = Settings::enabledItemtypes();
-$items = array_values(array_filter($items, static fn($raw) => is_string($raw) && preg_match('/^([A-Za-z_]+):([1-9][0-9]*)$/', $raw)));
+$items = array_values(array_filter($items, static fn($raw) => is_string($raw) && preg_match('/^([A-Za-z_][A-Za-z0-9_\\\\]*):([1-9][0-9]*)$/', $raw)));
 
 // Already granted to this session (one round trip).
 $hash = SessionToken::currentHash();
@@ -48,7 +48,7 @@ foreach ($items as $i => $raw) {
         $rooms[] = $raw;
         continue;
     }
-    preg_match('/^([A-Za-z_]+):([1-9][0-9]*)$/', $raw, $m);
+    preg_match('/^([A-Za-z_][A-Za-z0-9_\\\\]*):([1-9][0-9]*)$/', $raw, $m);
     [, $type, $id] = $m;
     if (!in_array($type, $enabled, true) || !is_a($type, CommonDBTM::class, true)) {
         continue;

@@ -4,9 +4,10 @@ import type { Holder, PresenceUser } from "./protocol.ts";
 import { noun } from "./updates.ts";
 
 /**
- * Single editor for the ticket fields (step 4): the right-hand fields panel
- * (`form#itil-form`, its Save button) and the title/description edit of the main item.
- * The timeline (followups, tasks, solutions) stays free.
+ * Single editor of an item's fields (step 4). Tickets, changes and problems: the
+ * right-hand fields panel (`form#itil-form`, its Save button) and the title/description
+ * edit of the main item; the timeline (followups, tasks, solutions) stays free. Other items
+ * (projects, assets...): their main form.
  *
  * - The first edit (focus, typing, a select2 opening) takes the lock; it is renewed while
  *   editing and released after a minute without input (if nothing is left unsaved). The
@@ -112,6 +113,64 @@ const CSS = `
 .glpi-rt-fields-locked .ITILContent .timeline-item-buttons { visibility:hidden; }
 `;
 
+/** The form whose fields have a single editor. */
+export interface FormTarget {
+  form(): HTMLFormElement | null;
+  /** Its Save buttons outside the form (`form="…"` attribute). */
+  outside(): Element[];
+  /** Whether an element is one of the locked fields or buttons. */
+  contains(el: Element): boolean;
+}
+
+/** Tickets, changes, problems: the fields panel, and the description's edit buttons. */
+export function itilTarget(doc: Document): FormTarget {
+  return {
+    form: () => doc.getElementById("itil-form") as HTMLFormElement | null,
+    outside: () => Array.from(doc.querySelectorAll("button[form='itil-form']")),
+    contains: (el) =>
+      !!el.closest("#itil-form") ||
+      el.matches("button[form='itil-form']") ||
+      !!el.closest("button[form='itil-form']") ||
+      !!el.closest(".ITILContent .timeline-item-buttons, .ITILContent .edit-content"),
+  };
+}
+
+/**
+ * Other items: the form that saves this very item (its `id` field, a Save button). Its
+ * `form.id` cannot be used: GLPI's forms hold an input named "id", which hides it.
+ */
+export function itemTarget(doc: Document, room: string): FormTarget {
+  const id = room.slice(room.lastIndexOf(":") + 1);
+  const form = (): HTMLFormElement | null =>
+    Array.from(doc.querySelectorAll("form")).find((f) => {
+      const field = f.querySelector<HTMLInputElement>(":scope input[name='id']");
+      return field?.value === id && !!f.querySelector("button[name='update'], input[name='update']");
+    }) ?? null;
+  return {
+    form,
+    outside: () => {
+      const name = form()?.getAttribute("id");
+      return name ? Array.from(doc.querySelectorAll(`button[form="${attr(name)}"]`)) : [];
+    },
+    contains: (el) => {
+      const f = form();
+      if (!f) return false;
+      const name = f.getAttribute("id");
+      return f.contains(el) || (!!name && !!el.closest(`button[form="${attr(name)}"]`));
+    },
+  };
+}
+
+/** A value inside a double-quoted attribute selector. */
+function attr(v: string): string {
+  return v.replace(/["\\]/g, "\\$&");
+}
+
+/** The form of a room: tickets, changes and problems have their own. */
+export function targetFor(doc: Document, room: string): FormTarget {
+  return ["Ticket", "Change", "Problem"].includes(room.split(":")[0]) ? itilTarget(doc) : itemTarget(doc, room);
+}
+
 export interface EditorClient {
   conn: string | null;
   user: { id: number } | null;
@@ -137,9 +196,11 @@ export class FieldsEditor {
   private disabled: HTMLElement[] = [];
   /** The form the bar and disabled fields belong to (GLPI may reload it). */
   private formEl: HTMLFormElement | null = null;
+  private readonly target: FormTarget;
 
-  constructor(doc: Document, client: EditorClient, room: string, lang: string) {
+  constructor(doc: Document, client: EditorClient, room: string, lang: string, target: FormTarget = targetFor(doc, room)) {
     this.doc = doc;
+    this.target = target;
     this.client = client;
     this.room = room;
     const code = lang.slice(0, 2).toLowerCase() === "fr" ? "fr" : "en";
@@ -198,21 +259,19 @@ export class FieldsEditor {
   }
 
   private form(): HTMLFormElement | null {
-    return this.doc.getElementById("itil-form") as HTMLFormElement | null;
+    return this.target.form();
   }
 
   /** Whether an event target belongs to the locked fields. */
   private inFields(el: Element): boolean {
     if (el.closest(".accordion-button, .accordion-header")) return false; // opening sections is reading
-    if (el.closest("#itil-form")) return true;
-    if (el.matches("button[form='itil-form']") || el.closest("button[form='itil-form']")) return true;
-    return !!el.closest(".ITILContent .timeline-item-buttons, .ITILContent .edit-content");
+    return this.target.contains(el);
   }
 
   private intent(e: Event): void {
     const el = e.target instanceof Element ? e.target : null;
     if (!el || !this.inFields(el)) return;
-    const control = el.closest(CONTROLS) ?? (el.closest("button[form='itil-form'], #itil-form button[type=submit]") as Element | null);
+    const control = el.closest(CONTROLS) ?? el.closest("button[type=submit], input[type=submit], button[form]");
     if (!control) return;
     if (!this.state.canEdit()) {
       e.preventDefault();
@@ -293,7 +352,7 @@ export class FieldsEditor {
     if (!form) return;
     const els = [
       ...Array.from(form.elements),
-      ...Array.from(this.doc.querySelectorAll("button[form='itil-form']")),
+      ...this.target.outside(),
     ] as HTMLInputElement[];
     for (const el of els) {
       if (el.disabled || el.closest(".accordion-header") || el.type === "hidden") continue;

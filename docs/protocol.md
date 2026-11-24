@@ -22,7 +22,7 @@ Every message carries `"v": 1`. A client may add an integer `"id"`, echoed in th
 
 | `t` | Fields | Reply |
 |---|---|---|
-| `sub` | `room` (`"Ticket:42"`, `"Change:7"`, `"Problem:3"`) | `subscribed` or `error` |
+| `sub` | `room` (`"Ticket:42"`, `"Change:7"`, `"Computer:3"`: any item type of `security.allowed_itemtypes`) | `subscribed` or `error` |
 | `unsub` | `room` | `unsubscribed` |
 | `ping` | — | `pong` |
 | `activity` | `active` (bool) | none; presence lists change for the other members |
@@ -219,6 +219,7 @@ in another tab, preferences saved) never alerts and reaches the author's own tab
 | `status_changed`, `updated` (`detail.fields`) | actors and "others" |
 | `validation_asked` / `validation_done` | approver (user or group members) / actors |
 | `transferred` | entity changed: actors, or technicians of the new entity when unassigned |
+| `mentioned` (`detail.in`: `description`, `followup`, `task`, `solution`, `validation`) | users newly mentioned ("@name", GLPI's rich text mentions), whatever their role; the user's *When I am mentioned* preference |
 
 "Others": technicians with the STEAL right on the item's entity who enabled *Notify others*.
 Queues are computed per reader: **New** (nobody assigned), **Mine**, **Team** (one of my

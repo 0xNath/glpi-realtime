@@ -2,9 +2,11 @@
 
 [![CI](https://github.com/0xNath/glpi-realtime/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/0xNath/glpi-realtime/actions/workflows/ci.yml)
 
-Optional real-time layer for GLPI 11 and 12, on tickets, changes and problems alike: presence,
-typing indicators, live updates of the item and its timeline, instant notifications, a
-single editor for the fields, one solution at a time, and shared answer drafts.
+Optional real-time layer for GLPI 11 and 12. On tickets, changes and problems: presence,
+typing indicators, live updates of the item and its timeline, instant notifications
+(mentions included), a single editor for the fields, one solution at a time, and shared
+answer drafts. On projects, project tasks and assets (any GLPI item can be enabled):
+presence and a single editor of the form.
 
 - `server/`: WebSocket server in Rust (tokio, axum, fred/Valkey).
 - `plugin/`: GLPI plugin `realtime` (PHP): issues session tokens and per-item grants.
@@ -80,7 +82,7 @@ from `deploy/examples/`, and upgrades never touch them.
 From [Releases](https://github.com/0xNath/glpi-realtime/releases):
 
 ```bash
-VERSION=0.5.0 ARCH=$(uname -m)                  # x86_64 or aarch64
+VERSION=0.6.0 ARCH=$(uname -m)                  # x86_64 or aarch64
 BASE=https://github.com/0xNath/glpi-realtime/releases/download/v$VERSION
 curl -LO "$BASE/glpi-realtime-$VERSION-linux-$ARCH.tar.gz" -LO "$BASE/SHA256SUMS"
 sha256sum --check --ignore-missing SHA256SUMS
@@ -223,6 +225,7 @@ causes.
 Download the new release (step 1) and run step 2 again. Configuration is never changed
 by an upgrade; [CHANGELOG.md](CHANGELOG.md) says when you have to edit it, e.g.:
 
+- **0.6.0**: projects and assets are opt-in for existing installs: see the CHANGELOG.
 - **0.3.0**: add `"Change", "Problem"` to `security.allowed_itemtypes` in `config.toml`.
 
 ## Build and test
@@ -263,6 +266,11 @@ See [`deploy/examples/config.toml.example`](deploy/examples/config.toml.example)
 with `GLPI_RT_<SECTION>__<KEY>`. Plugin settings (Valkey socket and db, key prefix, cookie
 name, enabled item types) are in GLPI's configuration table, context `plugin:realtime`,
 and must match the server.
+
+Item types: `enabled_itemtypes` (plugin) and `[security] allowed_itemtypes` (server) list
+the same classes. Tickets, changes and problems get every feature; any other GLPI item
+with a standard form (projects, project tasks, assets, custom assets of GLPI 11+ such as
+`Glpi\CustomAsset\ServerAsset`) gets presence and the single editor of its form.
 
 ## Translations
 
