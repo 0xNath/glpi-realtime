@@ -105,10 +105,10 @@ published release.
 ## CI
 
 `.github/workflows/ci.yml` runs everything above plus the e2e matrix, load test, fuzzing
-and, for tags, the release jobs. To follow a run and fix it in a loop, `gh` is needed
-(not installed here yet: the maintainer installs it and runs `gh auth login`); then
-`gh run watch` / `gh run view --log-failed`, or `/loop` to check back. Without it, the
-maintainer pastes the failing log.
+and, for tags, the release jobs; on pull requests (not on pushes to other branches:
+a branch's CI starts with its pull request), master, tags, and every Monday at 02:00 UTC
+(the GLPI nightly jobs). Follow a run with `gh run watch` / `gh run view --log-failed`,
+`gh pr checks`, or `/loop` to check back.
 
 `.github/workflows/claude.yml`: Claude on GitHub (@claude from maintainers, triage of
 new issues with comment/label rights only, reviews of pull requests from this
