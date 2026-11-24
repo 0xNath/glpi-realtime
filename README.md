@@ -32,7 +32,7 @@ Browser ──wss /ws──► nginx ──unix socket──► glpi-realtime (R
 | 3 | Ticket events, notifications (bell with queues, preferences, sound, full page) | done |
 | 4 | Single editor for ticket fields | done |
 | 5 | Shared answer drafts: follow live, take over | done |
-| 6 | Load test at 20 000 connections, hardening | — |
+| 6 | Load test at 20 000 connections ([results](#performance)), hardening | done |
 
 ## Performance
 
