@@ -23,7 +23,7 @@
 #                                     plugin install/upgrade yourself)
 #   RELOAD_PHP=                       command reloading GLPI's PHP once the files are copied, so
 #                                     that opcache serves no old file next to new ones, e.g.
-#                                     "systemctl reload php-fpm", "systemctl reload uwsgi@glpi",
+#                                     "systemctl reload php8.3-fpm",
 #                                     "systemctl reload apache2" (empty: the script waits until
 #                                     PHP revalidates, see OPCACHE_WAIT)
 #   OPCACHE_WAIT=65                   seconds waited without RELOAD_PHP (opcache.revalidate_freq + 5;

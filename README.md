@@ -1,5 +1,7 @@
 # glpi-realtime
 
+[![CI](https://github.com/0xNath/glpi-realtime/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/0xNath/glpi-realtime/actions/workflows/ci.yml)
+
 Optional real-time layer for GLPI 11 and 12, on tickets, changes and problems alike: presence,
 typing indicators, live updates of the item and its timeline, instant notifications, a
 single editor for the fields, one solution at a time, and shared answer drafts.
@@ -27,22 +29,11 @@ flowchart LR
 
     browser -- "GLPI pages (HTTPS)" --> web
     browser -- "wss/ws" --> web
-    web -- "PHP-FPM / uWSGI" --> php
+    web -- "PHP-FPM or mod_php" --> php
     web -- "/ws, unix socket" --> server
     php -- "writes tokens and grants,<br/>publishes events" --> valkey
     server -- "reads tokens and grants,<br/>subscribes to events" --> valkey
 ```
-
-## Status
-
-| Step | Content | State |
-|---|---|---|
-| 1 | Server skeleton, authentication, grants, deployment | done |
-| 2 | Presence | done |
-| 3 | Ticket events, notifications (bell with queues, preferences, sound, full page) | done |
-| 4 | Single editor for ticket fields | done |
-| 5 | Shared answer drafts: follow live, take over | done |
-| 6 | Load test at 20 000 connections ([results](#performance)), hardening | done |
 
 ## Performance
 
@@ -65,101 +56,97 @@ cd server && cargo run --release --example loadtest -- --valkey unix:///path/to/
 It uses Valkey db 6 with the `rt:` prefix (sessions `rt:s:5eed…`) and removes its keys at
 the end: point it to a test Valkey, not production's.
 
-## Build and test
-
-Requirements: Rust ≥ 1.85, Node ≥ 22.6, `valkey-server` (integration tests),
-`php-legacy` with the `redis` extension (plugin and interop tests).
-
-```bash
-./scripts/test-all.sh          # Rust unit + integration, PHP plugin, client
-(cd server && cargo build --release)
-(cd client && npm ci && npm run build)
-```
-
-End-to-end, against a disposable GLPI in containers (Docker or Podman; any
-`docker.io/glpi/glpi` tag with `GLPI_VERSION`):
-
-```bash
-e2e/env/up.sh && (cd e2e && npm ci && E2E_ENV_FILE=../.e2e.local.env npx playwright test)
-e2e/env/down.sh
-```
-
-The CI runs them on GLPI 11.0, 12.0.0, the latest 12.0 and the next one (nightly, warning only).
-
 ## Install
 
-`deploy/install.sh` only installs the project's own files: the server binary and the GLPI
-plugin. It never writes configuration: the files below are set up once, by you, from
-`deploy/examples/`, so that the project fits any distribution and upgrades never touch them.
+Requirements: GLPI 11 or 12 with the PHP `redis` extension (phpredis), Valkey ≥ 9.0 (or
+Redis ≥ 7.4), systemd, nginx or Apache httpd ≥ 2.4.47, HTTPS. Linux x86_64 (the server
+is a static binary).
 
-Requirements: GLPI 11 or 12 with the PHP `redis` extension (phpredis), Valkey ≥ 9.0 (or Redis ≥ 7.4,
-for hash field TTLs), systemd (or any supervisor), nginx or Apache httpd ≥ 2.4.47.
+The project never writes configuration: the files of steps 3 to 5 are yours, set up once
+from `deploy/examples/`, and upgrades never touch them.
 
-### 1. Build, then install the files (also for every upgrade)
+### 1. Download a release
 
-```bash
-(cd server && cargo build --release) && (cd client && npm ci && npm run build)
-sudo deploy/install.sh
-```
-
-Settings are environment variables (defaults in brackets): `GLPI_DIR` [`/var/www/glpi`],
-`PREFIX` [`/usr/local`, binary in `$PREFIX/bin`], `CONFIG`
-[`/etc/glpi-realtime/config.toml`, only read to validate it before switching binaries],
-`PHP` [`php`], `GLPI_USER` [owner of `$GLPI_DIR/files`], `SERVICE` [`glpi-realtime`,
-restarted if the unit exists], `SKIP_PLUGIN_UPGRADE=1` to only copy the plugin files,
-`RELOAD_PHP` [command reloading GLPI's PHP after the copy, e.g. `systemctl reload
-php-fpm`; without it the script waits `OPCACHE_WAIT`, 65 s, for opcache to revalidate].
-PHP's opcache can otherwise serve old plugin files next to new ones for a while after an
-upgrade.
-For example:
+From [Releases](https://github.com/0xNath/glpi-realtime/releases):
 
 ```bash
-sudo GLPI_DIR=/usr/share/glpi PHP=php8.3 deploy/install.sh                       # Debian-like
-sudo PHP="env PHP_INI_SCAN_DIR=:/etc/webapps/glpi/php-cli php-legacy" \
-     RELOAD_PHP="systemctl reload uwsgi@glpi" deploy/install.sh                        # Arch, uWSGI
+VERSION=0.4.0
+BASE=https://github.com/0xNath/glpi-realtime/releases/download/v$VERSION
+curl -LO "$BASE/glpi-realtime-$VERSION-linux-x86_64.tar.gz" -LO "$BASE/SHA256SUMS"
+sha256sum --check --ignore-missing SHA256SUMS
+tar xzf "glpi-realtime-$VERSION-linux-x86_64.tar.gz" && cd "glpi-realtime-$VERSION"
 ```
 
-The script copies the plugin into `$GLPI_DIR/plugins/realtime` (read-only for the web
-server), runs GLPI's `plugin:install` and `plugin:activate` (tables, cron task; settings
-are kept) and restarts the service. `deploy/update.sh` is an alias.
+It holds the server (`bin/`), the GLPI plugin (`plugin/`), `deploy/` and the docs.
+`glpi-plugin-realtime-<version>.tar.bz2` is the plugin alone, for `<GLPI>/plugins/`.
 
-### 2. System user, configuration, service (once)
+### 2. Install the files (also for every upgrade)
+
+```bash
+sudo GLPI_DIR=/var/www/glpi PHP=php8.3 RELOAD_PHP="systemctl reload php8.3-fpm" deploy/install.sh
+```
+
+It installs the binary in `/usr/local/bin`, copies the plugin into
+`$GLPI_DIR/plugins/realtime`, installs or upgrades it in GLPI (tables, cron task; settings
+are kept) and activates it, restarts the `glpi-realtime` service if there is one, and ends
+with the checks of step 6 (errors are expected on a first install, before steps 3 to 5).
+
+| Setting | Default | |
+|---|---|---|
+| `GLPI_DIR` | `/var/www/glpi` | GLPI's directory (holds `bin/console`) |
+| `PHP` | `php` | PHP command line, e.g. `php8.3` |
+| `RELOAD_PHP` | — | reloads GLPI's PHP after the copy, e.g. `systemctl reload php8.3-fpm` or `systemctl reload apache2` (mod_php); without it the script waits 65 s for PHP's opcache to see the new files |
+| `PREFIX` | `/usr/local` | the binary goes to `$PREFIX/bin` |
+| `GLPI_USER` | owner of `$GLPI_DIR/files` | user running GLPI's console |
+| `SERVICE` | `glpi-realtime` | systemd unit restarted |
+| `CHECK` | `1` | `0`: skip the final checks |
+
+### 3. Server: user, configuration, service (once)
 
 ```bash
 sudo useradd --system --no-create-home --shell /usr/sbin/nologin glpi-realtime
-#   or, with systemd-sysusers: deploy/examples/sysusers.conf in /etc/sysusers.d/
 sudo install -d -m 750 -o root -g glpi-realtime /etc/glpi-realtime
 sudo install -m 640 -o root -g glpi-realtime deploy/examples/config.toml.example /etc/glpi-realtime/config.toml
 sudoedit /etc/glpi-realtime/config.toml      # allowed_origins, listen.group, valkey.url
 glpi-realtime --config /etc/glpi-realtime/config.toml --check
+
+sudo cp deploy/examples/glpi-realtime.service /etc/systemd/system/
+sudoedit /etc/systemd/system/glpi-realtime.service   # SupplementaryGroups
+sudo systemctl daemon-reload && sudo systemctl enable --now glpi-realtime
 ```
 
-`listen.group` is the web server's group (Arch: `http`, Debian/Ubuntu: `www-data`,
-RHEL/Fedora: `nginx` or `apache`): the socket is `0660` so that only it can connect.
+- `allowed_origins`: GLPI's address, e.g. `["https://glpi.example.org"]`.
+- `listen.group` and the unit's `SupplementaryGroups`: the web server's group
+  (Debian/Ubuntu: `www-data`, RHEL/Fedora: `nginx` or `apache`), so that only it can open
+  the socket (`0660`); add Valkey's socket group to `SupplementaryGroups`.
+- The unit is sandboxed (no capabilities, read-only system, syscall filter) and allows
+  20 000 connections.
 
-Copy `deploy/examples/glpi-realtime.service` to `/etc/systemd/system/`, adjust
-`SupplementaryGroups` (Valkey's socket group and the web server's group) and the binary
-path if `PREFIX` is not `/usr/local`, then `systemctl daemon-reload && systemctl enable
---now glpi-realtime`. The unit is sandboxed (no capabilities, read-only system, syscall
-filter) and raises `LimitNOFILE` for 20 000 connections.
+### 4. Valkey (once)
 
-### 3. Valkey (once)
+Start from [`deploy/examples/valkey.conf.example`](deploy/examples/valkey.conf.example):
 
-Protect it: whoever can write to Valkey can forge sessions. Give the server and GLPI an
-ACL user limited to `rt:*` keys and channels (`valkey.conf.example`); set its password in
-`config.toml` (`[valkey] username`, `password`) and in GLPI with
-`bin/console config:set --context=plugin:realtime valkey_password '…'` (encrypted
-with GLPI's key).
+- a unix socket readable by its group: add the `glpi-realtime` user and the user running
+  PHP to that group;
+- `notify-keyspace-events Kgx`, for instant revocation at logout (without it, set
+  `revocation.keyspace_events = false` in `config.toml`: sessions are checked every 15 s);
+- an ACL user limited to the `rt:*` keys and channels: whoever can write to Valkey can
+  forge sessions.
 
+Give that user's password to the server (`config.toml`: `[valkey] username`, `password`)
+and to GLPI (stored encrypted with GLPI's key):
 
-See `deploy/examples/valkey.conf.example`: a unix socket readable by its group (add the
-`glpi-realtime` user and the user running PHP to that group), and
-`notify-keyspace-events Kgx` for instant revocation at logout (else set
-`revocation.keyspace_events = false`: sessions are then checked every 15 s). The plugin
-settings (`valkey_socket`, `valkey_db`, `key_prefix`, `cookie_name`) default to the same
-values as `config.toml.example`; change both sides together.
+```bash
+cd /var/www/glpi       # as the user running GLPI (here www-data)
+sudo -u www-data php bin/console config:set --context=plugin:realtime valkey_username glpi-rt
+sudo -u www-data php bin/console config:set --context=plugin:realtime valkey_password '…'
+```
 
-### 4. Web server (once)
+The plugin's other settings (`valkey_socket`, `valkey_db`, `key_prefix`, `cookie_name`)
+default to the values of `config.toml.example`: change both sides together
+([Configuration](#configuration)).
+
+### 5. Web server (once)
 
 The browser opens `wss://<glpi-host>/ws`: the GLPI vhost proxies that path to the
 server's unix socket, with WebSocket upgrade and long timeouts. Full examples:
@@ -194,7 +181,7 @@ For 20 000 WebSockets, raise the web server's limits (nginx: `worker_rlimit_nofi
 `worker_connections`; Apache event MPM: `MaxRequestWorkers` and related), as noted in the
 examples.
 
-### 5. Check
+### 6. Check
 
 **Setup > Plugins > Realtime** (the plugin's configuration page, for users who may
 change GLPI's configuration) checks everything the real-time layer needs and says how to
@@ -215,23 +202,40 @@ The web server is checked through GLPI's URL (as browsers reach it): `/ws` must 
 server, and a WebSocket upgrade must get through with GLPI's origin. Exit code, as
 monitoring tools expect it: 0 everything works, 1 warnings, 2 errors.
 
-### Releases
-
-`scripts/release.sh` builds `dist/glpi-realtime-<version>-linux-<arch>.tar.gz` (the
-binary, static when the `x86_64-unknown-linux-musl` target is installed, plus `deploy/`,
-the plugin and the docs: run `deploy/install.sh` from it, nothing to compile) and
-`dist/glpi-plugin-realtime-<version>.tar.bz2` (the plugin alone). The CI workflow
-(`.github/workflows/ci.yml`) runs every suite and the dependency audits, and publishes
-those archives for `v*` tags.
-
 ### Upgrading
 
-Run step 1 again (see [CHANGELOG.md](CHANGELOG.md) for what to edit yourself). Configuration is never changed by an upgrade; notes for versions that
-need you to edit it:
+Download the new release (step 1) and run step 2 again. Configuration is never changed
+by an upgrade; [CHANGELOG.md](CHANGELOG.md) says when you have to edit it, e.g.:
 
-- **0.3.0**: changes and problems have every feature: add `"Change", "Problem"` to
-  `security.allowed_itemtypes` in `config.toml` (the plugin adds them to its own list if
-  it still had its old default).
+- **0.3.0**: add `"Change", "Problem"` to `security.allowed_itemtypes` in `config.toml`.
+
+## Build and test
+
+Requirements: Rust ≥ 1.85, Node ≥ 22.6, `valkey-server` (integration tests),
+`php-legacy` with the `redis` extension (plugin and interop tests).
+
+```bash
+./scripts/test-all.sh          # Rust unit + integration, PHP plugin, client
+(cd server && cargo build --release)
+(cd client && npm ci && npm run build)
+```
+
+End-to-end, against a disposable GLPI in containers (Docker or Podman; any
+`docker.io/glpi/glpi` tag with `GLPI_VERSION`):
+
+```bash
+e2e/env/up.sh && (cd e2e && npm ci && E2E_ENV_FILE=../.e2e.local.env npx playwright test)
+e2e/env/down.sh
+```
+
+The CI runs them on GLPI 11.0, 12.0.0, the latest 12.0 and the next one (nightly, warning only).
+
+Release archives (what users install): `scripts/release.sh` builds
+`dist/glpi-realtime-<version>-linux-<arch>.tar.gz` (static binary when the
+`x86_64-unknown-linux-musl` target is installed, plugin, `deploy/`, docs),
+`dist/glpi-plugin-realtime-<version>.tar.bz2` and `SHA256SUMS`. The CI publishes them for
+`v*` tags, once every suite, the dependency audits and the end-to-end tests pass.
+`deploy/install.sh` also works from a built repository.
 
 ## Configuration
 
