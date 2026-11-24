@@ -100,6 +100,7 @@ const CSS = `
 .glpi-rt-bell-badge { position:absolute; top:-.25rem; right:-.25rem; min-width:1.25rem; height:1.25rem; padding:0 .3rem; border-radius:.625rem;
   background:var(--tblr-danger, #d63939); color:#fff; font-size:.7rem; font-weight:700; line-height:1.25rem; text-align:center; }
 .glpi-rt-bell-badge[hidden] { display:none; }
+.glpi-rt-sr { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
 .glpi-rt-bell.is-ringing .glpi-rt-bell-button { animation:glpi-rt-ring .8s ease-in-out 2; }
 @keyframes glpi-rt-ring { 0%,100% { transform:rotate(0) } 20% { transform:rotate(15deg) } 40% { transform:rotate(-12deg) } 60% { transform:rotate(8deg) } 80% { transform:rotate(-4deg) } }
 .glpi-rt-bell-panel { position:absolute; right:0; bottom:3.5rem; width:min(26rem, calc(100vw - 2rem)); max-height:min(36rem, calc(100vh - 6rem));
@@ -192,8 +193,11 @@ export class Bell {
     this.badge = h("span", { class: "glpi-rt-bell-badge", hidden: true });
     const button = h(
       "button",
-      { type: "button", class: "glpi-rt-bell-button", "aria-label": t.title, "aria-haspopup": "dialog", onclick: () => this.toggle() },
+      // Named by its content ("Notifications 3"): screen readers say what is shown, the
+      // badge included (WCAG 2.5.3, label in name).
+      { type: "button", class: "glpi-rt-bell-button", "aria-haspopup": "dialog", onclick: () => this.toggle() },
       icon("bell"),
+      h("span", { class: "glpi-rt-sr", text: t.title }),
       this.badge,
     );
     this.tabsEl = h("div", { class: "glpi-rt-tabs", role: "tablist" });
@@ -294,7 +298,6 @@ export class Bell {
     const total = list.counts.all ?? 0;
     this.badge.hidden = total === 0;
     this.badge.textContent = total > 99 ? "99+" : String(total);
-    this.root.querySelector(".glpi-rt-bell-button")!.setAttribute("aria-label", `${t.title} (${total})`);
 
     this.tabsEl.replaceChildren(
       ...shown.map((tab) => {
