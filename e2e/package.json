@@ -1,0 +1,12 @@
+{
+  "name": "glpi-realtime-e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.0",
+    "dotenv": "16.4.5"
+  }
+}

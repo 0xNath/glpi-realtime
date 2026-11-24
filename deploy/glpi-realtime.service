@@ -1,0 +1,55 @@
+[Unit]
+Description=glpi-realtime WebSocket server
+Documentation=file:///usr/local/share/doc/glpi-realtime/README.md
+After=network.target valkey.service
+Wants=valkey.service
+
+[Service]
+Type=exec
+User=glpi-realtime
+Group=glpi-realtime
+# valkey: access to /run/valkey/valkey.sock; http: give the socket to nginx.
+SupplementaryGroups=valkey http
+ExecStartPre=/usr/local/bin/glpi-realtime --config /etc/glpi-realtime/config.toml --check
+ExecStart=/usr/local/bin/glpi-realtime --config /etc/glpi-realtime/config.toml
+Restart=on-failure
+RestartSec=2
+TimeoutStopSec=15
+
+# /run/glpi-realtime/rt.sock (socket itself is 0660 glpi-realtime:http)
+RuntimeDirectory=glpi-realtime
+RuntimeDirectoryMode=0755
+
+# 20 000 WebSockets + Valkey connections
+LimitNOFILE=65536
+
+# Sandbox
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+# @privileged includes @chown, needed once at startup to give the socket to nginx's group.
+SystemCallFilter=@chown
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

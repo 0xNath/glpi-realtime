@@ -1,0 +1,230 @@
+//! Test harness: a throw-away Valkey and a server bound to 127.0.0.1:0.
+
+#![allow(dead_code)]
+
+use std::net::SocketAddr;
+use std::process::{Child, Command, Stdio};
+use std::time::Duration;
+
+use fred::prelude::*;
+use futures_util::{SinkExt, StreamExt};
+use glpi_realtime::auth::token_hash;
+use glpi_realtime::config::{Config, Listen};
+use glpi_realtime::server::{self, Running};
+use tokio::net::TcpStream;
+use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+use tokio_tungstenite::tungstenite::http::HeaderValue;
+use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
+use tokio_tungstenite::tungstenite::{Error as WsError, Message};
+use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
+
+pub const ORIGIN: &str = "https://glpi.test";
+
+pub struct Valkey {
+    child: Child,
+    _dir: tempfile::TempDir,
+    /// Unix socket of this test's private Valkey (no TCP port: no collisions between tests).
+    pub socket: std::path::PathBuf,
+    pub client: Client,
+}
+
+impl Drop for Valkey {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+/// Starts a private `valkey-server`; returns None (test skipped) when the binary is missing.
+pub async fn valkey() -> Option<Valkey> {
+    let bin = ["valkey-server", "redis-server"].into_iter().find(|b| {
+        Command::new(b)
+            .arg("--version")
+            .stdout(Stdio::null())
+            .status()
+            .is_ok()
+    })?;
+    let dir = tempfile::tempdir().unwrap();
+    let socket = dir.path().join("valkey.sock");
+    let child = Command::new(bin)
+        .args(["--port", "0", "--save", "", "--appendonly", "no"])
+        .args(["--notify-keyspace-events", "Kgx"])
+        .arg("--unixsocket")
+        .arg(&socket)
+        .arg("--dir")
+        .arg(dir.path())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    for _ in 0..500 {
+        if std::os::unix::net::UnixStream::connect(&socket).is_ok() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let mut cfg =
+        fred::prelude::Config::from_url_unix(&format!("unix://{}", socket.display())).unwrap();
+    cfg.database = Some(6);
+    let client = Builder::from_config(cfg).build().unwrap();
+    client.init().await.unwrap();
+    Some(Valkey {
+        child,
+        _dir: dir,
+        socket,
+        client,
+    })
+}
+
+pub fn config(vk: &Valkey) -> Config {
+    let mut c = Config {
+        listen: Listen::Tcp {
+            addr: "127.0.0.1:0".parse().unwrap(),
+        },
+        ..Config::default()
+    };
+    c.valkey.url = format!("unix://{}", vk.socket.display());
+    c.valkey.db = 6;
+    c.valkey.pool_size = 2;
+    c.security.allowed_origins = vec![ORIGIN.into()];
+    c.shutdown.grace_secs = 2;
+    c
+}
+
+pub async fn start(cfg: Config) -> (Running, SocketAddr) {
+    let r = server::start(cfg, None).await.unwrap();
+    let addr = r.local_addr.unwrap();
+    (r, addr)
+}
+
+/// Creates a GLPI session as the plugin would; returns the clear token (cookie value).
+pub async fn session(vk: &Valkey, uid: u64, name: &str) -> String {
+    let token: String = (0..64)
+        .map(|i| char::from(b"0123456789abcdef"[(uid as usize * 7 + i * 13) % 16]))
+        .collect();
+    let token = format!("{:0>64}", &token[..64]);
+    let _: () = vk
+        .client
+        .hset(
+            format!("rt:s:{}", token_hash(&token)),
+            [("uid", uid.to_string()), ("name", name.to_string())],
+        )
+        .await
+        .unwrap();
+    token
+}
+
+pub async fn grant(vk: &Valkey, token: &str, room: &str, flags: &[(&str, &str)]) {
+    let key = format!("rt:g:{}:{room}", token_hash(token));
+    let _: () = vk.client.hset(key, flags.to_vec()).await.unwrap();
+}
+
+pub type Ws = WebSocketStream<MaybeTlsStream<TcpStream>>;
+
+pub async fn connect(
+    addr: SocketAddr,
+    origin: Option<&str>,
+    token: Option<&str>,
+) -> Result<Ws, WsError> {
+    let mut req = format!("ws://{addr}/ws").into_client_request().unwrap();
+    if let Some(o) = origin {
+        req.headers_mut()
+            .insert("Origin", HeaderValue::from_str(o).unwrap());
+    }
+    if let Some(t) = token {
+        req.headers_mut().insert(
+            "Cookie",
+            HeaderValue::from_str(&format!("other=1; glpi_rt={t}")).unwrap(),
+        );
+    }
+    tokio_tungstenite::connect_async(req)
+        .await
+        .map(|(ws, _)| ws)
+}
+
+pub fn http_status(err: &WsError) -> Option<u16> {
+    match err {
+        WsError::Http(resp) => Some(resp.status().as_u16()),
+        _ => None,
+    }
+}
+
+/// Next JSON text message, skipping control frames and `presence` broadcasts.
+pub async fn recv(ws: &mut Ws) -> serde_json::Value {
+    recv_within(ws, Duration::from_secs(3))
+        .await
+        .expect("timed out waiting for a message")
+}
+
+pub async fn recv_within(ws: &mut Ws, d: Duration) -> Option<serde_json::Value> {
+    recv_matching(ws, d, |m| m["t"] != "presence").await
+}
+
+/// Next `presence` message for `room`.
+pub async fn recv_presence(ws: &mut Ws, room: &str) -> serde_json::Value {
+    recv_matching(ws, Duration::from_secs(5), |m| {
+        m["t"] == "presence" && m["room"] == room
+    })
+    .await
+    .expect("timed out waiting for presence")
+}
+
+/// Ids of the users in a `presence` message.
+pub fn present(m: &serde_json::Value) -> Vec<u64> {
+    m["users"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|u| u["id"].as_u64().unwrap())
+        .collect()
+}
+
+pub async fn recv_matching(
+    ws: &mut Ws,
+    d: Duration,
+    pred: impl Fn(&serde_json::Value) -> bool,
+) -> Option<serde_json::Value> {
+    let deadline = tokio::time::Instant::now() + d;
+    loop {
+        let m = tokio::time::timeout_at(deadline, ws.next())
+            .await
+            .ok()??
+            .ok()?;
+        if let Message::Text(t) = m {
+            let v: serde_json::Value = serde_json::from_str(&t).unwrap();
+            if pred(&v) {
+                return Some(v);
+            }
+        }
+    }
+}
+
+/// Waits for the close frame and returns its code.
+pub async fn close_code(ws: &mut Ws) -> Option<CloseCode> {
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    loop {
+        match tokio::time::timeout_at(deadline, ws.next()).await {
+            Ok(Some(Ok(Message::Close(f)))) => return f.map(|f| f.code),
+            Ok(Some(Ok(_))) => continue,
+            _ => return None,
+        }
+    }
+}
+
+pub async fn send(ws: &mut Ws, v: serde_json::Value) {
+    ws.send(Message::Text(v.to_string().into())).await.unwrap();
+}
+
+/// Minimal HTTP GET for /health and /metrics.
+pub async fn http_get(addr: SocketAddr, path: &str) -> (u16, String) {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let mut s = TcpStream::connect(addr).await.unwrap();
+    s.write_all(format!("GET {path} HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n").as_bytes())
+        .await
+        .unwrap();
+    let mut buf = String::new();
+    s.read_to_string(&mut buf).await.unwrap();
+    let code = buf[9..12].parse().unwrap();
+    let body = buf.split("\r\n\r\n").nth(1).unwrap_or("").to_string();
+    (code, body)
+}

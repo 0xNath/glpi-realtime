@@ -1,0 +1,194 @@
+<?php
+
+/**
+ * Minimal GLPI doubles so the plugin classes can run against a real Valkey
+ * without a GLPI installation. Usage: php -d extension=igbinary -d extension=redis <script> <valkey-port>
+ */
+
+declare(strict_types=1);
+
+define('READ', 1);
+
+final class Session
+{
+    public static mixed $uid = false;
+    /** @var array<string, int> */
+    public static array $rights = [];
+
+    public static function getLoginUserID($force_human = true): mixed
+    {
+        return self::$uid;
+    }
+
+    public static function haveRight(string $module, int $right): bool
+    {
+        return ((self::$rights[$module] ?? 0) & $right) === $right;
+    }
+}
+
+final class Config
+{
+    public static array $values = [];
+
+    public static function getConfigurationValues($context, array $names = []): array
+    {
+        return self::$values;
+    }
+}
+
+final class Toolbox
+{
+    public static array $logs = [];
+
+    public static function getFgColor(string $color = "", int $offset = 40, bool $inherit_if_transparent = false): string
+    {
+        return '#ffffff';
+    }
+
+    public static function logInFile($name, $text): void
+    {
+        self::$logs[] = [$name, $text];
+    }
+}
+
+function htmlescape(mixed $str): string
+{
+    return htmlspecialchars((string) $str, ENT_QUOTES);
+}
+
+final class Entity
+{
+    public static bool $initials = true;
+
+    public static function getUsedConfig($fieldref, $entities_id, $fieldval = '', $default_value = -2)
+    {
+        return $fieldref === 'display_users_initials' ? self::$initials : null;
+    }
+}
+
+final class User
+{
+    /** @var array<int, array{name: string, picture: ?string}> */
+    public static array $db = [];
+    public array $fields = [];
+
+    public function getFromDB($id): bool
+    {
+        if (!isset(self::$db[$id])) {
+            return false;
+        }
+        $this->fields = self::$db[$id] + ['id' => $id];
+        return true;
+    }
+
+    public function getThumbnailPicturePath(bool $enable_anonymization = false): ?string
+    {
+        return $this->fields['picture'] ? '/front/document.send.php?file=_pictures/' . $this->fields['picture'] : null;
+    }
+
+    public function getPicturePath(bool $enable_anonymization = false): string
+    {
+        return '/pics/picture.png';
+    }
+
+    public function getUserInitials(bool $enable_anonymization = false): string
+    {
+        return strtoupper(substr($this->fields['name'], 0, 2));
+    }
+
+    public function getUserInitialsBgColor(bool $enable_anonymization = false): string
+    {
+        return '#5a7f9e';
+    }
+}
+
+abstract class CommonDBTM
+{
+    public array $fields = [];
+    public bool $readable = true;
+
+    public function getID(): int
+    {
+        return (int) ($this->fields['id'] ?? 0);
+    }
+
+    public function isNewItem(): bool
+    {
+        return $this->getID() <= 0;
+    }
+
+    public function can($id, $right): bool
+    {
+        return $this->readable;
+    }
+}
+
+abstract class CommonITILObject extends CommonDBTM
+{
+    public bool $updatable = false;
+
+    public function canUpdateItem(): bool
+    {
+        return $this->updatable;
+    }
+
+    public function canAddFollowups(): bool
+    {
+        return true;
+    }
+
+    public function canAddTasks(): bool
+    {
+        return false;
+    }
+
+    public function canSolve(): bool
+    {
+        return false;
+    }
+}
+
+final class Ticket extends CommonITILObject {}
+
+final class Computer extends CommonDBTM {}
+
+final class ITILFollowup
+{
+    public const SEEPRIVATE = 8192;
+    public const SEEPRIVATEGROUPS = 65536;
+    public static string $rightname = 'followup';
+}
+
+abstract class CommonITILTask
+{
+    public const SEEPRIVATE = 8192;
+    public const SEEPRIVATEGROUPS = 65536;
+    public static string $rightname = 'task';
+}
+
+require __DIR__ . '/../setup.php';
+
+use GlpiPlugin\Realtime\Valkey;
+
+/** $target: TCP port on 127.0.0.1, or path of a unix socket. */
+function test_valkey(string $target): Redis
+{
+    $r = new Redis();
+    if (str_starts_with($target, '/')) {
+        $r->connect($target);
+    } else {
+        $r->connect('127.0.0.1', (int) $target, 1.0);
+    }
+    $r->select(6);
+    Valkey::$override = $r;
+    return $r;
+}
+
+$GLOBALS['failures'] = 0;
+function check(bool $cond, string $label): void
+{
+    echo ($cond ? "ok   " : "FAIL ") . $label . "\n";
+    if (!$cond) {
+        $GLOBALS['failures']++;
+    }
+}

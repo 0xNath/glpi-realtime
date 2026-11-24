@@ -1,0 +1,244 @@
+import type { Avatar, PresenceUser } from "./protocol.ts";
+
+export const MAX_AVATARS = 5;
+
+/** Other people on the item: the current user's own tabs are not shown. */
+export function others(users: PresenceUser[], selfId: number | undefined): PresenceUser[] {
+  return users.filter((u) => u.id !== selfId);
+}
+
+export function initials(name: string): string {
+  const words = name.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  const letters = words.length >= 2 ? words[0][0] + words[1][0] : (words[0] ?? "?").slice(0, 2);
+  return letters.toUpperCase();
+}
+
+/** Stable color per user. */
+export function hue(id: number): number {
+  return (id * 137) % 360;
+}
+
+interface Labels {
+  also: string;
+  more: (n: number) => string;
+  active: string;
+  inactive: string;
+}
+
+const LABELS: Record<string, Labels> = {
+  fr: {
+    also: "Également sur ce ticket :",
+    more: (n) => `et ${n} autre${n > 1 ? "s" : ""}`,
+    active: "actif sur ce ticket",
+    inactive: "inactif (onglet en arrière-plan ou inutilisé)",
+  },
+  en: {
+    also: "Also on this ticket:",
+    more: (n) => `and ${n} more`,
+    active: "active on this ticket",
+    inactive: "inactive (tab in background or unused)",
+  },
+};
+
+export function labels(lang: string) {
+  return LABELS[lang.slice(0, 2).toLowerCase()] ?? LABELS.en;
+}
+
+const STYLE_ID = "glpi-rt-presence-style";
+const CSS = `
+.glpi-rt-presence { display:flex; align-items:center; gap:.35rem; padding:0 .5rem; }
+/* GLPI's title bar orders its children (1..3): stay after the navigation buttons. */
+#navigationheader > .glpi-rt-presence { order:4; }
+.glpi-rt-presence[hidden] { display:none !important; }
+.glpi-rt-presence .glpi-rt-label { font-size:.75rem; color:var(--tblr-secondary, #667382); white-space:nowrap; }
+.glpi-rt-presence .glpi-rt-avatars { display:flex; gap:.45rem; padding:3px; }
+.glpi-rt-presence .glpi-rt-avatar { width:1.75rem; height:1.75rem; border-radius:50%; display:inline-flex;
+  align-items:center; justify-content:center; font-size:.7rem; font-weight:600; color:#fff;
+  background-size:cover; background-position:center;
+  box-shadow:0 0 0 2px var(--tblr-bg-surface, #fff); cursor:default; transition:box-shadow .3s, opacity .3s; }
+/* Ring: green = active on their tab, grey = inactive. */
+.glpi-rt-presence .glpi-rt-avatar.is-active { box-shadow:0 0 0 2px var(--tblr-bg-surface, #fff), 0 0 0 4px var(--tblr-green, #2fb344); }
+.glpi-rt-presence .glpi-rt-avatar.is-inactive { opacity:.55; box-shadow:0 0 0 2px var(--tblr-bg-surface, #fff), 0 0 0 4px var(--tblr-gray-400, #9ba9be); }
+.glpi-rt-presence .glpi-rt-more { background:var(--tblr-secondary, #667382); }
+`;
+
+function ensureStyle(doc: Document): void {
+  if (doc.getElementById(STYLE_ID)) return;
+  const style = doc.createElement("style");
+  style.id = STYLE_ID;
+  style.textContent = CSS;
+  doc.head.appendChild(style);
+}
+
+/** Where to show the bar: GLPI's item title bar, else above the item. */
+function anchor(doc: Document): { parent: Element; before: Node | null } | null {
+  const header = doc.getElementById("navigationheader");
+  if (header) return { parent: header, before: null };
+  const container = doc.getElementById("itil-object-container");
+  if (container) return { parent: container, before: container.firstChild };
+  return null;
+}
+
+const SAFE_PATH = /^\/(?!\/)[A-Za-z0-9/._~?=&%+,:;@-]{0,511}$/;
+const COLOR = /^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
+
+/** What to draw for a user: GLPI's picture or initials, else our own fallback. */
+export function look(u: PresenceUser): { picture: string | null; text: string; bg: string; fg: string } {
+  const a: Partial<Avatar> = u.avatar ?? {};
+  const picture = a.picture && SAFE_PATH.test(a.picture) ? a.picture : null;
+  return {
+    picture,
+    text: picture ? "" : a.initials || initials(u.name),
+    bg: a.color && COLOR.test(a.color) ? a.color : `hsl(${hue(u.id)} 55% 42%)`,
+    fg: a.fg && COLOR.test(a.fg) ? a.fg : "#ffffff",
+  };
+}
+
+/**
+ * GLPI's own user card on hover, as on the actors of a ticket: same HTML (ajax/comments.php,
+ * which applies GLPI's rights), same Bootstrap popover, same 300 ms hide delay, kept open
+ * while the card itself is hovered. Unlike GLPI's helper, the card opens below the avatar
+ * and is shifted to stay on screen instead of jumping to the side.
+ */
+const cards = new Map<number, Promise<string>>();
+
+function cardHtml(id: number): Promise<string> {
+  let p = cards.get(id);
+  if (!p) {
+    const $ = (globalThis as any).jQuery;
+    const root: string = (globalThis as any).CFG_GLPI?.root_doc ?? "";
+    p = $
+      ? Promise.resolve($.ajax({ url: `${root}/ajax/comments.php`, type: "POST", data: { itemtype: "User", value: id } }))
+          .then((html: unknown) => (typeof html === "string" ? html : ""))
+          .catch(() => "")
+      : Promise.resolve("");
+    cards.set(id, p);
+    // Pictures and names can change: do not keep cards forever.
+    setTimeout(() => cards.delete(id), 5 * 60_000);
+  }
+  return p;
+}
+
+function attachCard(el: HTMLElement, id: number): void {
+  const bs = (globalThis as any).bootstrap;
+  if (!bs?.Popover) return;
+  let hideTimer: ReturnType<typeof setTimeout> | undefined;
+  let popover: any = null;
+  const overCard = () => !!popover?.tip?.matches(":hover");
+  const scheduleHide = () => {
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(() => {
+      if (overCard() || el.matches(":hover")) return scheduleHide();
+      popover?.hide();
+    }, 300);
+  };
+  const show = async () => {
+    clearTimeout(hideTimer);
+    const html = await cardHtml(id);
+    if (!html || !el.isConnected || !el.matches(":hover, :focus")) return;
+    if (!popover) {
+      popover = new bs.Popover(el, {
+        html: true,
+        sanitize: false, // GLPI's own HTML, as in GLPI's helper
+        content: html,
+        trigger: "manual",
+        placement: "bottom",
+        container: "body",
+        customClass: "glpi-rt-card",
+        popperConfig: (config: any) => ({
+          ...config,
+          modifiers: [
+            ...(config.modifiers ?? []),
+            { name: "flip", options: { fallbackPlacements: ["top"], altBoundary: false, altAxis: false } },
+            { name: "preventOverflow", options: { padding: 8 } },
+          ],
+        }),
+      });
+    }
+    document.querySelectorAll(".popover").forEach((p) => p !== popover.tip && p.classList.contains("glpi-rt-card") && p.remove());
+    popover.show();
+    popover.tip?.addEventListener("mouseleave", scheduleHide);
+  };
+  el.tabIndex = 0;
+  el.addEventListener("mouseenter", show);
+  el.addEventListener("focus", show);
+  el.addEventListener("mouseleave", scheduleHide);
+  el.addEventListener("blur", scheduleHide);
+}
+
+function disposeCard(el: Element): void {
+  const bs = (globalThis as any).bootstrap;
+  bs?.Popover?.getInstance?.(el)?.dispose?.();
+}
+
+function paint(el: HTMLElement, u: PresenceUser, status: string): void {
+  const l = look(u);
+  el.className = `glpi-rt-avatar ${u.active ? "is-active" : "is-inactive"}`;
+  el.dataset.active = String(u.active);
+  el.dataset.glpiAvatar = l.picture ? "picture" : "initials";
+  el.style.backgroundImage = l.picture ? `url("${l.picture}")` : "";
+  el.style.backgroundColor = l.picture ? "transparent" : l.bg;
+  el.style.color = l.fg;
+  el.textContent = l.text;
+  el.setAttribute("aria-label", `${u.name} — ${status}`);
+}
+
+/** Renders (or hides) the presence bar of `room`. Avatars are updated in place, so that
+ *  an open user card is not destroyed by an unrelated change. */
+export function render(doc: Document, room: string, users: PresenceUser[], selfId: number | undefined): void {
+  const id = `glpi-rt-presence-${room.replace(/[^A-Za-z0-9_-]/g, "-")}`;
+  let bar = doc.getElementById(id);
+  if (!bar) {
+    const at = anchor(doc);
+    if (!at) return;
+    ensureStyle(doc);
+    bar = doc.createElement("div");
+    bar.id = id;
+    bar.className = "glpi-rt-presence";
+    bar.setAttribute("data-room", room);
+    bar.setAttribute("aria-live", "polite");
+    const label = doc.createElement("span");
+    label.className = "glpi-rt-label";
+    const avatars = doc.createElement("span");
+    avatars.className = "glpi-rt-avatars";
+    bar.append(label, avatars);
+    at.parent.insertBefore(bar, at.before);
+  }
+  const label = bar.querySelector<HTMLElement>(".glpi-rt-label")!;
+  const avatars = bar.querySelector<HTMLElement>(".glpi-rt-avatars")!;
+
+  const list = others(users, selfId);
+  bar.hidden = list.length === 0;
+  const t = labels(doc.documentElement.lang || navigator.language || "en");
+  label.textContent = t.also;
+
+  const shown = list.slice(0, MAX_AVATARS);
+  const existing = new Map<string, HTMLElement>();
+  avatars.querySelectorAll<HTMLElement>(".glpi-rt-avatar[data-uid]").forEach((el) => existing.set(el.dataset.uid!, el));
+  for (const u of shown) {
+    let el = existing.get(String(u.id));
+    existing.delete(String(u.id));
+    if (!el) {
+      el = doc.createElement("span");
+      el.dataset.uid = String(u.id);
+      attachCard(el, u.id);
+    }
+    paint(el, u, u.active ? t.active : t.inactive);
+    avatars.appendChild(el); // (re)ordered by arrival
+  }
+  for (const el of existing.values()) {
+    disposeCard(el);
+    el.remove();
+  }
+
+  avatars.querySelector(".glpi-rt-more")?.remove();
+  const hiddenCount = list.length - MAX_AVATARS;
+  if (hiddenCount > 0) {
+    const more = doc.createElement("span");
+    more.className = "glpi-rt-avatar glpi-rt-more";
+    more.textContent = `+${hiddenCount}`;
+    more.title = list.slice(MAX_AVATARS).map((u) => u.name).join(", ");
+    more.setAttribute("aria-label", t.more(hiddenCount));
+    avatars.appendChild(more);
+  }
+}

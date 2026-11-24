@@ -1,0 +1,47 @@
+# glpi-realtime configuration.
+# Every value can be overridden by environment: GLPI_RT_<SECTION>__<KEY>,
+# e.g. GLPI_RT_LIMITS__MAX_CONNECTIONS=30000.
+
+[listen]
+type = "unix"                       # or: type = "tcp", addr = "127.0.0.1:8090"
+path = "/run/glpi-realtime/rt.sock"
+mode = 0o660
+group = "http"                      # nginx's group; the service must be a member
+
+[valkey]
+url = "unix:///run/valkey/valkey.sock"
+db = 6                              # must match the plugin setting valkey_db
+pool_size = 8
+key_prefix = "rt:"                  # must match the plugin setting key_prefix
+
+[security]
+cookie_name = "glpi_rt"             # must match the plugin setting cookie_name
+# Exact browser origins allowed to open the WebSocket (CSWSH protection).
+allowed_origins = ["https://glpi.example.org"]
+allowed_itemtypes = ["Ticket"]
+
+[limits]
+max_connections = 25000             # per instance
+max_connections_per_user = 10       # tabs
+max_message_bytes = 65536
+max_rooms_per_connection = 50
+messages_per_second = 20            # per connection
+burst = 40
+user_messages_per_second = 50       # all connections of a user
+user_burst = 100
+max_violations = 20                 # rate-limit hits before closing
+outbound_queue = 256                # slower clients are dropped (close 1013)
+ping_interval_secs = 30
+idle_timeout_secs = 90
+
+[revocation]
+sweep_interval_secs = 15
+# Instant logout: needs `notify-keyspace-events Kgx` in valkey.conf.
+keyspace_events = true
+
+[shutdown]
+grace_secs = 5
+
+[log]
+format = "text"                     # or "json"
+filter = "info"                     # RUST_LOG overrides
