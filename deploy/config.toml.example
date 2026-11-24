@@ -44,6 +44,11 @@ keyspace_events = true
 # grant from GLPI before it is removed from the item.
 regrant_timeout_secs = 30
 
+[locks]
+# Single editor for ticket fields: a lock its holder stops renewing expires after this.
+ttl_secs = 30
+sweep_secs = 5                      # how often expired locks are noticed
+
 [shutdown]
 grace_secs = 5
 

@@ -18,6 +18,7 @@ sleep 0.3
 "$PHP" "${PHPX[@]}" "$ROOT/plugin/tests/plugin_test.php" "$PORT"
 "$PHP" "${PHPX[@]}" "$ROOT/plugin/tests/events_test.php" "$PORT"
 "$PHP" "${PHPX[@]}" "$ROOT/plugin/tests/inbox_test.php"
+"$PHP" "${PHPX[@]}" "$ROOT/plugin/tests/solution_test.php"
 
 echo "== Client"
 (cd "$ROOT/client" && npm run -s typecheck && npm test --silent)

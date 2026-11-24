@@ -21,6 +21,7 @@ use tracing::info;
 
 use crate::config::{Config, Listen};
 use crate::events::Hub;
+use crate::locks::Locks;
 use crate::presence::Presence;
 use crate::protocol::ByeReason;
 use crate::registry::Registry;
@@ -35,6 +36,7 @@ pub struct AppState {
     pub user_limiter: Arc<DefaultKeyedRateLimiter<u64>>,
     pub presence: Arc<Presence>,
     pub hub: Arc<Hub>,
+    pub locks: Arc<Locks>,
     pub metrics: Option<PrometheusHandle>,
 }
 
@@ -113,13 +115,16 @@ pub async fn start(cfg: Config, metrics: Option<PrometheusHandle>) -> anyhow::Re
         NonZeroU32::new(cfg.limits.user_messages_per_second).unwrap_or(NonZeroU32::MIN),
     )
     .allow_burst(NonZeroU32::new(cfg.limits.user_burst).unwrap_or(NonZeroU32::MIN));
+    let hub = Hub::new(Arc::clone(&registry));
+    let locks = Locks::new(store.clone(), Arc::clone(&hub), cfg.locks.ttl_secs);
     let state = AppState {
         cfg: Arc::clone(&cfg),
         store: store.clone(),
         registry: Arc::clone(&registry),
         user_limiter: Arc::new(RateLimiter::keyed(user_quota)),
         presence: Presence::new(store.clone(), Arc::clone(&registry), cfg.presence.ttl_secs),
-        hub: Hub::new(Arc::clone(&registry)),
+        hub,
+        locks,
         metrics,
     };
     let (stop_tx, stop_rx) = watch::channel(false);
@@ -131,6 +136,10 @@ pub async fn start(cfg: Config, metrics: Option<PrometheusHandle>) -> anyhow::Re
     ));
     tokio::spawn(Arc::clone(&state.presence).listen(Arc::clone(&cfg), stop_rx.clone()));
     tokio::spawn(Arc::clone(&state.hub).listen(Arc::clone(&cfg), store.clone(), stop_rx.clone()));
+    tokio::spawn(
+        Arc::clone(&state.locks).sweep(Duration::from_secs(cfg.locks.sweep_secs), stop_rx.clone()),
+    );
+    tokio::spawn(Arc::clone(&state.locks).listen(Arc::clone(&cfg), stop_rx.clone()));
     tokio::spawn(revocation::sweep(
         store.clone(),
         Arc::clone(&registry),

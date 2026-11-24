@@ -8,7 +8,7 @@ anyhow = "1.0.105"
 axum = { version = "0.8.9", features = ["ws"] }
 clap = { version = "4.6.9", features = ["derive"] }
 figment = { version = "0.10.19", features = ["toml", "env"] }
-fred = { version = "10.1.0", default-features = false, features = ["i-hashes", "i-hexpire", "i-keys", "i-pubsub", "i-std", "subscriber-client", "unix-sockets"] }
+fred = { version = "10.1.0", default-features = false, features = ["i-hashes", "i-hexpire", "i-keys", "i-pubsub", "i-scripts", "i-std", "subscriber-client", "unix-sockets"] }
 futures-util = "0.3.34"
 governor = "0.10.4"
 hex = "0.4.3"

@@ -26,6 +26,9 @@ Every message carries `"v": 1`. A client may add an integer `"id"`, echoed in th
 | `unsub` | `room` | `unsubscribed` |
 | `ping` | — | `pong` |
 | `activity` | `active` (bool) | none; presence lists change for the other members |
+| `lock` | `room`, `force?`, `scope?` (`fields`, `solution`) | `lock` (see [Single editor](#single-editor)) |
+| `unlock` | `room`, `scope?` | `lock` |
+| `compose` | `room`, `kind` (`followup`, `task`, `solution`, `validation`, `document`) or `null` | none; presence lists change |
 
 A `sub` succeeds only if GLPI wrote a grant `rt:g:{hash}:{room}` with `read=1` for this
 session (the plugin does it when the item is displayed, or through `ajax/grant.php`).
@@ -36,15 +39,16 @@ grant is gone, removes the connection from the room and answers `forbidden`.
 
 | `t` | Fields | When |
 |---|---|---|
-| `hello` | `conn`, `user{id,name}`, `ping_interval` | right after the handshake |
+| `hello` | `conn`, `user{id,name}`, `ping_interval`, `lock_ttl` | right after the handshake |
 | `subscribed` / `unsubscribed` | `room` | replies |
 | `unsubscribed` | `room`, `reason: "forbidden"` | the server removed the subscription (unanswered `regrant`) |
 | `pong` | — | reply |
 | `error` | `code`, `message` | see codes |
 | `bye` | `reason` | just before the server closes |
-| `presence` | `room`, `users[{id,name,since,active,avatar?}]` | after `subscribed`, then whenever the list changes |
+| `presence` | `room`, `users[{id,name,since,active,avatar?,composing?}]` | after `subscribed`, then whenever the list changes |
 | `event` | `room`, `kind`, `by{id,name}`, `item{type,id}?`, `fields[]?` | something changed on the item |
 | `regrant` | `room` | rights on the item may have changed |
+| `lock` | `room`, `scope`, `holder{conn,id,name,since,avatar?}` or `null` | after `subscribed`, on change, reply to `lock`/`unlock` |
 | `notification` | `nid`, `kind`, `room`, `by{id,name}`, `alert` | the user's notifications changed |
 
 Error codes: `bad_request`, `unsupported_version`, `forbidden`, `rate_limited`,
@@ -101,6 +105,48 @@ on no event for that room. The client calls `ajax/grant.php` (GLPI rewrites the 
 deletes it if `READ` is now refused) and sends `sub` again: `subscribed`, or `forbidden`
 and the connection leaves the room. Without a new `sub` within
 `events.regrant_timeout_secs` (30 s), the server sends `unsubscribed{reason: forbidden}`.
+
+## Single editor
+
+One person at a time edits an item's **fields**: the fields panel (`form#itil-form`:
+status, urgency, category, actors…), its Save button, and the title/description of the
+main item. The timeline (followups, tasks, solutions) is not locked.
+
+- The client sends `lock` on the first edit (focus, typing, opening a dropdown), then every
+  `lock_ttl / 3` seconds while editing; `unlock` after a minute without input when nothing
+  is unsaved. Saving reloads the page: the connection closes and the server releases the
+  lock. A lock that is not renewed expires after `locks.ttl_secs` (30 s).
+- Taking the lock needs the grant flag `update`, and no pending `regrant`
+  (`forbidden` otherwise). `force: true` takes it from a holder whose tab is inactive
+  (presence) or who left the item; otherwise the reply names the current holder.
+- Stored in `rt:l:{room}` (JSON holder, TTL), taken and released atomically (Lua) so that
+  a connection only renews or releases its own. Changes are announced on `rt:lc`.
+- Others see the fields disabled and who edits ("Take over" when the holder is inactive).
+  After an `event` changing the fields (`ticket.*`, `actor.*`) by anyone else, the page
+  stays read-only until refreshed, so nobody saves values older than GLPI's; the holder
+  gets a warning instead.
+- The lock is **advisory**: GLPI still accepts any update its rights allow (API, mail
+  collector, a browser without the client). GLPI's own item lock (*Lock items*), when
+  enabled, removes the Save button: the client then does nothing.
+
+## Live timeline
+
+- **Who is writing.** Opening one of GLPI's answer forms (`#new-{Class}-block`) sends
+  `compose{kind}`; closing or submitting it sends `compose{null}`. The kind travels in the
+  presence entry of the connection (same TTL, same cleanup), and other members show a
+  placeholder ("Alice is writing a followup…") where new items appear, in their own
+  timeline order.
+- **New items.** On `followup.*`, `task.*`, `solution.*`, `validation.*`, `document.*`
+  events, the client fetches the ticket tab again (`data-glpi-ajax-content`, rendered by
+  GLPI for this user, rights included) and merges its timeline: new entries inserted next
+  to their neighbours, edited ones replaced, deleted ones removed. Entries being edited and
+  the answer forms are never touched. Nothing of the content travels on the WebSocket.
+- **One solution at a time.** Opening the solution form takes the `solution` lock (grant
+  flag `solve`), renewed like the fields lock. Meanwhile, and once a solution was proposed
+  by someone else, the Solution button is disabled for the others. GLPI enforces it: the
+  plugin's `pre_item_add` on ITILSolution refuses a solution when the item already has one
+  that is not refused, under a MariaDB `GET_LOCK` so that two simultaneous saves cannot
+  both pass.
 
 ## Notifications
 

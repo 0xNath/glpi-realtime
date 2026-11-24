@@ -28,7 +28,7 @@ Browser ──wss /ws──► nginx ──unix socket──► glpi-realtime (R
 | 1 | Server skeleton, authentication, grants, deployment | done |
 | 2 | Presence | done |
 | 3 | Ticket events, notifications (bell with queues, preferences, sound, full page) | done |
-| 4 | Single editor for ticket fields | — |
+| 4 | Single editor for ticket fields | done |
 | 5 | Collaborative answers (TipTap + Yjs) | — |
 | 6 | Load test at 20 000 connections, hardening | — |
 

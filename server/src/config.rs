@@ -17,6 +17,7 @@ pub struct Config {
     pub revocation: RevocationConfig,
     pub presence: PresenceConfig,
     pub events: EventsConfig,
+    pub locks: LocksConfig,
     pub shutdown: ShutdownConfig,
     pub log: LogConfig,
 }
@@ -193,6 +194,25 @@ impl Default for EventsConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
+pub struct LocksConfig {
+    /// Lifetime of a fields lock that its holder stops renewing (clients renew every
+    /// third of it while editing).
+    pub ttl_secs: u64,
+    /// How often expired locks are noticed.
+    pub sweep_secs: u64,
+}
+
+impl Default for LocksConfig {
+    fn default() -> Self {
+        Self {
+            ttl_secs: 30,
+            sweep_secs: 5,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
 pub struct ShutdownConfig {
     /// Time given to clients to receive `bye` before the process exits.
     pub grace_secs: u64,
@@ -257,6 +277,9 @@ impl Config {
         let p = &self.presence;
         if p.heartbeat_secs == 0 || p.ttl_secs < 2 * p.heartbeat_secs {
             return Err("presence.ttl_secs must be at least twice presence.heartbeat_secs".into());
+        }
+        if self.locks.ttl_secs < 3 || self.locks.sweep_secs == 0 {
+            return Err("locks.ttl_secs must be at least 3 and locks.sweep_secs > 0".into());
         }
         if self.events.regrant_timeout_secs == 0 {
             return Err("events.regrant_timeout_secs must be > 0".into());

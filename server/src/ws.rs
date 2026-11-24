@@ -18,6 +18,7 @@ use tracing::{info, warn};
 
 use crate::auth;
 use crate::events::{self, Delivery};
+use crate::locks;
 use crate::presence::{self, Entry};
 use crate::protocol::{self, ByeReason, ClientMsg, Decoded, ErrorCode, Room, ServerMsg, UserInfo};
 use crate::registry::{RegisterError, Registration};
@@ -95,6 +96,8 @@ struct Joined {
     since: u64,
     /// Set by `regrant`: no event until the client subscribes again, removed at this deadline.
     stale_until: Option<Instant>,
+    /// Answer being written in this room's timeline.
+    composing: Option<String>,
 }
 
 enum PushError {
@@ -175,6 +178,7 @@ impl Connection {
                 name: self.session.name.clone(),
             },
             ping_interval: limits.ping_interval_secs,
+            lock_ttl: self.app.locks.ttl_secs(),
         };
         info!(conn = %self.reg.id, uid = self.session.uid, "connection opened");
         let mut end = match push_json(&tx, &hello, None) {
@@ -229,6 +233,13 @@ impl Connection {
         self.app.hub.remove_user(self.session.uid, self.reg.id);
         for room in std::mem::take(&mut self.rooms).into_keys() {
             self.app.hub.leave(&room, self.reg.id);
+            self.app
+                .locks
+                .release_all(&room, &self.reg.id.to_string())
+                .await;
+            if !self.app.hub.has_room(&room) {
+                self.app.locks.forget(&room);
+            }
             self.app.presence.leave(&room, self.reg.id).await;
         }
         let end = end.unwrap_or(End::Gone);
@@ -272,20 +283,27 @@ impl Connection {
                 if active != self.active {
                     self.active = active;
                     self.active_flag.store(active, Ordering::Relaxed);
-                    let rooms: Vec<(Room, u64)> = self
+                    let rooms: Vec<(Room, u64, Option<String>)> = self
                         .rooms
                         .iter()
-                        .map(|(r, j)| (r.clone(), j.since))
+                        .map(|(r, j)| (r.clone(), j.since, j.composing.clone()))
                         .collect();
-                    for (room, since) in rooms {
+                    for (room, since, composing) in rooms {
                         self.app
                             .presence
-                            .update(&room, self.reg.id, self.entry(since))
+                            .update(&room, self.reg.id, self.entry(since, composing))
                             .await;
                     }
                 }
                 None
             }
+            ClientMsg::Lock { room, force, scope } => {
+                self.handle_lock(tx, room, scope, true, force, id).await
+            }
+            ClientMsg::Unlock { room, scope } => {
+                self.handle_lock(tx, room, scope, false, false, id).await
+            }
+            ClientMsg::Compose { room, kind } => self.handle_compose(tx, room, kind, id).await,
             ClientMsg::Unsub { room } => {
                 if let Some(r) = Room::parse(&room, &self.app.cfg.security.allowed_itemtypes) {
                     self.leave(&r).await;
@@ -312,17 +330,26 @@ impl Connection {
                                 grant: g,
                                 since,
                                 stale_until: None,
+                                composing: None,
                             },
                         );
                         self.app.hub.join(&r, self.reg.id, self.ev_tx.clone());
                         if let Some(end) = reply(tx, &ServerMsg::Subscribed { room }, id) {
                             return Some(end);
                         }
-                        let entry = self.entry(since);
+                        let entry = self.entry(since, None);
                         self.app
                             .presence
                             .join(&r, self.reg.id, entry, tx.clone())
                             .await;
+                        // Who edits the fields, right away.
+                        for scope in locks::Scope::ALL {
+                            if let Some(msg) = self.app.locks.state(&r, scope).await
+                                && let Some(end) = reply(tx, &msg, None)
+                            {
+                                return Some(end);
+                            }
+                        }
                         None
                     }
                     Ok(_) => {
@@ -370,7 +397,55 @@ impl Connection {
     async fn leave(&mut self, r: &Room) {
         if self.rooms.remove(r).is_some() {
             self.app.hub.leave(r, self.reg.id);
+            self.app
+                .locks
+                .release_all(r, &self.reg.id.to_string())
+                .await;
+            if !self.app.hub.has_room(r) {
+                self.app.locks.forget(r);
+            }
             self.app.presence.leave(r, self.reg.id).await;
+        }
+    }
+
+    /// `lock` / `unlock`: only on a joined room, with GLPI's `update` right, and not
+    /// while a regrant is pending.
+    async fn handle_lock(
+        &mut self,
+        tx: &mpsc::Sender<Message>,
+        room: String,
+        scope: locks::Scope,
+        take: bool,
+        force: bool,
+        id: Option<u32>,
+    ) -> Option<End> {
+        let Some(r) = Room::parse(&room, &self.app.cfg.security.allowed_itemtypes) else {
+            return self.error(tx, ErrorCode::BadRequest, "unknown room", id);
+        };
+        let conn = self.reg.id.to_string();
+        if !take {
+            self.app.locks.release(&r, scope, &conn).await;
+        } else {
+            let allowed = self
+                .rooms
+                .get(&r)
+                .is_some_and(|j| j.stale_until.is_none() && j.grant.has(scope.right()));
+            if !allowed {
+                return self.error(tx, ErrorCode::Forbidden, "cannot edit this item", id);
+            }
+            let me = locks::holder(
+                self.reg.id,
+                self.session.uid,
+                &self.session.name,
+                self.session.avatar.clone(),
+            );
+            if self.app.locks.acquire(&r, scope, me, force).await.is_err() {
+                return self.error(tx, ErrorCode::Internal, "temporarily unavailable", id);
+            }
+        }
+        match self.app.locks.state(&r, scope).await {
+            Some(msg) => reply(tx, &msg, id),
+            None => self.error(tx, ErrorCode::Internal, "temporarily unavailable", id),
         }
     }
 
@@ -434,13 +509,45 @@ impl Connection {
         None
     }
 
-    fn entry(&self, since: u64) -> Entry {
+    /// `compose`: what this tab writes in the room's timeline, in its presence entry.
+    async fn handle_compose(
+        &mut self,
+        tx: &mpsc::Sender<Message>,
+        room: String,
+        kind: Option<String>,
+        id: Option<u32>,
+    ) -> Option<End> {
+        if kind
+            .as_deref()
+            .is_some_and(|k| !presence::COMPOSE_KINDS.contains(&k))
+        {
+            return self.error(tx, ErrorCode::BadRequest, "unknown kind", id);
+        }
+        let Some(r) = Room::parse(&room, &self.app.cfg.security.allowed_itemtypes) else {
+            return self.error(tx, ErrorCode::BadRequest, "unknown room", id);
+        };
+        let Some(j) = self.rooms.get_mut(&r) else {
+            return self.error(tx, ErrorCode::Forbidden, "not subscribed", id);
+        };
+        if j.composing != kind {
+            j.composing.clone_from(&kind);
+            let since = j.since;
+            self.app
+                .presence
+                .update(&r, self.reg.id, self.entry(since, kind))
+                .await;
+        }
+        None
+    }
+
+    fn entry(&self, since: u64, composing: Option<String>) -> Entry {
         Entry {
             uid: self.session.uid,
             name: self.session.name.clone(),
             since,
             active: self.active,
             avatar: self.session.avatar.clone(),
+            composing,
         }
     }
 

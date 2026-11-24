@@ -2,6 +2,8 @@ import { ActivityTracker } from "./activity.ts";
 import { RealtimeClient } from "./client.ts";
 import { Bell, InboxController } from "./bell.ts";
 import { InboxApi, labelsFor } from "./inbox.ts";
+import { FieldsEditor } from "./editor.ts";
+import { LiveTimeline, TIMELINE_EVENTS } from "./timeline.ts";
 import { Toasts } from "./notifications.ts";
 import { InboxPage } from "./page.ts";
 import { Chime } from "./sound.ts";
@@ -95,6 +97,8 @@ function boot(): void {
     if (msg.t !== "event") return;
     // Our own change made from this very tab: the page already shows it.
     if (msg.by.id === client.user?.id && document.hasFocus()) return;
+    // Followups, tasks, solutions... are added to the timeline live: no "refresh" banner.
+    if (document.querySelector(".itil-timeline") && TIMELINE_EVENTS.test(msg.kind)) return;
     banner.add(msg.room, msg, client.user?.id);
   });
   client.on("unsubscribed", (msg) => {
@@ -103,6 +107,26 @@ function boot(): void {
     render(document, msg.room, [], client.user?.id);
   });
   startInbox(client, rootDoc);
+
+  // Single editor for the ticket fields, on the item form only (GLPI's own lock, when
+  // enabled, removes the Save button: then there is nothing to coordinate).
+  // Single editor for the ticket fields. The ticket form arrives with its tab, after the
+  // page (and again when the tab reloads): created when it appears, then follows it.
+  // GLPI's own lock, when enabled, removes the Save button: nothing to coordinate then.
+  let editor: FieldsEditor | null = null;
+  let timeline: LiveTimeline | null = null;
+  const followForm = () => {
+    // The timeline of the same tab: placeholders of who is writing, items added live.
+    if (!timeline && document.querySelector(".itil-timeline")) {
+      const room = roomsIn(document)[0];
+      if (room) timeline = new LiveTimeline(document, client, room, document.documentElement.lang || navigator.language || "en");
+    }
+    if (editor) return editor.attach();
+    if (!document.getElementById("itil-form") || !document.querySelector("button[name='update'][form='itil-form']")) return;
+    const room = roomsIn(document)[0];
+    if (room) editor = new FieldsEditor(document, client, room, document.documentElement.lang || navigator.language || "en");
+  };
+  followForm();
 
   // Connection lost: the list is unknown until the server sends it again.
   client.on("bye", () => {
@@ -119,6 +143,7 @@ function boot(): void {
         for (const room of roomsIn(n)) client.subscribe(room);
       });
     }
+    followForm();
   }).observe(document.body, { childList: true, subtree: true });
 
   client.start();

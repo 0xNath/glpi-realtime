@@ -4,6 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::events::{Actor, Event};
+use crate::locks::{Holder, Scope};
 use crate::presence::PresenceUser;
 
 pub const VERSION: u8 = 1;
@@ -59,6 +60,27 @@ pub enum ClientMsg {
     Activity {
         active: bool,
     },
+    /// Take (or renew, while editing) the item's fields lock. `force`: take it from a
+    /// holder whose tab is inactive.
+    Lock {
+        room: String,
+        #[serde(default)]
+        force: bool,
+        #[serde(default)]
+        scope: Scope,
+    },
+    /// Release a lock.
+    Unlock {
+        room: String,
+        #[serde(default)]
+        scope: Scope,
+    },
+    /// Writing an answer in the timeline (`followup`, `task`, `solution`, `validation`,
+    /// `document`), or `null` when done. Shown to the other members (presence).
+    Compose {
+        room: String,
+        kind: Option<String>,
+    },
 }
 
 #[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
@@ -98,6 +120,8 @@ pub enum ServerMsg {
         conn: String,
         user: UserInfo,
         ping_interval: u64,
+        /// Lifetime of a fields lock, seconds: holders renew it every third of it.
+        lock_ttl: u64,
     },
     Subscribed {
         room: String,
@@ -132,6 +156,13 @@ pub enum ServerMsg {
     /// No event is delivered for this room until then.
     Regrant {
         room: String,
+    },
+    /// Who edits the item's fields (`null`: nobody). After `subscribed`, on change, and in
+    /// reply to `lock` / `unlock`.
+    Lock {
+        room: String,
+        scope: Scope,
+        holder: Option<Holder>,
     },
     /// The user's notifications changed (assignment, answer on one of their tickets,
     /// read in another tab...): refresh the bell from GLPI. `alert`: play the sound here.

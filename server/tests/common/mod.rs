@@ -149,7 +149,7 @@ pub fn http_status(err: &WsError) -> Option<u16> {
     }
 }
 
-/// Next JSON text message, skipping control frames and `presence` broadcasts.
+/// Next JSON text message, skipping control frames, `presence` and `lock` broadcasts.
 pub async fn recv(ws: &mut Ws) -> serde_json::Value {
     recv_within(ws, Duration::from_secs(3))
         .await
@@ -157,7 +157,7 @@ pub async fn recv(ws: &mut Ws) -> serde_json::Value {
 }
 
 pub async fn recv_within(ws: &mut Ws, d: Duration) -> Option<serde_json::Value> {
-    recv_matching(ws, d, |m| m["t"] != "presence").await
+    recv_matching(ws, d, |m| m["t"] != "presence" && m["t"] != "lock").await
 }
 
 /// Next `presence` message for `room`.
@@ -227,4 +227,18 @@ pub async fn http_get(addr: SocketAddr, path: &str) -> (u16, String) {
     let code = buf[9..12].parse().unwrap();
     let body = buf.split("\r\n\r\n").nth(1).unwrap_or("").to_string();
     (code, body)
+}
+
+/// Next `lock` message for `room` (fields scope).
+pub async fn recv_lock(ws: &mut Ws, room: &str) -> serde_json::Value {
+    recv_lock_scope(ws, room, "fields").await
+}
+
+/// Next `lock` message for `room` and `scope`.
+pub async fn recv_lock_scope(ws: &mut Ws, room: &str, scope: &str) -> serde_json::Value {
+    recv_matching(ws, Duration::from_secs(5), |m| {
+        m["t"] == "lock" && m["room"] == room && m["scope"] == scope
+    })
+    .await
+    .expect("timed out waiting for lock")
 }

@@ -15,6 +15,7 @@ use Glpi\Plugin\Hooks;
 use GlpiPlugin\Realtime\Events;
 use GlpiPlugin\Realtime\Grants;
 use GlpiPlugin\Realtime\SessionToken;
+use GlpiPlugin\Realtime\SolutionGuard;
 
 define('PLUGIN_REALTIME_VERSION', '0.2.0');
 define('PLUGIN_REALTIME_MIN_GLPI', '12.0.0');
@@ -74,6 +75,9 @@ function plugin_init_realtime(): void
     foreach (Events::hooks() as $hook => $byClass) {
         $PLUGIN_HOOKS[$hook]['realtime'] = $byClass;
     }
+
+    // One solution at a time, enforced by GLPI.
+    $PLUGIN_HOOKS[Hooks::PRE_ITEM_ADD]['realtime'] = ['ITILSolution' => [SolutionGuard::class, 'onPreAdd']];
 
     // Browser client (served from public/realtime.js).
     $PLUGIN_HOOKS[Hooks::ADD_JAVASCRIPT]['realtime'] = ['realtime.js'];

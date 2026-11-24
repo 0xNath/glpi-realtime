@@ -37,7 +37,13 @@ pub struct Entry {
     pub active: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub avatar: Option<Avatar>,
+    /// Answer being written in the timeline (`followup`, `solution`...).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub composing: Option<String>,
 }
+
+/// Kinds of answers a client may announce.
+pub const COMPOSE_KINDS: [&str; 5] = ["followup", "task", "solution", "validation", "document"];
 
 fn yes() -> bool {
     true
@@ -53,6 +59,9 @@ pub struct PresenceUser {
     pub active: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub avatar: Option<Avatar>,
+    /// What they are writing in the timeline, on any of their tabs.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub composing: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -92,6 +101,9 @@ pub fn aggregate(entries: impl IntoIterator<Item = Entry>) -> Vec<PresenceUser> 
             .and_modify(|u| {
                 u.since = u.since.min(e.since);
                 u.active |= e.active;
+                if u.composing.is_none() {
+                    u.composing.clone_from(&e.composing);
+                }
             })
             .or_insert(PresenceUser {
                 id: e.uid,
@@ -99,6 +111,7 @@ pub fn aggregate(entries: impl IntoIterator<Item = Entry>) -> Vec<PresenceUser> 
                 since: e.since,
                 active: e.active,
                 avatar: e.avatar,
+                composing: e.composing,
             });
     }
     let mut users: Vec<_> = by_uid.into_values().collect();
@@ -345,6 +358,7 @@ mod tests {
             since,
             active: false,
             avatar: None,
+            composing: None,
         }
     }
 
@@ -382,6 +396,7 @@ mod tests {
                     since: 10,
                     active: false,
                     avatar: None,
+                    composing: None,
                 },
                 PresenceUser {
                     id: 3,
@@ -389,6 +404,7 @@ mod tests {
                     since: 10,
                     active: false,
                     avatar: None,
+                    composing: None,
                 },
                 PresenceUser {
                     id: 1,
@@ -396,6 +412,7 @@ mod tests {
                     since: 30,
                     active: false,
                     avatar: None,
+                    composing: None,
                 },
             ]
         );

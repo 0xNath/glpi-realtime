@@ -54,6 +54,20 @@ already prevents the cookie from being sent from another site).
 - Only item types listed in both the plugin (`enabled_itemtypes`) and the server
   (`allowed_itemtypes`) can be subscribed to.
 
+## Single editor
+
+Taking the fields lock requires the grant flag `update` computed by GLPI
+(`canUpdateItem()`); a connection can only renew or release its own lock, and can take
+another's only when that holder's tab is inactive or gone. The lock is advisory: it does
+not replace GLPI's rights checks on save.
+
+## Live timeline and solutions
+
+Timeline items are never sent over the WebSocket: each browser reloads its ticket tab from
+GLPI, in its own session, and merges the timeline entries GLPI rendered for it. A second
+solution is refused by GLPI itself (plugin `pre_item_add`, serialized per item with
+MariaDB `GET_LOCK`), whatever the browsers do.
+
 ## Values displayed in other users' pages
 
 Names and avatars travel from one user's session to others' pages. Names are inserted as

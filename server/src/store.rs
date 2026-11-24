@@ -84,6 +84,11 @@ impl Store {
         &self.prefix
     }
 
+    /// Raw access for modules with their own keys (locks).
+    pub fn pool(&self) -> &Pool {
+        &self.pool
+    }
+
     pub async fn ping(&self) -> Result<(), Error> {
         let _: String = self.pool.ping(None).await?;
         Ok(())

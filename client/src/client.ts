@@ -1,5 +1,5 @@
 import { backoff } from "./backoff.ts";
-import { CLOSE_REVOKED, type ClientMsg, parse, type ServerMsg, VERSION } from "./protocol.ts";
+import { CLOSE_REVOKED, type ClientMsg, type Holder, type LockScope, parse, type ServerMsg, VERSION } from "./protocol.ts";
 
 export type State = "idle" | "connecting" | "open" | "waiting" | "revoked" | "stopped";
 
@@ -30,6 +30,10 @@ export interface ClientOptions {
 export class RealtimeClient {
   state: State = "idle";
   user: { id: number; name: string } | null = null;
+  /** Id of the current connection (from `hello`). */
+  conn: string | null = null;
+  /** Lifetime of a fields lock on the server, seconds (from `hello`). */
+  lockTtl = 30;
 
   private ws: WebSocket | null = null;
   private attempt = 0;
@@ -38,6 +42,8 @@ export class RealtimeClient {
   /** Tab activity; the server assumes `true` on each new connection. */
   private active = true;
   private readonly rooms = new Set<string>();
+  /** Last `lock` state per room, for features that start after it arrived. */
+  private readonly locks = new Map<string, Holder | null>();
   private readonly joined = new Set<string>();
   /** Rooms accepted at least once: a later refusal means the rights were lost. */
   private readonly accepted = new Set<string>();
@@ -93,6 +99,26 @@ export class RealtimeClient {
     if (active === this.active) return;
     this.active = active;
     if (this.state === "open") this.send({ t: "activity", active });
+  }
+
+  /** Takes or renews a lock of a joined room (fields: editor.ts, solution: timeline.ts). */
+  lock(room: string, force = false, scope: LockScope = "fields"): void {
+    if (this.state === "open" && this.joined.has(room)) {
+      this.send({ t: "lock", room, ...(force ? { force } : {}), ...(scope !== "fields" ? { scope } : {}) });
+    }
+  }
+
+  unlock(room: string, scope: LockScope = "fields"): void {
+    if (this.state === "open" && this.joined.has(room)) this.send({ t: "unlock", room, ...(scope !== "fields" ? { scope } : {}) });
+  }
+
+  /** What this tab writes in the room's timeline (null: nothing). */
+  compose(room: string, kind: string | null): void {
+    if (this.state === "open" && this.joined.has(room)) this.send({ t: "compose", room, kind });
+  }
+
+  lockOf(room: string): Holder | null {
+    return this.locks.get(room) ?? null;
   }
 
   isJoined(room: string): boolean {
@@ -152,6 +178,8 @@ export class RealtimeClient {
         this.state = "open";
         this.attempt = 0;
         this.user = msg.user;
+        this.conn = msg.conn;
+        if (msg.lock_ttl) this.lockTtl = msg.lock_ttl;
         this.joined.clear();
         this.pendingSubs.clear();
         // Before subscribing, so that our presence entries carry the right state.
@@ -171,6 +199,9 @@ export class RealtimeClient {
           return; // emitted by lost()
         }
         this.joined.delete(msg.room);
+        break;
+      case "lock":
+        if (msg.scope === "fields") this.locks.set(msg.room, msg.holder);
         break;
       case "regrant":
         if (this.ws && this.rooms.has(msg.room)) void this.regrant(msg.room, this.ws);

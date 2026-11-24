@@ -258,6 +258,25 @@ impl Hub {
         }
     }
 
+    pub fn has_room(&self, room: &Room) -> bool {
+        self.rooms.lock().expect("hub poisoned").contains_key(room)
+    }
+
+    /// Sends the same encoded frame to every local member of a room.
+    pub fn broadcast(&self, room: &Room, d: Delivery) {
+        let Delivery::Text(text) = d else { return };
+        let members: Vec<(Uuid, mpsc::Sender<Delivery>)> = self
+            .rooms
+            .lock()
+            .expect("hub poisoned")
+            .get(room)
+            .map(|m| m.iter().map(|(id, tx)| (*id, tx.clone())).collect())
+            .unwrap_or_default();
+        for (id, tx) in members {
+            self.deliver(id, &tx, Delivery::Text(text.clone()));
+        }
+    }
+
     fn deliver(&self, conn: Uuid, tx: &mpsc::Sender<Delivery>, d: Delivery) {
         if let Err(mpsc::error::TrySendError::Full(_)) = tx.try_send(d) {
             self.registry.close_conn(conn, ByeReason::Slow);

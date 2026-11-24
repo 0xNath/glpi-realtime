@@ -72,6 +72,7 @@ final class Events
 
     public static function onAdd(mixed $item): void
     {
+        SolutionGuard::onAdd($item);
         self::safely($item, 'add');
     }
 

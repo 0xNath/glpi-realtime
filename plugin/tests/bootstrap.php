@@ -8,6 +8,7 @@
 declare(strict_types=1);
 
 define('READ', 1);
+define('ERROR', 1);
 
 final class Session
 {
@@ -18,6 +19,14 @@ final class Session
     public static function getLoginUserID($force_human = true): mixed
     {
         return self::$uid;
+    }
+
+    /** @var list<array{string, int}> */
+    public static array $messages = [];
+
+    public static function addMessageAfterRedirect($msg, $check_once = false, $message_type = 0, $reset = false): void
+    {
+        self::$messages[] = [$msg, $message_type];
     }
 
     public static function haveRight(string $module, int $right): bool
@@ -49,6 +58,11 @@ final class Toolbox
     {
         self::$logs[] = [$name, $text];
     }
+}
+
+function __(string $str, string $domain = 'glpi'): string
+{
+    return $str;
 }
 
 function htmlescape(mixed $str): string
@@ -106,6 +120,7 @@ abstract class CommonDBTM
 {
     public array $fields = [];
     public array $updates = [];
+    public mixed $input = [];
     public bool $readable = true;
 
     public function __construct(array $fields = [], array $updates = [])
