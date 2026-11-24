@@ -1,4 +1,5 @@
-# glpi-realtime configuration.
+# glpi-realtime configuration: copy to /etc/glpi-realtime/config.toml (root:glpi-realtime,
+# mode 640) and adapt. Check it with: glpi-realtime --config /etc/glpi-realtime/config.toml --check
 # Every value can be overridden by environment: GLPI_RT_<SECTION>__<KEY>,
 # e.g. GLPI_RT_LIMITS__MAX_CONNECTIONS=30000.
 
@@ -6,10 +7,12 @@
 type = "unix"                       # or: type = "tcp", addr = "127.0.0.1:8090"
 path = "/run/glpi-realtime/rt.sock"
 mode = 0o660
-group = "http"                      # nginx's group; the service must be a member
+# Group of the web server, which must reach the socket; the service must be a member.
+# Arch: http, Debian/Ubuntu: www-data, RHEL/Fedora: nginx or apache.
+group = "http"
 
 [valkey]
-url = "unix:///run/valkey/valkey.sock"
+url = "unix:///run/valkey/valkey.sock"   # unixsocket of valkey.conf (or redis://127.0.0.1:6379)
 db = 6                              # must match the plugin setting valkey_db
 pool_size = 8
 key_prefix = "rt:"                  # must match the plugin setting key_prefix

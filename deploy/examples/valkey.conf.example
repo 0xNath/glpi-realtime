@@ -1,0 +1,13 @@
+# Valkey (or Redis) settings glpi-realtime relies on. Add them to your valkey.conf
+# (Arch: /etc/valkey/valkey.conf, Debian: /etc/valkey/valkey.conf or /etc/redis/redis.conf).
+
+# A local unix socket, readable by its group only: add the glpi-realtime user and the user
+# running PHP (GLPI) to that group (Arch/Debian: valkey or redis).
+unixsocket /run/valkey/valkey.sock
+unixsocketperm 660
+
+# Instant revocation of WebSocket sessions at logout (glpi-realtime: revocation.keyspace_events).
+notify-keyspace-events Kgx
+
+# If Valkey also listens on TCP, protect it: whoever can write to it can forge sessions.
+# requirepass ... / ACLs, or: port 0

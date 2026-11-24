@@ -1,6 +1,7 @@
 [Unit]
 Description=glpi-realtime WebSocket server
-Documentation=file:///usr/local/share/doc/glpi-realtime/README.md
+# Copy to /etc/systemd/system/ and adapt the paths and groups below, then:
+#   systemctl daemon-reload && systemctl enable --now glpi-realtime
 After=network.target valkey.service
 Wants=valkey.service
 
@@ -8,7 +9,8 @@ Wants=valkey.service
 Type=exec
 User=glpi-realtime
 Group=glpi-realtime
-# valkey: access to /run/valkey/valkey.sock; http: give the socket to nginx.
+# Groups: Valkey's socket group (valkey or redis), and the web server's group set as
+# listen.group in config.toml (Arch: http, Debian/Ubuntu: www-data, RHEL: nginx/apache).
 SupplementaryGroups=valkey http
 ExecStartPre=/usr/local/bin/glpi-realtime --config /etc/glpi-realtime/config.toml --check
 ExecStart=/usr/local/bin/glpi-realtime --config /etc/glpi-realtime/config.toml

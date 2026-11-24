@@ -1,102 +1,98 @@
 #!/usr/bin/env bash
-# Installs / upgrades glpi-realtime on this host (Arch Linux, GLPI in /var/www/glpi,
-# nginx vhost /etc/nginx/conf.d/glpi.conf, uWSGI php-legacy, Valkey on a unix socket).
+# Installs or upgrades glpi-realtime's own files: the server binary and the GLPI plugin.
+# Run it the first time and after every update; it is idempotent.
 #
-# Build first, as your user:   (cd server && cargo build --release) && (cd client && npm run build)
-# Then:                        sudo bash deploy/install.sh https://glpi.example.org
+# It never creates nor edits configuration: /etc/glpi-realtime/config.toml, the systemd
+# unit, the system user, the web server (vhost), PHP and Valkey are yours to set up once,
+# from deploy/examples/ (see README, "Install").
+#
+# Build first, as your user:  (cd server && cargo build --release) && (cd client && npm ci && npm run build)
+# Then, as root:              sudo deploy/install.sh
+#
+# Settings (environment variables), with their defaults:
+#   GLPI_DIR=/var/www/glpi            GLPI installation (contains bin/console)
+#   PREFIX=/usr/local                 the binary goes to $PREFIX/bin/glpi-realtime
+#   CONFIG=/etc/glpi-realtime/config.toml   only read, to check it before switching binaries
+#   PHP=php                           PHP CLI command, e.g. PHP=php8.3, PHP=php-legacy, or
+#                                     PHP="env PHP_INI_SCAN_DIR=:/etc/webapps/glpi/php-cli php-legacy"
+#   GLPI_USER=<owner of $GLPI_DIR/files>   system user running GLPI's console
+#   SERVICE=glpi-realtime             systemd unit restarted if it exists ("" to skip)
+#   SKIP_PLUGIN_UPGRADE=0             1: copy the plugin files only (run GLPI's
+#                                     plugin install/upgrade yourself)
 set -euo pipefail
 
-ORIGIN="${1:?usage: install.sh <https://glpi-origin>}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-GLPI=/var/www/glpi
-VHOST=/etc/nginx/conf.d/glpi.conf
-NGINX_CONF=/etc/nginx/nginx.conf
-VALKEY_CONF=/etc/valkey/valkey.conf
+GLPI_DIR="${GLPI_DIR:-/var/www/glpi}"
+PREFIX="${PREFIX:-/usr/local}"
+CONFIG="${CONFIG:-/etc/glpi-realtime/config.toml}"
+PHP="${PHP:-php}"
+SERVICE="${SERVICE-glpi-realtime}"
+SKIP_PLUGIN_UPGRADE="${SKIP_PLUGIN_UPGRADE:-0}"
 BIN="$ROOT/server/target/release/glpi-realtime"
-BACKUP=/root/glpi-realtime-backup-$(date +%Y%m%d-%H%M%S)
-CONSOLE=(runuser -u glpi -- env PHP_INI_SCAN_DIR=:/etc/webapps/glpi/php-cli php-legacy "$GLPI/bin/console")
+DEST="$PREFIX/bin/glpi-realtime"
 
-[[ $EUID -eq 0 ]] || { echo "Run as root (sudo)"; exit 1; }
-[[ -x "$BIN" ]] || { echo "Missing $BIN: run 'cargo build --release' in server/ first"; exit 1; }
-[[ -f "$ROOT/plugin/public/realtime.js" ]] || { echo "Missing client bundle: run 'npm run build' in client/ first"; exit 1; }
+die() { echo "!! $*" >&2; exit 1; }
 
-echo "==> Backup in $BACKUP"
-mkdir -p "$BACKUP"
-cp -a "$VHOST" "$NGINX_CONF" "$BACKUP"/
-[[ -f "$VALKEY_CONF" ]] && cp -a "$VALKEY_CONF" "$BACKUP"/
+[[ $EUID -eq 0 ]] || die "run as root (sudo)"
+[[ -x "$BIN" ]] || die "missing $BIN: run 'cargo build --release' in server/ first"
+[[ -f "$ROOT/plugin/public/realtime.js" ]] || die "missing client bundle: run 'npm run build' in client/ first"
+[[ -f "$GLPI_DIR/bin/console" ]] || die "no GLPI in $GLPI_DIR (set GLPI_DIR)"
+# Refuse stale builds: sources newer than what would be installed.
+if [[ -n "$(find "$ROOT/server/src" "$ROOT/server/Cargo.toml" "$ROOT/server/Cargo.lock" -newer "$BIN" -print -quit)" ]]; then
+    die "$BIN is older than server/ sources: run 'cargo build --release' in server/ first"
+fi
+if [[ -n "$(find "$ROOT/client/src" -newer "$ROOT/plugin/public/realtime.js" -print -quit)" ]]; then
+    die "plugin/public/realtime.js is older than client/src: run 'npm run build' in client/ first"
+fi
 
-# --- Server -------------------------------------------------------------------------
-echo "==> System user, binary, configuration"
-install -m 644 "$ROOT/deploy/sysusers.conf" /etc/sysusers.d/glpi-realtime.conf
-systemd-sysusers /etc/sysusers.d/glpi-realtime.conf
-install -m 755 "$BIN" /usr/local/bin/glpi-realtime
-install -d -m 750 -o root -g glpi-realtime /etc/glpi-realtime
-if [[ ! -f /etc/glpi-realtime/config.toml ]]; then
-    sed "s#https://glpi.example.org#${ORIGIN}#" "$ROOT/deploy/config.toml.example" > /etc/glpi-realtime/config.toml
-    chown root:glpi-realtime /etc/glpi-realtime/config.toml
-    chmod 640 /etc/glpi-realtime/config.toml
+# --- Server binary ----------------------------------------------------------------------
+echo "==> Server binary: $DEST"
+install -d "$PREFIX/bin"
+install -m 755 "$BIN" "$DEST.new"
+if [[ -f "$CONFIG" ]]; then
+    # The new binary must accept the existing configuration before it replaces the old one.
+    "$DEST.new" --config "$CONFIG" --check || { rm -f "$DEST.new"; die "$CONFIG is not valid for this version (see README)"; }
 else
-    echo "   keeping existing /etc/glpi-realtime/config.toml"
+    echo "   no $CONFIG yet: create it from deploy/examples/config.toml.example"
 fi
-install -d -m 755 /usr/local/share/doc/glpi-realtime
-install -m 644 "$ROOT/README.md" /usr/local/share/doc/glpi-realtime/README.md
+mv "$DEST.new" "$DEST"
 
-# --- Valkey: keyspace notifications for instant revocation ---------------------------
-echo "==> Valkey keyspace notifications (Kgx)"
-if [[ -f "$VALKEY_CONF" ]] && ! grep -qE '^\s*notify-keyspace-events\s+\S*K' "$VALKEY_CONF"; then
-    printf '\n# glpi-realtime: instant session revocation\nnotify-keyspace-events Kgx\n' >> "$VALKEY_CONF"
+# --- GLPI plugin --------------------------------------------------------------------------
+echo "==> GLPI plugin: $GLPI_DIR/plugins/realtime"
+NEW="$GLPI_DIR/plugins/realtime.new"
+rm -rf "$NEW"
+mkdir "$NEW"
+cp -r "$ROOT/plugin/setup.php" "$ROOT/plugin/hook.php" "$ROOT/plugin/src" "$ROOT/plugin/ajax" \
+    "$ROOT/plugin/front" "$ROOT/plugin/public" "$NEW/"
+# Read-only for the web server, like GLPI's own code.
+chown -R root:root "$NEW"
+find "$NEW" -type d -exec chmod 755 {} + -o -type f -exec chmod 644 {} +
+rm -rf "$GLPI_DIR/plugins/realtime.old"
+[[ -d "$GLPI_DIR/plugins/realtime" ]] && mv "$GLPI_DIR/plugins/realtime" "$GLPI_DIR/plugins/realtime.old"
+mv "$NEW" "$GLPI_DIR/plugins/realtime"
+rm -rf "$GLPI_DIR/plugins/realtime.old"
+
+if [[ "$SKIP_PLUGIN_UPGRADE" != 1 ]]; then
+    # GLPI's console must run as the user owning GLPI's writable files.
+    GLPI_USER="${GLPI_USER:-$(stat -c %U "$GLPI_DIR/files" 2>/dev/null || true)}"
+    [[ -n "$GLPI_USER" && "$GLPI_USER" != root ]] || die "cannot tell which user runs GLPI: set GLPI_USER (or SKIP_PLUGIN_UPGRADE=1)"
+    echo "==> Plugin install/upgrade (as $GLPI_USER, with: $PHP)"
+    # Creates or upgrades the plugin's tables and cron task (settings are kept), then
+    # activates it: GLPI disables a plugin whose version changed until it is upgraded.
+    # shellcheck disable=SC2086 # $PHP may hold "env VAR=... php"
+    runuser -u "$GLPI_USER" -- $PHP "$GLPI_DIR/bin/console" plugin:install --force --username=glpi realtime
+    # shellcheck disable=SC2086
+    runuser -u "$GLPI_USER" -- $PHP "$GLPI_DIR/bin/console" plugin:activate realtime
 fi
-valkey-cli -s /run/valkey/valkey.sock CONFIG SET notify-keyspace-events Kgx >/dev/null
 
-# --- Service ----------------------------------------------------------------------------
-echo "==> systemd service"
-install -m 644 "$ROOT/deploy/glpi-realtime.service" /etc/systemd/system/glpi-realtime.service
-systemctl daemon-reload
-/usr/local/bin/glpi-realtime --config /etc/glpi-realtime/config.toml --check
-systemctl enable glpi-realtime.service
-systemctl restart glpi-realtime.service
-sleep 1
-curl -sf --unix-socket /run/glpi-realtime/rt.sock http://localhost/health && echo
-
-# --- nginx --------------------------------------------------------------------------------
-echo "==> nginx: /ws location, upstream, worker limits"
-python3 - "$VHOST" "$ROOT/deploy/nginx-upstream.conf" "$ROOT/deploy/nginx-location.conf" <<'EOF'
-import sys, pathlib
-vhost, up, loc = (pathlib.Path(p) for p in sys.argv[1:])
-s = vhost.read_text()
-if "upstream glpi_realtime" not in s:
-    s = up.read_text() + "\n" + s
-if "location = /ws" not in s:
-    anchor = "    location ~ /\\. {"
-    if anchor not in s:
-        sys.exit("cannot find where to insert the /ws location in " + str(vhost))
-    s = s.replace(anchor, loc.read_text() + "\n" + anchor, 1)
-vhost.write_text(s)
-EOF
-sed -i -E 's/^(\s*worker_connections\s+)[0-9]+;/\116384;/' "$NGINX_CONF"
-grep -q '^worker_rlimit_nofile' "$NGINX_CONF" || sed -i -E '/^worker_processes/a worker_rlimit_nofile 100000;' "$NGINX_CONF"
-if ! nginx -t; then
-    cp -a "$BACKUP/glpi.conf" "$VHOST"
-    cp -a "$BACKUP/nginx.conf" "$NGINX_CONF"
-    echo "!! nginx configuration invalid: previous files restored"
-    exit 1
+# --- Service ------------------------------------------------------------------------------
+if [[ -n "$SERVICE" ]] && command -v systemctl >/dev/null && systemctl cat "$SERVICE" >/dev/null 2>&1; then
+    echo "==> Restarting $SERVICE"
+    systemctl try-restart "$SERVICE"
+else
+    echo "   service not restarted (no systemd unit '$SERVICE'): restart the server yourself"
 fi
-systemctl reload nginx
-
-# --- GLPI plugin -----------------------------------------------------------------------------
-echo "==> GLPI plugin"
-rm -rf "$GLPI/plugins/realtime.new"
-mkdir "$GLPI/plugins/realtime.new"
-cp -r "$ROOT/plugin/setup.php" "$ROOT/plugin/hook.php" "$ROOT/plugin/src" "$ROOT/plugin/ajax" "$ROOT/plugin/front" "$ROOT/plugin/public" \
-    "$GLPI/plugins/realtime.new/"
-chown -R root:root "$GLPI/plugins/realtime.new"
-find "$GLPI/plugins/realtime.new" -type d -exec chmod 755 {} + -o -type f -exec chmod 644 {} +
-rm -rf "$GLPI/plugins/realtime"
-mv "$GLPI/plugins/realtime.new" "$GLPI/plugins/realtime"
-"${CONSOLE[@]}" plugin:install --force --username=glpi realtime
-"${CONSOLE[@]}" plugin:activate realtime
 
 echo
-echo "Done. Backup: $BACKUP"
-echo "Check: open a ticket in GLPI, then: journalctl -u glpi-realtime -f"
-echo "Browser debug: localStorage.setItem('glpi-realtime-debug', '1') then reload"
+echo "Done. Browsers pick up the new client on their next page load."
+echo "First install? Follow README, \"Install\": configuration, service, Valkey, web server."

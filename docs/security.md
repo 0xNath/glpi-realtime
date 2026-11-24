@@ -95,7 +95,7 @@ bounded outbound queue (slow clients are dropped), handshake rate limit in nginx
 
 systemd sandbox: dedicated user, no capabilities, read-only system, no home, private
 `/tmp` and `/dev`, W^X memory, syscall filter, only UNIX/INET sockets. The socket is
-`0660 glpi-realtime:http`: only nginx can connect.
+`0660`, owned by the web server's group (`listen.group`): only it can connect.
 
 ## Known limits
 

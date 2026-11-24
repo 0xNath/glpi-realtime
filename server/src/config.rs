@@ -50,7 +50,8 @@ impl Default for Listen {
         Listen::Unix {
             path: PathBuf::from("/run/glpi-realtime/rt.sock"),
             mode: default_socket_mode(),
-            group: Some("http".into()),
+            // The web server's group differs between distributions: set it in config.toml.
+            group: None,
         }
     }
 }
