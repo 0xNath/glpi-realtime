@@ -17,11 +17,20 @@ GLPI works unchanged when the server, Valkey or the plugin is absent.
 
 ## Architecture
 
-```
-Browser ──wss /ws──► nginx ──unix socket──► glpi-realtime (Rust)
-   │                                            │ reads tokens, grants
-   └── GLPI pages ──► nginx ──► uWSGI/PHP ──────┴──► Valkey (db 6)
-                               (plugin writes tokens, grants; publishes events)
+```mermaid
+flowchart LR
+    browser["Browser<br/>(client: realtime.js)"]
+    web["Web server<br/>nginx or Apache"]
+    php["GLPI on PHP<br/>(plugin realtime)"]
+    server["glpi-realtime<br/>(Rust)"]
+    valkey[("Valkey<br/>db 6")]
+
+    browser -- "GLPI pages (HTTPS)" --> web
+    browser -- "wss/ws" --> web
+    web -- "PHP-FPM / uWSGI" --> php
+    web -- "/ws, unix socket" --> server
+    php -- "writes tokens and grants,<br/>publishes events" --> valkey
+    server -- "reads tokens and grants,<br/>subscribes to events" --> valkey
 ```
 
 ## Status
