@@ -8,12 +8,32 @@ import type { Actor, ItemEvent } from "./protocol.ts";
 
 type Lang = "fr" | "en";
 
+/** "le ticket", "this change"...: every message names the kind of item it is about. */
+const NOUNS: Record<Lang, Record<string, { the: string; this: string }>> = {
+  fr: {
+    Ticket: { the: "le ticket", this: "ce ticket" },
+    Change: { the: "le changement", this: "ce changement" },
+    Problem: { the: "le problème", this: "ce problème" },
+  },
+  en: {
+    Ticket: { the: "the ticket", this: "this ticket" },
+    Change: { the: "the change", this: "this change" },
+    Problem: { the: "the problem", this: "this problem" },
+  },
+};
+
+export function noun(itemtype: string, l: Lang): { the: string; this: string } {
+  return NOUNS[l][itemtype] ?? NOUNS[l].Ticket;
+}
+
+/** Changes of the item itself; `%` is replaced by its noun ("le ticket"). */
+const ITEM_ACTIONS: Record<Lang, Record<string, string>> = {
+  fr: { "item.update": "a modifié %", "item.delete": "a mis % à la corbeille", "item.restore": "a restauré %", "item.purge": "a supprimé %" },
+  en: { "item.update": "updated %", "item.delete": "moved % to the trash", "item.restore": "restored %", "item.purge": "deleted %" },
+};
+
 const ACTIONS: Record<Lang, Record<string, string>> = {
   fr: {
-    "ticket.update": "a modifié le ticket",
-    "ticket.delete": "a mis le ticket à la corbeille",
-    "ticket.restore": "a restauré le ticket",
-    "ticket.purge": "a supprimé le ticket",
     "followup.add": "a ajouté un suivi",
     "followup.update": "a modifié un suivi",
     "followup.delete": "a supprimé un suivi",
@@ -33,10 +53,6 @@ const ACTIONS: Record<Lang, Record<string, string>> = {
     "actor.delete": "a retiré un acteur",
   },
   en: {
-    "ticket.update": "updated the ticket",
-    "ticket.delete": "moved the ticket to the trash",
-    "ticket.restore": "restored the ticket",
-    "ticket.purge": "deleted the ticket",
     "followup.add": "added a followup",
     "followup.update": "edited a followup",
     "followup.delete": "deleted a followup",
@@ -57,7 +73,7 @@ const ACTIONS: Record<Lang, Record<string, string>> = {
   },
 };
 
-/** Names of the ticket fields users care about, for `ticket.update`. */
+/** Names of the ticket fields users care about, for `item.update`. */
 const FIELDS: Record<Lang, Record<string, string>> = {
   fr: {
     status: "le statut",
@@ -96,7 +112,7 @@ const TEXT = {
     more: (n: number) => ` (+${n} autre${n > 1 ? "s" : ""} modification${n > 1 ? "s" : ""})`,
     refresh: "Actualiser",
     dismiss: "Masquer",
-    lost: "Vous n'avez plus accès à ce ticket.",
+    lost: (n: string) => `Vous n'avez plus accès à ${n}.`,
   },
   en: {
     you: "You",
@@ -106,7 +122,7 @@ const TEXT = {
     more: (n: number) => ` (+${n} more change${n > 1 ? "s" : ""})`,
     refresh: "Refresh",
     dismiss: "Dismiss",
-    lost: "You no longer have access to this ticket.",
+    lost: (n: string) => `You no longer have access to ${n}.`,
   },
 };
 
@@ -121,9 +137,10 @@ export function who(by: Actor, selfId: number | undefined, l: Lang): string {
 }
 
 /** One sentence for one event: "Bob changed the status and the priority". */
-export function describe(ev: ItemEvent & { by: Actor }, selfId: number | undefined, l: Lang): string {
-  let action = ACTIONS[l][ev.kind] ?? ACTIONS[l]["ticket.update"];
-  if (ev.kind === "ticket.update" && ev.fields?.length) {
+export function describe(ev: ItemEvent & { by: Actor }, selfId: number | undefined, l: Lang, itemtype = "Ticket"): string {
+  const own = ITEM_ACTIONS[l][ev.kind] ?? (ACTIONS[l][ev.kind] ? null : ITEM_ACTIONS[l]["item.update"]);
+  let action = own ? own.replace("%", noun(itemtype, l).the) : ACTIONS[l][ev.kind];
+  if (ev.kind === "item.update" && ev.fields?.length) {
     const named = ev.fields.map((f) => FIELDS[l][f]).filter((f): f is string => !!f);
     // Only when every change has a name: "changed the status" must not hide other changes.
     if (named.length === ev.fields.length && named.length <= 3) {
@@ -133,9 +150,9 @@ export function describe(ev: ItemEvent & { by: Actor }, selfId: number | undefin
   return `${who(ev.by, selfId, l)} ${action}`;
 }
 
-export function summary(events: Array<ItemEvent & { by: Actor }>, selfId: number | undefined, l: Lang): string {
+export function summary(events: Array<ItemEvent & { by: Actor }>, selfId: number | undefined, l: Lang, itemtype = "Ticket"): string {
   if (events.length === 0) return "";
-  const last = describe(events[events.length - 1], selfId, l);
+  const last = describe(events[events.length - 1], selfId, l, itemtype);
   return events.length > 1 ? last + TEXT[l].more(events.length - 1) : last;
 }
 
@@ -185,7 +202,7 @@ export class UpdatesBanner {
     this.events.set(room, list);
     const bar = this.bar(room);
     if (!bar || bar.classList.contains("is-lost")) return;
-    bar.querySelector<HTMLElement>(".glpi-rt-updates-text")!.textContent = summary(list, selfId, this.l());
+    bar.querySelector<HTMLElement>(".glpi-rt-updates-text")!.textContent = summary(list, selfId, this.l(), room.split(":")[0]);
     bar.hidden = false;
   }
 
@@ -194,7 +211,7 @@ export class UpdatesBanner {
     const bar = this.bar(room);
     if (!bar) return;
     bar.classList.add("is-lost");
-    bar.querySelector<HTMLElement>(".glpi-rt-updates-text")!.textContent = TEXT[this.l()].lost;
+    bar.querySelector<HTMLElement>(".glpi-rt-updates-text")!.textContent = TEXT[this.l()].lost(noun(room.split(":")[0], this.l()).this);
     bar.querySelector<HTMLElement>(".glpi-rt-dismiss")!.hidden = true;
     bar.hidden = false;
   }

@@ -48,10 +48,10 @@ export interface Actor {
 
 /** Something changed on an item. No content: reload from GLPI to see it. */
 export interface ItemEvent {
-  /** `ticket.update`, `followup.add`, `task.delete`, `actor.add`, ... */
+  /** `item.update`, `followup.add`, `task.delete`, `actor.add`, ... */
   kind: string;
   item?: { type: string; id: number };
-  /** Changed fields, for `ticket.update`. */
+  /** Changed fields, for `item.update`. */
   fields?: string[];
 }
 

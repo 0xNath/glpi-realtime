@@ -17,6 +17,11 @@ function plugin_realtime_install(): bool
     if ($missing !== []) {
         Config::setConfigurationValues(Settings::CONTEXT, $missing);
     }
+    // 0.3.0: changes and problems get every feature, like tickets (unless an admin chose
+    // the list).
+    if (($current['enabled_itemtypes'] ?? null) === Settings::OLD_ITEMTYPES) {
+        Config::setConfigurationValues(Settings::CONTEXT, ['enabled_itemtypes' => Settings::DEFAULTS['enabled_itemtypes']]);
+    }
 
     $charset   = DBConnection::getDefaultCharset();
     $collation = DBConnection::getDefaultCollation();

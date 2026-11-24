@@ -23,6 +23,11 @@ if [[ -n "$(find "$ROOT/client/src" -newer "$ROOT/plugin/public/realtime.js" -pr
 fi
 
 echo "==> Server"
+# 0.3.0: changes and problems like tickets, if the list is still the old default.
+if grep -qE '^allowed_itemtypes = \["Ticket"\]$' /etc/glpi-realtime/config.toml; then
+    sed -i -E 's/^allowed_itemtypes = \["Ticket"\]$/allowed_itemtypes = ["Ticket", "Change", "Problem"]/' /etc/glpi-realtime/config.toml
+    echo "   allowed_itemtypes: Change and Problem added"
+fi
 install -m 755 "$BIN" /usr/local/bin/glpi-realtime.new
 /usr/local/bin/glpi-realtime.new --config /etc/glpi-realtime/config.toml --check
 mv /usr/local/bin/glpi-realtime.new /usr/local/bin/glpi-realtime

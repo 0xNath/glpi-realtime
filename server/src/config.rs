@@ -93,7 +93,7 @@ impl Default for SecurityConfig {
         Self {
             cookie_name: "glpi_rt".into(),
             allowed_origins: vec![],
-            allowed_itemtypes: vec!["Ticket".into()],
+            allowed_itemtypes: vec!["Ticket".into(), "Change".into(), "Problem".into()],
         }
     }
 }

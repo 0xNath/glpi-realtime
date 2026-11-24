@@ -18,7 +18,7 @@ key_prefix = "rt:"                  # must match the plugin setting key_prefix
 cookie_name = "glpi_rt"             # must match the plugin setting cookie_name
 # Exact browser origins allowed to open the WebSocket (CSWSH protection).
 allowed_origins = ["https://glpi.example.org"]
-allowed_itemtypes = ["Ticket"]
+allowed_itemtypes = ["Ticket", "Change", "Problem"]
 
 [limits]
 max_connections = 25000             # per instance

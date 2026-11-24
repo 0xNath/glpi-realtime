@@ -17,7 +17,7 @@ use GlpiPlugin\Realtime\Grants;
 use GlpiPlugin\Realtime\SessionToken;
 use GlpiPlugin\Realtime\SolutionGuard;
 
-define('PLUGIN_REALTIME_VERSION', '0.2.0');
+define('PLUGIN_REALTIME_VERSION', '0.3.0');
 define('PLUGIN_REALTIME_MIN_GLPI', '12.0.0');
 define('PLUGIN_REALTIME_MAX_GLPI', '12.0.99');
 
@@ -71,7 +71,8 @@ function plugin_init_realtime(): void
     // Per-item grants, computed by GLPI when the item form is displayed.
     $PLUGIN_HOOKS[Hooks::POST_ITEM_FORM]['realtime'] = [Grants::class, 'onPostItemForm'];
 
-    // Live events and notifications: item_add, item_update, ... on tickets and their sub-items.
+    // Live events and notifications: item_add, item_update, ... on tickets, changes, problems
+    // and their sub-items.
     foreach (Events::hooks() as $hook => $byClass) {
         $PLUGIN_HOOKS[$hook]['realtime'] = $byClass;
     }

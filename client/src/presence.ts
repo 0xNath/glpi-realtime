@@ -18,6 +18,8 @@ export function hue(id: number): number {
   return (id * 137) % 360;
 }
 
+import { noun } from "./updates.ts";
+
 interface Labels {
   also: string;
   more: (n: number) => string;
@@ -27,21 +29,25 @@ interface Labels {
 
 const LABELS: Record<string, Labels> = {
   fr: {
-    also: "Également sur ce ticket :",
+    also: "Également sur % :",
     more: (n) => `et ${n} autre${n > 1 ? "s" : ""}`,
-    active: "actif sur ce ticket",
+    active: "actif sur %",
     inactive: "inactif (onglet en arrière-plan ou inutilisé)",
   },
   en: {
-    also: "Also on this ticket:",
+    also: "Also on %:",
     more: (n) => `and ${n} more`,
-    active: "active on this ticket",
+    active: "active on %",
     inactive: "inactive (tab in background or unused)",
   },
 };
 
-export function labels(lang: string) {
-  return LABELS[lang.slice(0, 2).toLowerCase()] ?? LABELS.en;
+/** Labels for an item type ("Également sur ce changement :"). */
+export function labels(lang: string, itemtype = "Ticket"): Labels {
+  const code = lang.slice(0, 2).toLowerCase() === "fr" ? "fr" : "en";
+  const l = LABELS[code];
+  const n = noun(itemtype, code).this;
+  return { ...l, also: l.also.replace("%", n), active: l.active.replace("%", n) };
 }
 
 const STYLE_ID = "glpi-rt-presence-style";
@@ -209,7 +215,7 @@ export function render(doc: Document, room: string, users: PresenceUser[], selfI
 
   const list = others(users, selfId);
   bar.hidden = list.length === 0;
-  const t = labels(doc.documentElement.lang || navigator.language || "en");
+  const t = labels(doc.documentElement.lang || navigator.language || "en", room.split(":")[0]);
   label.textContent = t.also;
 
   const shown = list.slice(0, MAX_AVATARS);

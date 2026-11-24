@@ -43,14 +43,14 @@ Events::onUpdate(new Ticket(['id' => 5], ['status', 'date_mod']));
 Events::onUpdate(new Ticket(['id' => 5], ['priority', 'status']));
 Events::onUpdate(new Ticket(['id' => 5], ['date_mod']));
 $b = take('Ticket:5');
-check($b['events'] === [['kind' => 'ticket.update', 'fields' => ['status', 'priority']]], 'one ticket.update with every changed field, noise dropped');
+check($b['events'] === [['kind' => 'item.update', 'fields' => ['status', 'priority']]], 'one item.update with every changed field, noise dropped');
 check($b['regrant'] === false, 'no regrant for ordinary updates');
 Events::onAdd(new Ticket(['id' => 6]));
 check(take('Ticket:6') === null, 'nothing for a new ticket');
 Events::onUpdate(new Ticket(['id' => 5], ['entities_id']));
 check(take('Ticket:5')['regrant'] === true, 'entity change: regrant');
 Events::onDelete(new Ticket(['id' => 5]));
-check(take('Ticket:5')['events'][0]['kind'] === 'ticket.delete', 'trash');
+check(take('Ticket:5')['events'][0]['kind'] === 'item.delete', 'trash');
 
 // --- Followups: visibility, notifications of public ones ------------------------------
 Ticket::$actors = [5 => [CommonITILActor::REQUESTER => [11], CommonITILActor::OBSERVER => [12], CommonITILActor::ASSIGN => [7, 13]]];
@@ -66,8 +66,21 @@ $b = take('Ticket:5');
 check($b['events'][0]['vis']['private'] === true, 'private followup: private event');
 Events::onPurge(new ITILFollowup(['id' => 31, 'itemtype' => 'Ticket', 'items_id' => 5, 'is_private' => 1, 'users_id' => 7]));
 check(take('Ticket:5')['events'][0]['kind'] === 'followup.delete', 'purged sub-item announced as a deletion');
-Events::onAdd(new ITILFollowup(['id' => 32, 'itemtype' => 'Change', 'items_id' => 5]));
+Events::onAdd(new ITILFollowup(['id' => 32, 'itemtype' => 'Computer', 'items_id' => 5]));
 check(Events::pending() === [], 'item types that are not enabled are ignored');
+
+// --- Changes and problems: same events, their own rooms ------------------------------------
+Events::onUpdate(new Change(['id' => 8], ['status']));
+Events::onAdd(new ChangeTask(['id' => 41, 'changes_id' => 8, 'is_private' => 0, 'users_id' => 7]));
+Events::onAdd(new ChangeValidation(['id' => 61, 'changes_id' => 8]));
+Events::onPurge(new Change_Group(['id' => 84, 'changes_id' => 8, 'groups_id' => 3, 'type' => 2]));
+$b = take('Change:8');
+check(array_column($b['events'], 'kind') === ['item.update', 'task.add', 'validation.add', 'actor.delete'], 'change: fields, task, approval, actors');
+check($b['events'][1]['item'] === ['type' => 'ChangeTask', 'id' => 41] && $b['regrant'] === true, 'change task, and regrant when an actor goes');
+Events::onAdd(new ITILSolution(['id' => 51, 'itemtype' => 'Problem', 'items_id' => 9]));
+Events::onAdd(new Document_Item(['id' => 72, 'itemtype' => 'Problem', 'items_id' => 9, 'documents_id' => 5]));
+Events::onAdd(new ProblemTask(['id' => 42, 'problems_id' => 9]));
+check(array_column(take('Problem:9')['events'], 'kind') === ['solution.add', 'document.add', 'task.add'], 'problem: solution, document, task');
 
 // --- Tasks: technician and group visibility, notification of the technician -----------
 Events::onAdd(new TicketTask(['id' => 40, 'tickets_id' => 5, 'is_private' => 1, 'users_id' => 7, 'users_id_tech' => 13, 'groups_id_tech' => 4]));

@@ -214,6 +214,12 @@ final class ChangeValidation extends CommonITILValidation {}
 
 final class ChangeTask extends CommonDBTM {}
 
+final class ProblemTask extends CommonDBTM {}
+
+final class Problem_User extends CommonITILActor {}
+
+final class Group_Problem extends CommonITILActor {}
+
 abstract class CommonITILActor extends CommonDBTM
 {
     public const REQUESTER = 1;

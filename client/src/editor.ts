@@ -1,5 +1,6 @@
 import { h, icon } from "./dom.ts";
 import type { Holder, PresenceUser } from "./protocol.ts";
+import { noun } from "./updates.ts";
 
 /**
  * Single editor for the ticket fields (step 4): the right-hand fields panel
@@ -16,7 +17,7 @@ import type { Holder, PresenceUser } from "./protocol.ts";
  */
 
 /** Events that change what the fields panel shows. */
-const FIELD_EVENTS = /^(ticket\.(update|delete|restore|purge)|actor\.(add|update|delete))$/;
+const FIELD_EVENTS = /^(item\.(update|delete|restore|purge)|actor\.(add|update|delete))$/;
 
 /** Without input for this long and nothing unsaved, the lock is released. */
 export const IDLE_MS = 60_000;
@@ -74,19 +75,19 @@ export class EditorState {
 
 const TEXT = {
   fr: {
-    other: (n: string, since: string) => `${n} modifie les champs de ce ticket ${since}.`,
+    other: (n: string, since: string, it: string) => `${n} modifie les champs de ${it} ${since}.`,
     takeOver: "Prendre la main",
-    stale: (n: string) => `${n || "Quelqu'un"} a modifié ce ticket. Actualisez avant de modifier ses champs.`,
-    mineStale: (n: string) => `${n || "Quelqu'un"} a modifié ce ticket pendant votre saisie : vérifiez avant d'enregistrer.`,
+    stale: (n: string, it: string) => `${n || "Quelqu'un"} a modifié ${it}. Actualisez avant de modifier ses champs.`,
+    mineStale: (n: string, it: string) => `${n || "Quelqu'un"} a modifié ${it} pendant votre saisie : vérifiez avant d'enregistrer.`,
     lost: (n: string) => `${n} a pris la main sur les champs. Vos modifications non enregistrées ne peuvent plus être enregistrées.`,
     refresh: "Actualiser",
     since: (m: number) => (m < 1 ? "depuis un instant" : `depuis ${m} min`),
   },
   en: {
-    other: (n: string, since: string) => `${n} is editing this ticket's fields ${since}.`,
+    other: (n: string, since: string, it: string) => `${n} is editing the fields of ${it} ${since}.`,
     takeOver: "Take over",
-    stale: (n: string) => `${n || "Someone"} changed this ticket. Refresh before editing its fields.`,
-    mineStale: (n: string) => `${n || "Someone"} changed this ticket while you were editing: check before saving.`,
+    stale: (n: string, it: string) => `${n || "Someone"} changed ${it}. Refresh before editing its fields.`,
+    mineStale: (n: string, it: string) => `${n || "Someone"} changed ${it} while you were editing: check before saving.`,
     lost: (n: string) => `${n} took over the fields. Your unsaved changes can no longer be saved.`,
     refresh: "Refresh",
     since: (m: number) => (m < 1 ? "since a moment" : `for ${m} min`),
@@ -123,6 +124,8 @@ export class FieldsEditor {
   private readonly client: EditorClient;
   private readonly room: string;
   private readonly t: (typeof TEXT)["en"];
+  /** "ce ticket", "this change"... */
+  private readonly it: string;
   private readonly bar: HTMLElement;
   private holderActive = true;
   private disabled: HTMLElement[] = [];
@@ -133,7 +136,9 @@ export class FieldsEditor {
     this.doc = doc;
     this.client = client;
     this.room = room;
-    this.t = lang.slice(0, 2).toLowerCase() === "fr" ? TEXT.fr : TEXT.en;
+    const code = lang.slice(0, 2).toLowerCase() === "fr" ? "fr" : "en";
+    this.t = TEXT[code];
+    this.it = noun(room.split(":")[0], code).this;
     const style = doc.createElement("style");
     style.textContent = CSS;
     doc.head.appendChild(style);
@@ -247,17 +252,17 @@ export class FieldsEditor {
     switch (mode) {
       case "other": {
         const minutes = Math.floor((Date.now() / 1000 - (holder?.since ?? 0)) / 60);
-        children.push(icon("lock"), h("span", { class: "glpi-rt-editor-text", text: t.other(holder?.name ?? "", t.since(minutes)) }));
+        children.push(icon("lock"), h("span", { class: "glpi-rt-editor-text", text: t.other(holder?.name ?? "", t.since(minutes), this.it) }));
         if (!this.holderActive) {
           children.push(h("button", { type: "button", class: "btn btn-sm btn-outline-warning", text: t.takeOver, onclick: () => this.client.lock(this.room, true) }));
         }
         break;
       }
       case "stale":
-        children.push(icon("refresh"), h("span", { class: "glpi-rt-editor-text", text: t.stale(this.state.staleBy) }), refresh());
+        children.push(icon("refresh"), h("span", { class: "glpi-rt-editor-text", text: t.stale(this.state.staleBy, this.it) }), refresh());
         break;
       case "mine-stale":
-        children.push(icon("alert-triangle"), h("span", { class: "glpi-rt-editor-text", text: t.mineStale(this.state.staleBy) }), refresh());
+        children.push(icon("alert-triangle"), h("span", { class: "glpi-rt-editor-text", text: t.mineStale(this.state.staleBy, this.it) }), refresh());
         break;
       case "lost":
         children.push(icon("lock"), h("span", { class: "glpi-rt-editor-text", text: t.lost(holder?.name ?? "") }), refresh());

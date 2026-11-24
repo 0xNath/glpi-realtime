@@ -112,12 +112,12 @@ test("event sentences", () => {
   const bob = { id: 7, name: "Bob" };
   assert.equal(describe({ kind: "followup.add", by: bob }, 2, "en"), "Bob added a followup");
   assert.equal(describe({ kind: "followup.add", by: bob }, 2, "fr"), "Bob a ajouté un suivi");
-  assert.equal(describe({ kind: "ticket.update", fields: ["status"], by: bob }, 2, "en"), "Bob changed the status");
+  assert.equal(describe({ kind: "item.update", fields: ["status"], by: bob }, 2, "en"), "Bob changed the status");
   assert.equal(
-    describe({ kind: "ticket.update", fields: ["status", "priority", "urgency"], by: bob }, 2, "fr"),
+    describe({ kind: "item.update", fields: ["status", "priority", "urgency"], by: bob }, 2, "fr"),
     "Bob a modifié le statut, la priorité et l'urgence",
   );
-  assert.equal(describe({ kind: "ticket.update", fields: ["status", "global_validation"], by: bob }, 2, "en"), "Bob updated the ticket", "unnamed field: generic");
+  assert.equal(describe({ kind: "item.update", fields: ["status", "global_validation"], by: bob }, 2, "en"), "Bob updated the ticket", "unnamed field: generic");
   assert.equal(describe({ kind: "brand.new", by: bob }, 2, "en"), "Bob updated the ticket");
   assert.equal(who({ id: 2, name: "me" }, 2, "en"), "You");
   assert.equal(who({ id: 0, name: "" }, 2, "fr"), "GLPI");
@@ -137,4 +137,18 @@ test("notification text and link", () => {
   assert.equal(text({ ...n, kind: "unknown", by: { id: 0, name: "" } }, 2, "en"), "GLPI updated ticket #42");
   assert.equal(link("Ticket:42", "/glpi"), "/glpi/front/ticket.form.php?id=42");
   assert.equal(link("Ticket:42\"><x", ""), null);
+});
+
+test("changes and problems are named as such", async () => {
+  const { describe: d, summary: s } = await import("../src/updates.ts");
+  const { labels } = await import("../src/presence.ts");
+  const bob = { id: 7, name: "Bob" };
+  assert.equal(d({ kind: "item.update", by: bob }, 2, "fr", "Change"), "Bob a modifié le changement");
+  assert.equal(d({ kind: "item.delete", by: bob }, 2, "en", "Problem"), "Bob moved the problem to the trash");
+  assert.equal(d({ kind: "item.update", fields: ["status"], by: bob }, 2, "fr", "Problem"), "Bob a modifié le statut");
+  assert.equal(d({ kind: "followup.add", by: bob }, 2, "fr", "Change"), "Bob a ajouté un suivi");
+  assert.equal(s([{ kind: "item.purge", by: bob }], 2, "en", "Change"), "Bob deleted the change");
+  assert.equal(labels("fr", "Change").also, "Également sur ce changement :");
+  assert.equal(labels("en", "Problem").active, "active on this problem");
+  assert.equal(labels("en").also, "Also on this ticket:");
 });

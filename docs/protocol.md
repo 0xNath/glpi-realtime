@@ -22,7 +22,7 @@ Every message carries `"v": 1`. A client may add an integer `"id"`, echoed in th
 
 | `t` | Fields | Reply |
 |---|---|---|
-| `sub` | `room` (`"Ticket:42"`) | `subscribed` or `error` |
+| `sub` | `room` (`"Ticket:42"`, `"Change:7"`, `"Problem:3"`) | `subscribed` or `error` |
 | `unsub` | `room` | `unsubscribed` |
 | `ping` | — | `pong` |
 | `activity` | `active` (bool) | none; presence lists change for the other members |
@@ -85,7 +85,7 @@ clients show "Bob added a followup" and the user reloads from GLPI.
 
 | `kind` | `item` | Seen by members with |
 |---|---|---|
-| `ticket.update` (+ `fields`: changed field names), `ticket.delete`, `ticket.restore`, `ticket.purge` | — | `read` |
+| `item.update` (+ `fields`: changed field names), `item.delete`, `item.restore`, `item.purge` | — | `read` |
 | `followup.add` / `.update` / `.delete` | `ITILFollowup` | public: `see_public_followup`; private: `see_private_followup`; always the author |
 | `task.add` / `.update` / `.delete` | `TicketTask` | public: `see_public_task`; private: `see_private_task`, or `see_private_task_groups` and a member of the technician group; always the author and the technician |
 | `solution.add` / `.update` | `ITILSolution` | `read` |

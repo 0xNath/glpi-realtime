@@ -84,7 +84,7 @@ async fn events_are_filtered_with_each_grant() {
     publish(
         &vk,
         json!({"room":"Ticket:5","by":{"id":10,"name":"Tech"},"events":[
-            {"kind":"ticket.update","fields":["status","priority"]},
+            {"kind":"item.update","fields":["status","priority"]},
             followup(1, false, 10),
             followup(2, true, 10),
         ]}),
@@ -94,7 +94,7 @@ async fn events_are_filtered_with_each_grant() {
     let e = next(&mut t).await.unwrap();
     assert_eq!(e["t"], "event");
     assert_eq!(e["room"], "Ticket:5");
-    assert_eq!(e["kind"], "ticket.update");
+    assert_eq!(e["kind"], "item.update");
     assert_eq!(e["fields"], json!(["status", "priority"]));
     assert_eq!(e["by"], json!({"id":10,"name":"Tech"}));
     assert_eq!(next(&mut t).await.unwrap()["item"]["id"], 1);
@@ -108,14 +108,14 @@ async fn events_are_filtered_with_each_grant() {
         "visibility rules stay on the server"
     );
 
-    assert_eq!(next(&mut u).await.unwrap()["kind"], "ticket.update");
+    assert_eq!(next(&mut u).await.unwrap()["kind"], "item.update");
     assert_eq!(next(&mut u).await.unwrap()["item"]["id"], 1);
     assert!(
         next(&mut u).await.is_none(),
         "no private followup for the requester"
     );
 
-    assert_eq!(next(&mut b).await.unwrap()["kind"], "ticket.update");
+    assert_eq!(next(&mut b).await.unwrap()["kind"], "item.update");
     assert!(
         next(&mut b).await.is_none(),
         "no followup without a see right"
@@ -202,7 +202,7 @@ async fn regrant_withholds_events_until_the_grant_is_renewed() {
 
     publish(
         &vk,
-        json!({"room":"Ticket:7","events":[{"kind":"ticket.update"}]}),
+        json!({"room":"Ticket:7","events":[{"kind":"item.update"}]}),
     )
     .await;
     assert!(next(&mut k).await.is_none(), "stale members get nothing");
@@ -216,10 +216,10 @@ async fn regrant_withholds_events_until_the_grant_is_renewed() {
     );
     publish(
         &vk,
-        json!({"room":"Ticket:7","events":[{"kind":"ticket.update"}]}),
+        json!({"room":"Ticket:7","events":[{"kind":"item.update"}]}),
     )
     .await;
-    assert_eq!(next(&mut k).await.unwrap()["kind"], "ticket.update");
+    assert_eq!(next(&mut k).await.unwrap()["kind"], "item.update");
 
     // `loses` has no grant any more: refused and removed from the room.
     send(&mut l, json!({"v":1,"id":5,"t":"sub","room":"Ticket:7"})).await;
@@ -343,10 +343,10 @@ async fn malformed_batches_are_dropped() {
     publish(&vk, json!("not a batch")).await;
     publish(
         &vk,
-        json!({"room":"Ticket:10","events":[{"kind":"ticket.update"}]}),
+        json!({"room":"Ticket:10","events":[{"kind":"item.update"}]}),
     )
     .await;
-    assert_eq!(next(&mut ws).await.unwrap()["kind"], "ticket.update");
+    assert_eq!(next(&mut ws).await.unwrap()["kind"], "item.update");
     assert!(next(&mut ws).await.is_none());
     srv.stop().await.unwrap();
 }

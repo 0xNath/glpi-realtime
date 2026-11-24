@@ -16,8 +16,8 @@ use Throwable;
  *
  * - Item hooks (`item_add`, `item_update`, ...) record what changed during the request;
  *   everything is published once, at the end of the request, one message per item.
- * - Events carry no content: a kind (`followup.add`), the sub-item id, the names of the
- *   changed fields. Browsers reload from GLPI, which applies its own rights.
+ * - Events carry no content: a kind (`followup.add`, `item.update`), the sub-item id, the
+ *   names of the changed fields. Tickets, changes and problems alike. Browsers reload from GLPI, which applies its own rights.
  * - Each event says who may see it (`vis`), mirroring GLPI's `canViewItem()`; the server
  *   checks it against each session's grant flags.
  * - When rights on the item may have shrunk (actor removed or changed, entity moved),
@@ -38,10 +38,27 @@ final class Events
         'item_purge'   => 'onPurge',
     ];
 
+    /** ITIL objects: one room each (`Ticket:5`, `Change:3`, `Problem:7`). */
+    public const ITIL = ['Ticket', 'Change', 'Problem'];
+
+    /** Tasks and approvals => [parent type, foreign key]. */
+    private const TASKS = ['TicketTask' => ['Ticket', 'tickets_id'], 'ChangeTask' => ['Change', 'changes_id'], 'ProblemTask' => ['Problem', 'problems_id']];
+    private const VALIDATIONS = ['TicketValidation' => ['Ticket', 'tickets_id'], 'ChangeValidation' => ['Change', 'changes_id']];
+
+    /** Actor links (users, groups, suppliers) => [parent type, foreign key]. */
+    private const ACTORS = [
+        'Ticket_User' => ['Ticket', 'tickets_id'], 'Group_Ticket' => ['Ticket', 'tickets_id'], 'Supplier_Ticket' => ['Ticket', 'tickets_id'],
+        'Change_User' => ['Change', 'changes_id'], 'Change_Group' => ['Change', 'changes_id'], 'Change_Supplier' => ['Change', 'changes_id'],
+        'Problem_User' => ['Problem', 'problems_id'], 'Group_Problem' => ['Problem', 'problems_id'], 'Problem_Supplier' => ['Problem', 'problems_id'],
+    ];
+
     /** Item classes whose changes are announced. */
     public const CLASSES = [
-        'Ticket', 'ITILFollowup', 'TicketTask', 'ITILSolution', 'TicketValidation',
-        'Document_Item', 'Ticket_User', 'Group_Ticket', 'Supplier_Ticket',
+        ...self::ITIL, 'ITILFollowup', 'ITILSolution', 'Document_Item',
+        'TicketTask', 'ChangeTask', 'ProblemTask', 'TicketValidation', 'ChangeValidation',
+        'Ticket_User', 'Group_Ticket', 'Supplier_Ticket',
+        'Change_User', 'Change_Group', 'Change_Supplier',
+        'Problem_User', 'Group_Problem', 'Problem_Supplier',
     ];
 
     /** Updated fields that are not worth telling anyone about. */
@@ -121,77 +138,81 @@ final class Events
         // Sub-items are purged, not trashed: a purge is what users call a deletion.
         $sub = $action === 'purge' ? 'delete' : $action;
 
-        switch ($item::class) {
-            case 'Ticket':
-                if ($action === 'add') {
-                    return; // nobody is on a ticket that did not exist
+        $class = $item::class;
+
+        // The item itself: field changes, trash, restore, purge.
+        if (in_array($class, self::ITIL, true)) {
+            if ($action === 'add') {
+                return; // nobody is on an item that did not exist
+            }
+            $room = self::room($class, $id);
+            if ($action === 'update') {
+                $fields = array_values(array_diff($item->updates, self::NOISE));
+                if ($fields !== []) {
+                    self::event($room, ['kind' => 'item.update', 'fields' => $fields], in_array('entities_id', $fields, true));
                 }
-                $room = 'Ticket:' . $id;
-                if ($action === 'update') {
-                    $fields = array_values(array_diff($item->updates, self::NOISE));
-                    if ($fields === []) {
-                        return;
-                    }
-                    self::event($room, ['kind' => 'ticket.update', 'fields' => $fields], in_array('entities_id', $fields, true));
-                    return;
-                }
-                self::event($room, ['kind' => 'ticket.' . $action]);
                 return;
+            }
+            self::event($room, ['kind' => 'item.' . $action]);
+            return;
+        }
 
-            case 'ITILFollowup':
-                $room = self::room((string) ($f['itemtype'] ?? ''), (int) ($f['items_id'] ?? 0));
-                $private = (bool) ($f['is_private'] ?? false);
-                self::event($room, [
-                    'kind' => 'followup.' . $sub,
-                    'item' => ['type' => 'ITILFollowup', 'id' => $id],
-                    'vis'  => ['right' => 'followup', 'private' => $private, 'uids' => self::ids([$f['users_id'] ?? 0])],
-                ]);
-                return;
+        if ($class === 'ITILFollowup') {
+            $room = self::room((string) ($f['itemtype'] ?? ''), (int) ($f['items_id'] ?? 0));
+            $private = (bool) ($f['is_private'] ?? false);
+            self::event($room, [
+                'kind' => 'followup.' . $sub,
+                'item' => ['type' => 'ITILFollowup', 'id' => $id],
+                'vis'  => ['right' => 'followup', 'private' => $private, 'uids' => self::ids([$f['users_id'] ?? 0])],
+            ]);
+            return;
+        }
 
-            case 'TicketTask':
-                $room = self::room('Ticket', (int) ($f['tickets_id'] ?? 0));
-                $tech = (int) ($f['users_id_tech'] ?? 0);
-                self::event($room, [
-                    'kind' => 'task.' . $sub,
-                    'item' => ['type' => 'TicketTask', 'id' => $id],
-                    'vis'  => [
-                        'right'   => 'task',
-                        'private' => (bool) ($f['is_private'] ?? false),
-                        'uids'    => self::ids([$f['users_id'] ?? 0, $tech]),
-                        'groups'  => self::ids([$f['groups_id_tech'] ?? 0]),
-                    ],
-                ]);
-                return;
+        if (isset(self::TASKS[$class])) {
+            [$parent, $fk] = self::TASKS[$class];
+            $tech = (int) ($f['users_id_tech'] ?? 0);
+            self::event(self::room($parent, (int) ($f[$fk] ?? 0)), [
+                'kind' => 'task.' . $sub,
+                'item' => ['type' => $class, 'id' => $id],
+                'vis'  => [
+                    'right'   => 'task',
+                    'private' => (bool) ($f['is_private'] ?? false),
+                    'uids'    => self::ids([$f['users_id'] ?? 0, $tech]),
+                    'groups'  => self::ids([$f['groups_id_tech'] ?? 0]),
+                ],
+            ]);
+            return;
+        }
 
-            case 'ITILSolution':
-                $room = self::room((string) ($f['itemtype'] ?? ''), (int) ($f['items_id'] ?? 0));
-                self::event($room, ['kind' => 'solution.' . $sub, 'item' => ['type' => 'ITILSolution', 'id' => $id]]);
-                return;
+        if ($class === 'ITILSolution') {
+            $room = self::room((string) ($f['itemtype'] ?? ''), (int) ($f['items_id'] ?? 0));
+            self::event($room, ['kind' => 'solution.' . $sub, 'item' => ['type' => 'ITILSolution', 'id' => $id]]);
+            return;
+        }
 
-            case 'TicketValidation':
-                $room = self::room('Ticket', (int) ($f['tickets_id'] ?? 0));
-                self::event($room, ['kind' => 'validation.' . $sub, 'item' => ['type' => 'TicketValidation', 'id' => $id]]);
-                return;
+        if (isset(self::VALIDATIONS[$class])) {
+            [$parent, $fk] = self::VALIDATIONS[$class];
+            self::event(self::room($parent, (int) ($f[$fk] ?? 0)), ['kind' => 'validation.' . $sub, 'item' => ['type' => $class, 'id' => $id]]);
+            return;
+        }
 
-            case 'Document_Item':
-                // Documents of followups and tasks are announced with them.
-                if (($f['itemtype'] ?? '') !== 'Ticket') {
-                    return;
-                }
-                $room = self::room('Ticket', (int) ($f['items_id'] ?? 0));
-                self::event($room, ['kind' => 'document.' . $sub, 'item' => ['type' => 'Document', 'id' => (int) ($f['documents_id'] ?? 0)]]);
+        if ($class === 'Document_Item') {
+            // Documents of followups and tasks are announced with them.
+            $parent = (string) ($f['itemtype'] ?? '');
+            if (!in_array($parent, self::ITIL, true)) {
                 return;
+            }
+            self::event(self::room($parent, (int) ($f['items_id'] ?? 0)), ['kind' => 'document.' . $sub, 'item' => ['type' => 'Document', 'id' => (int) ($f['documents_id'] ?? 0)]]);
+            return;
+        }
 
-            case 'Ticket_User':
-            case 'Group_Ticket':
-            case 'Supplier_Ticket':
-                $room = self::room('Ticket', (int) ($f['tickets_id'] ?? 0));
-                if ($action === 'update' && !in_array('type', $item->updates, true)) {
-                    return; // e.g. notification settings of the actor
-                }
-                // Removing or demoting an actor may remove their access: grants are recomputed.
-                self::event($room, ['kind' => 'actor.' . $sub], $action !== 'add');
-                return;
+        if (isset(self::ACTORS[$class])) {
+            [$parent, $fk] = self::ACTORS[$class];
+            if ($action === 'update' && !in_array('type', $item->updates, true)) {
+                return; // e.g. notification settings of the actor
+            }
+            // Removing or demoting an actor may remove their access: grants are recomputed.
+            self::event(self::room($parent, (int) ($f[$fk] ?? 0)), ['kind' => 'actor.' . $sub], $action !== 'add');
         }
     }
 
@@ -209,10 +230,10 @@ final class Events
         }
         $b = &self::batch($room);
         $b['regrant'] = $b['regrant'] || $regrant;
-        // One `ticket.update` per request, with every changed field.
-        if ($event['kind'] === 'ticket.update') {
+        // One `item.update` per request, with every changed field.
+        if ($event['kind'] === 'item.update') {
             foreach ($b['events'] as &$e) {
-                if ($e['kind'] === 'ticket.update') {
+                if ($e['kind'] === 'item.update') {
                     $e['fields'] = array_values(array_unique([...$e['fields'], ...$event['fields']]));
                     return;
                 }

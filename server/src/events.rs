@@ -476,7 +476,7 @@ mod tests {
     #[test]
     fn parse_and_validate() {
         let ok = r#"{"room":"Ticket:4","by":{"id":7,"name":"Alice"},
-            "events":[{"kind":"ticket.update","fields":["status","bad field","priority"]},
+            "events":[{"kind":"item.update","fields":["status","bad field","priority"]},
                       {"kind":"followup.add","item":{"type":"ITILFollowup","id":3},
                        "vis":{"right":"followup","private":true,"uids":[7]}}],
             "notify":[{"to":[9,0],"kind":"followup"}]}"#;
@@ -492,7 +492,7 @@ mod tests {
             r#"{"room":"Ticket:1","events":[{"kind":"x","item":{"type":"A B","id":1}}]}"#,
             r#"{"room":"Ticket:1","events":[{"kind":"x","item":{"type":"A","id":0}}]}"#,
             r#"{"room":"Ticket:1","events":[{"kind":"x","vis":{"right":"admin"}}]}"#,
-            r#"{"events":[{"kind":"ticket.update"}]}"#,
+            r#"{"events":[{"kind":"item.update"}]}"#,
             r#"{"regrant":true}"#,
             r#"{"notify":[{"to":[1],"kind":"assigned","item":"Ticket"}]}"#,
             r#"{"notify":[{"to":[1],"kind":"assigned","item":"Ticket:x"}]}"#,

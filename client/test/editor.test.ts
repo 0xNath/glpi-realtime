@@ -41,7 +41,7 @@ test("values changed by someone else: refresh before editing", () => {
   const s = state();
   s.onEvent("followup.add", { id: 7, name: "Bob" });
   assert.equal(s.mode(), "free", "the timeline does not touch the fields");
-  s.onEvent("ticket.update", { id: 7, name: "Bob" });
+  s.onEvent("item.update", { id: 7, name: "Bob" });
   assert.equal(s.mode(), "stale");
   assert.equal(s.staleBy, "Bob");
   assert.ok(!s.canEdit());
@@ -50,7 +50,7 @@ test("values changed by someone else: refresh before editing", () => {
 test("while editing: a warning for others' changes, nothing for our own", () => {
   const s = state();
   s.onLock(me);
-  s.onEvent("ticket.update", { id: 2, name: "Me" });
+  s.onEvent("item.update", { id: 2, name: "Me" });
   assert.equal(s.mode(), "mine", "our own save");
   s.onEvent("actor.add", { id: 0, name: "" });
   assert.equal(s.mode(), "mine-stale", "GLPI itself (rules, cron) changed it");
@@ -59,7 +59,7 @@ test("while editing: a warning for others' changes, nothing for our own", () => 
 
 test("our other tab saving makes this one stale", () => {
   const s = state();
-  s.onEvent("ticket.update", { id: 2, name: "Me" });
+  s.onEvent("item.update", { id: 2, name: "Me" });
   assert.equal(s.mode(), "stale");
 });
 

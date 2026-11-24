@@ -151,7 +151,7 @@ async fn events_published_by_the_plugin_reach_clients() {
     assert_eq!(
         kinds,
         [
-            ("event", "ticket.update"),
+            ("event", "item.update"),
             ("event", "followup.add"),
             ("event", "actor.add"),
             ("notification", "status_changed"), // Rita is the requester

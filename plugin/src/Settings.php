@@ -21,8 +21,11 @@ final class Settings
         'ws_path'            => '/ws',
         // Valkey timeout for every plugin call, in seconds: GLPI must never wait on us.
         'valkey_timeout'     => '0.05',
-        'enabled_itemtypes'  => '["Ticket"]',
+        'enabled_itemtypes'  => '["Ticket","Change","Problem"]',
     ];
+
+    /** Default of versions before 0.3.0, replaced on upgrade (changes and problems). */
+    public const OLD_ITEMTYPES = '["Ticket"]';
 
     private static ?array $values = null;
 
@@ -44,7 +47,7 @@ final class Settings
     public static function enabledItemtypes(): array
     {
         $list = json_decode(self::get('enabled_itemtypes'), true);
-        return is_array($list) ? array_values(array_filter($list, 'is_string')) : ['Ticket'];
+        return is_array($list) ? array_values(array_filter($list, 'is_string')) : ['Ticket', 'Change', 'Problem'];
     }
 
     /** Lifetime of the token: the PHP session lifetime, slid on each GLPI request. */

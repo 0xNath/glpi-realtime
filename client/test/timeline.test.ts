@@ -51,7 +51,7 @@ test("answer forms and events", () => {
   assert.equal(ANSWER_KINDS.ITILSolution, "solution");
   assert.equal(ANSWER_KINDS.TicketTask, "task");
   assert.ok(TIMELINE_EVENTS.test("followup.add") && TIMELINE_EVENTS.test("solution.update") && TIMELINE_EVENTS.test("document.delete"));
-  assert.ok(!TIMELINE_EVENTS.test("ticket.update") && !TIMELINE_EVENTS.test("actor.add"));
+  assert.ok(!TIMELINE_EVENTS.test("item.update") && !TIMELINE_EVENTS.test("actor.add"));
   assert.equal(langOf("fr_FR"), "fr");
   assert.equal(langOf("de"), "en");
 });

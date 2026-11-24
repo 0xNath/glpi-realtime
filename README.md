@@ -1,7 +1,8 @@
 # glpi-realtime
 
-Optional real-time layer for GLPI 12: presence, typing indicators, live ticket updates,
-instant notifications, a single editor for ticket fields and collaborative answers.
+Optional real-time layer for GLPI 12, on tickets, changes and problems alike: presence,
+typing indicators, live updates of the item and its timeline, instant notifications, a
+single editor for the fields, one solution at a time, and shared answer drafts.
 
 - `server/`: WebSocket server in Rust (tokio, axum, fred/Valkey).
 - `plugin/`: GLPI plugin `realtime` (PHP): issues session tokens and per-item grants.
