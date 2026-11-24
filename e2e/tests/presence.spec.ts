@@ -1,6 +1,7 @@
-import { expect, type Page, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
 
 import {
+  expect,
   focusedPage,
   login,
   openTicket,
@@ -8,6 +9,7 @@ import {
   room,
   type Session,
   setTabVisible,
+  test,
   useProfile,
   waitForFrame,
 } from "./helpers.ts";

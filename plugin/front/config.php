@@ -3,7 +3,7 @@
 /**
  * Configuration page of the plugin (Setup > Plugins > Realtime): checks that everything the
  * real-time layer needs is available, and says how to fix what is not. Settings themselves
- * stay in config.toml (server) and GLPI's configuration (plugin, bin/console glpi:config:set).
+ * stay in config.toml (server) and GLPI's configuration (plugin, bin/console config:set).
  *
  * @license GPL-3.0-or-later
  */
@@ -73,7 +73,7 @@ echo $row(Health::INFO, __('Checking…', 'realtime'), '', '');
 echo '</tbody></table></div></div>';
 
 echo '<p class="text-secondary small">' . htmlescape(sprintf(
-    __('Plugin settings (context plugin:realtime) are changed with: bin/console glpi:config:set --context=plugin:realtime <name> <value>. Current: valkey_socket=%s, valkey_db=%s, key_prefix=%s, cookie_name=%s, ws_path=%s.', 'realtime'),
+    __('Plugin settings (context plugin:realtime) are changed with: bin/console config:set --context=plugin:realtime <name> <value>. Current: valkey_socket=%s, valkey_db=%s, key_prefix=%s, cookie_name=%s, ws_path=%s.', 'realtime'),
     Settings::get('valkey_socket'),
     Settings::get('valkey_db'),
     Settings::get('key_prefix'),

@@ -25,6 +25,24 @@ final class Valkey
     /** @internal tests */
     public static ?Redis $override = null;
 
+    /**
+     * Setting valkey_socket: a unix socket path, or host[:port] (default port 6379).
+     *
+     * @return array{0: string, 1: int} host or path, and port (0 for a socket)
+     */
+    public static function target(string $setting): array
+    {
+        if (str_starts_with($setting, '/')) {
+            return [$setting, 0];
+        }
+        $setting = preg_replace('#^(redis|valkey|tcp)://#', '', $setting);
+        if (preg_match('/^\[(.+)\](?::(\d+))?$/', $setting, $m)) { // [IPv6]:port
+            return [$m[1], (int) ($m[2] ?? 6379) ?: 6379];
+        }
+        [$host, $port] = array_pad(explode(':', $setting, 2), 2, '6379');
+        return [$host, (int) $port ?: 6379];
+    }
+
     public static function client(): ?Redis
     {
         if (self::$override !== null) {
@@ -39,7 +57,8 @@ final class Valkey
         try {
             $timeout = (float) Settings::get('valkey_timeout');
             $r = new Redis();
-            $r->pconnect(Settings::get('valkey_socket'), 0, $timeout, 'glpi-realtime');
+            [$host, $port] = self::target(Settings::get('valkey_socket'));
+            $r->pconnect($host, $port, $timeout, 'glpi-realtime');
             $r->setOption(Redis::OPT_READ_TIMEOUT, $timeout);
             $password = Settings::valkeyPassword();
             if ($password !== '') {

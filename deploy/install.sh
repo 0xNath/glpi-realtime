@@ -28,6 +28,8 @@
 #                                     PHP revalidates, see OPCACHE_WAIT)
 #   OPCACHE_WAIT=65                   seconds waited without RELOAD_PHP (opcache.revalidate_freq + 5;
 #                                     0 when opcache.validate_timestamps revalidates every request)
+#   CHECK=1                           0: do not run the plugin's checks at the end
+#                                     (bin/console plugins:realtime:check, never fails the install)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -116,6 +118,16 @@ if [[ -n "$SERVICE" ]] && command -v systemctl >/dev/null && systemctl cat "$SER
     systemctl try-restart "$SERVICE"
 else
     echo "   service not restarted (no systemd unit '$SERVICE'): restart the server yourself"
+fi
+
+# --- Checks -------------------------------------------------------------------------------
+# The configuration page's checks; reported only: an upgrade is not undone for a warning.
+if [[ "$SKIP_PLUGIN_UPGRADE" != 1 && "${CHECK:-1}" == 1 ]]; then
+    sleep 2 # the restarted server publishes its status in Valkey
+    echo "==> Checks (bin/console plugins:realtime:check)"
+    # shellcheck disable=SC2086
+    runuser -u "$GLPI_USER" -- $PHP "$GLPI_DIR/bin/console" plugins:realtime:check \
+        || echo "   see above: what to fix, and the plugin's configuration page (Setup > Plugins > Realtime)"
 fi
 
 echo

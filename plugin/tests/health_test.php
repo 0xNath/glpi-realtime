@@ -74,4 +74,42 @@ Health::$requestOrigin = 'http://glpi.example.org';
 $res = results();
 check($res['https'][0] === Health::ERROR, 'page served over plain HTTP: error');
 
+// Command line: no request, GLPI's URL is what browsers use; the web server is requested.
+Health::$requestOrigin = '';
+Health::$urlBase = 'https://glpi.example.org/';
+$requests = [];
+$answers = [];
+Health::$http = static function (string $url, array $headers) use (&$requests, &$answers): array {
+    $requests[] = [$url, $headers];
+    return array_shift($answers) ?? [0, 'no answer'];
+};
+$cli = static function () {
+    $out = [];
+    foreach (Health::run(cli: true) as $c) {
+        $out[$c['id']] = [$c['status'], $c['detail'], $c['fix'], $c['group']];
+    }
+    return $out;
+};
+$answers = [[400, 'Connection header did not include \'upgrade\''], [401, 'unauthorized']];
+$res = $cli();
+check(!isset($res['session']) && !isset($res['opcache']), 'command line: no session nor opcache check');
+check($res['https'][0] === Health::OK && $res['origin'][0] === Health::OK, 'command line: GLPI\'s URL is the origin');
+check($res['ws_location'][0] === Health::OK && $res['ws_upgrade'][0] === Health::OK && $res['ws_upgrade'][3] === 'web', 'web server forwards /ws and the upgrade');
+check($requests[0][0] === 'https://glpi.example.org/ws' && ($requests[1][1]['Origin'] ?? '') === 'https://glpi.example.org' && ($requests[1][1]['Upgrade'] ?? '') === 'websocket', 'requests: /ws at GLPI\'s URL, then an upgrade with GLPI\'s origin');
+
+$answers = [[404, '<html>GLPI</html>']];
+$res = $cli();
+check($res['ws_location'][0] === Health::ERROR && str_contains($res['ws_location'][2], 'location') && !isset($res['ws_upgrade']), 'no /ws location: error, upgrade not tried');
+$answers = [[502, 'Bad Gateway']];
+check($cli()['ws_location'][0] === Health::ERROR, 'server down behind the proxy: error');
+$answers = [[0, 'Could not resolve host']];
+check(str_contains($cli()['ws_location'][1], 'Could not resolve host'), 'no answer: the reason is shown');
+$answers = [[400, 'Connection header did not include \'upgrade\''], [400, '`Upgrade` header did not include \'websocket\'']];
+$res = $cli();
+check($res['ws_upgrade'][0] === Health::ERROR && str_contains($res['ws_upgrade'][2], 'proxy_http_version'), 'upgrade headers lost by the proxy: error, how to pass them');
+$answers = [[400, ''], [403, 'origin']];
+$res = $cli();
+check($res['ws_upgrade'][0] === Health::ERROR && str_contains($res['ws_upgrade'][2], 'allowed_origins'), 'origin refused: error');
+Health::$http = null;
+
 exit($GLOBALS['failures'] === 0 ? 0 : 1);

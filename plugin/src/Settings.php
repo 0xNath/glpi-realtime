@@ -18,7 +18,7 @@ final class Settings
         'valkey_db'          => '6',
         // Valkey ACL user and password (empty: no AUTH). The password is stored encrypted
         // with GLPI's key (secured config): set it with
-        //   bin/console glpi:config:set --context=plugin:realtime valkey_password '...'
+        //   bin/console config:set --context=plugin:realtime valkey_password '...'
         'valkey_username'    => '',
         'valkey_password'    => '',
         'key_prefix'         => 'rt:',

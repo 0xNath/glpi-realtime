@@ -33,11 +33,19 @@ final class Health
     public static ?string $requestOrigin = null;
     public static ?string $version = null;
     public static bool $skipDatabase = false;
+    /**
+     * @internal tests: HTTP client of the command line checks,
+     * fn(string $url, array<string, string> $headers): array{0: int, 1: string} (status, body).
+     */
+    public static ?\Closure $http = null;
+
+    /** Groups of checks: those of the command line add the web server. */
+    public const GROUPS = ['glpi', 'valkey', 'server', 'web'];
 
     /**
      * @return list<array{group: string, id: string, label: string, status: string, detail: string, fix: string}>
      */
-    public static function run(): array
+    public static function run(bool $cli = false): array
     {
         $out = [];
         $add = static function (string $group, array $check) use (&$out) {
@@ -53,7 +61,9 @@ final class Health
             $add('glpi', self::cron());
         }
         $add('glpi', self::bundle());
-        $add('glpi', self::opcache());
+        if (!$cli) {
+            $add('glpi', self::opcache()); // the command line's PHP is not the web server's
+        }
 
         // --- Valkey -----------------------------------------------------------------
         [$r, $check] = self::connect();
@@ -61,13 +71,21 @@ final class Health
         if ($r !== null) {
             $add('valkey', self::version($r));
             $add('valkey', self::permissions($r));
-            $add('glpi', self::sessionToken($r));
+            if (!$cli) {
+                $add('glpi', self::sessionToken($r)); // no GLPI session on the command line
+            }
             // --- Server -------------------------------------------------------------
             foreach (self::servers($r) as $check) {
                 $add('server', $check);
             }
             if ($r !== Valkey::$override) {
                 $r->close(); // ours only (tests pass their client)
+            }
+        }
+        // --- Web server: what the browser checks on the configuration page -------------
+        if ($cli) {
+            foreach (self::webServer() as $check) {
+                $add('web', $check);
             }
         }
         return $out;
@@ -128,10 +146,16 @@ final class Health
         return $host === '' ? '' : self::origin(($https ? 'https' : 'http') . '://' . explode(',', $host)[0]);
     }
 
+    /** The address browsers use: this request's, else (command line) GLPI's URL setting. */
+    public static function browserOrigin(): string
+    {
+        return self::requestOrigin() ?: self::origin(self::urlBase());
+    }
+
     private static function https(): array
     {
         $label = __('HTTPS', 'realtime');
-        $origin = self::requestOrigin();
+        $origin = self::browserOrigin();
         if (str_starts_with($origin, 'https://')) {
             return self::check('https', $label, self::OK, $origin);
         }
@@ -196,7 +220,7 @@ final class Health
                 $label,
                 self::WARNING,
                 $last === '' ? __('Never run.', 'realtime') : sprintf(__('Last run: %s.', 'realtime'), $last),
-                __('GLPI\'s automatic actions do not seem to run: add a system cron job running "php bin/console glpi:cron" every minute as the user running GLPI (see GLPI\'s documentation).', 'realtime')
+                __('GLPI\'s automatic actions do not seem to run: add a system cron job running "php front/cron.php" (in GLPI\'s directory) every minute as the user running GLPI (see GLPI\'s documentation).', 'realtime')
             );
         }
         return self::check('cron', $label, self::OK, sprintf(__('Last run: %s.', 'realtime'), $last));
@@ -252,21 +276,19 @@ final class Health
         try {
             $r = Valkey::$override ?? new Redis();
             if (Valkey::$override === null) {
-                if (str_starts_with($target, '/')) {
+                [$host, $port] = Valkey::target($target);
+                if ($port === 0) {
                     if (!file_exists($target)) {
-                        return [null, self::check('valkey', $label, self::ERROR, sprintf(__('No socket at %s.', 'realtime'), $target), __('Check that Valkey runs and that its "unixsocket" (valkey.conf) is the plugin setting valkey_socket (bin/console glpi:config:set --context=plugin:realtime valkey_socket ...).', 'realtime'))];
+                        return [null, self::check('valkey', $label, self::ERROR, sprintf(__('No socket at %s.', 'realtime'), $target), __('Check that Valkey runs and that its "unixsocket" (valkey.conf) is the plugin setting valkey_socket (bin/console config:set --context=plugin:realtime valkey_socket ...).', 'realtime'))];
                     }
-                    $r->connect($target, 0, 1.0);
-                } else {
-                    [$host, $port] = array_pad(explode(':', $target, 2), 2, '6379');
-                    $r->connect($host, (int) $port, 1.0);
                 }
+                $r->connect($host, $port, 1.0);
             }
             $password = Settings::valkeyPassword();
             if ($password !== '') {
                 $name = Settings::get('valkey_username');
                 if (!$r->auth($name !== '' ? [$name, $password] : $password)) {
-                    return [null, self::check('valkey', $label, self::ERROR, __('Valkey refused the user name or password.', 'realtime'), __('Check valkey_username and valkey_password (bin/console glpi:config:set --context=plugin:realtime valkey_password ...) against the ACL user of valkey.conf.', 'realtime'))];
+                    return [null, self::check('valkey', $label, self::ERROR, __('Valkey refused the user name or password.', 'realtime'), __('Check valkey_username and valkey_password (bin/console config:set --context=plugin:realtime valkey_password ...) against the ACL user of valkey.conf.', 'realtime'))];
                 }
             }
             $r->ping();
@@ -275,7 +297,7 @@ final class Health
             $msg = $e->getMessage();
             $fix = match (true) {
                 stripos($msg, 'permission denied') !== false => sprintf(__('The user running PHP (%s) cannot open Valkey\'s socket: add it to the socket\'s group (valkey or redis, see "unixsocketperm" in valkey.conf) and restart PHP.', 'realtime'), $user),
-                stripos($msg, 'NOAUTH') !== false => __('Valkey requires a password: set valkey_username and valkey_password (bin/console glpi:config:set --context=plugin:realtime valkey_password ...).', 'realtime'),
+                stripos($msg, 'NOAUTH') !== false => __('Valkey requires a password: set valkey_username and valkey_password (bin/console config:set --context=plugin:realtime valkey_password ...).', 'realtime'),
                 stripos($msg, 'WRONGPASS') !== false => __('Wrong user name or password: check valkey_username and valkey_password against valkey.conf.', 'realtime'),
                 default => __('Check that Valkey runs, and the plugin settings valkey_socket and valkey_db.', 'realtime'),
             };
@@ -416,8 +438,7 @@ final class Health
                 __('Use the same name: [security] cookie_name in config.toml, plugin setting cookie_name.', 'realtime')
             );
 
-        // The address browsers use (this request), else GLPI's URL setting.
-        $origin = self::requestOrigin() ?: self::origin(self::urlBase());
+        $origin = self::browserOrigin();
         $bad = array_values(array_filter($statuses, static function ($s) use ($origin) {
             $allowed = array_map(static fn($o) => strtolower(rtrim((string) $o, '/')), (array) ($s['allowed_origins'] ?? []));
             return !in_array($origin, $allowed, true);
@@ -458,6 +479,86 @@ final class Health
         } else {
             $out[] = self::check('keyspace', __('Instant logout', 'realtime'), self::INFO, __('Cannot be verified: Valkey refuses CONFIG GET to the server (ACL). Make sure notify-keyspace-events contains K, g and x.', 'realtime'));
         }
+        return $out;
+    }
+    // ------------------------------------------------------------------ web server
+
+    /** @return array{0: int, 1: string} HTTP status (0: no answer) and body, or the error */
+    private static function fetch(string $url, array $headers): array
+    {
+        if (self::$http !== null) {
+            return (self::$http)($url, $headers);
+        }
+        if (!function_exists('curl_init')) {
+            return [0, 'PHP curl extension missing'];
+        }
+        $ch = curl_init($url);
+        $lines = [];
+        foreach ($headers as $k => $v) {
+            $lines[] = "$k: $v";
+        }
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTP_VERSION   => CURL_HTTP_VERSION_1_1, // WebSocket upgrades are HTTP/1.1
+            CURLOPT_HTTPHEADER     => $lines,
+            CURLOPT_CONNECTTIMEOUT => 5,
+            CURLOPT_TIMEOUT        => 5,
+            CURLOPT_FOLLOWLOCATION => false,
+        ]);
+        $body = curl_exec($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+        $error = curl_error($ch);
+        return $body === false ? [0, $error] : [$status, (string) $body];
+    }
+
+    /**
+     * The /ws location of the web server, from GLPI's URL: a plain request must reach the
+     * server (which answers 400, not GLPI's 404), and a WebSocket upgrade without session
+     * must get the server's 401 (upgrade passed, origin accepted), not its 403 (origin) nor
+     * a 400 (upgrade headers lost by the proxy).
+     *
+     * @return list<array>
+     */
+    public static function webServer(): array
+    {
+        $origin = self::browserOrigin();
+        $path = Settings::get('ws_path');
+        $label = __('Web server forwards /ws', 'realtime');
+        if ($origin === '') {
+            return [self::check('ws_location', $label, self::ERROR, __('GLPI\'s URL is not set.', 'realtime'), __('Set it in Setup > General > General setup ("URL of the application").', 'realtime'))];
+        }
+        $url = $origin . $path;
+        [$status, $body] = self::fetch($url, []);
+        $glpiPage = stripos($body, '<html') !== false;
+        if ($status === 0) {
+            return [self::check('ws_location', $label, self::ERROR, sprintf(__('No answer from %s: %s', 'realtime'), $url, $body), __('Check that GLPI\'s URL can be reached from this machine (DNS, firewall, certificate).', 'realtime'))];
+        }
+        if ($status === 404 || (($status === 400 || $status === 426) && $glpiPage)) {
+            return [self::check('ws_location', $label, self::ERROR, sprintf(__('%s is answered by GLPI itself (HTTP %d): the web server does not forward it.', 'realtime'), $url, $status), __('Add the /ws location to the GLPI vhost (README, "Web server": nginx location or Apache ProxyPass), then reload the web server.', 'realtime'))];
+        }
+        if ($status >= 502 && $status <= 504) {
+            return [self::check('ws_location', $label, self::ERROR, sprintf(__('The web server cannot reach glpi-realtime (HTTP %s).', 'realtime'), $status), __('Start the server (systemctl status glpi-realtime). With a unix socket, the web server\'s user must be in the socket\'s group: [listen] group in config.toml, and the service\'s SupplementaryGroups.', 'realtime'))];
+        }
+        if ($status !== 400 && $status !== 426) {
+            return [self::check('ws_location', $label, self::WARNING, sprintf(__('Unexpected answer from %s: HTTP %d.', 'realtime'), $url, $status))];
+        }
+        $out = [self::check('ws_location', $label, self::OK, sprintf(__('%s reaches glpi-realtime (HTTP %d).', 'realtime'), $url, $status))];
+
+        $label = __('WebSocket upgrade', 'realtime');
+        [$status, $body] = self::fetch($url, [
+            'Connection'            => 'Upgrade',
+            'Upgrade'               => 'websocket',
+            'Sec-WebSocket-Version' => '13',
+            'Sec-WebSocket-Key'     => base64_encode(random_bytes(16)),
+            'Origin'                => $origin,
+        ]);
+        $out[] = match (true) {
+            $status === 401 => self::check('ws_upgrade', $label, self::OK, __('The upgrade reaches the server, which accepts GLPI\'s origin (and asks for a session: expected here).', 'realtime')),
+            $status === 403 => self::check('ws_upgrade', $label, self::ERROR, sprintf(__('The server refuses the origin %s.', 'realtime'), $origin), sprintf(__('Add "%s" to [security] allowed_origins in config.toml, then restart the server.', 'realtime'), $origin)),
+            $status === 400 || $status === 426 => self::check('ws_upgrade', $label, self::ERROR, sprintf(__('The upgrade headers do not reach the server (HTTP %d: %s).', 'realtime'), $status, trim(substr($body, 0, 120))), __('nginx: proxy_http_version 1.1, proxy_set_header Upgrade $http_upgrade and Connection "upgrade"; Apache: upgrade=websocket on the ProxyPass (README, "Web server").', 'realtime')),
+            $status === 429 => self::check('ws_upgrade', $label, self::WARNING, __('Rate-limited by the web server (HTTP 429): try again in a minute.', 'realtime')),
+            default => self::check('ws_upgrade', $label, self::WARNING, sprintf(__('Unexpected answer: HTTP %d.', 'realtime'), $status)),
+        };
         return $out;
     }
 }

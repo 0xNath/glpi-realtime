@@ -1,6 +1,5 @@
-import { expect, test } from "@playwright/test";
 
-import { login } from "./helpers.ts";
+import { login, expect, test } from "./helpers.ts";
 
 /** Every check of the plugin's configuration page: [status, label, detail and fix]. */
 async function checks(page: import("@playwright/test").Page): Promise<Array<[string, string, string]>> {

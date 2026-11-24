@@ -1,6 +1,6 @@
 # glpi-realtime
 
-Optional real-time layer for GLPI 12, on tickets, changes and problems alike: presence,
+Optional real-time layer for GLPI 11 and 12, on tickets, changes and problems alike: presence,
 typing indicators, live updates of the item and its timeline, instant notifications, a
 single editor for the fields, one solution at a time, and shared answer drafts.
 
@@ -9,7 +9,8 @@ single editor for the fields, one solution at a time, and shared answer drafts.
 - `client/`: browser client in TypeScript, bundled into `plugin/public/realtime.js`.
 - `deploy/`: `install.sh` (installs and upgrades the binary and the plugin), and
   `examples/`: configuration, systemd unit, system user, Valkey, nginx and Apache vhosts.
-- `e2e/`: end-to-end tests in a real Chromium against the GLPI instance ([setup](e2e/README.md)).
+- `e2e/`: end-to-end tests in a real Chromium, against your GLPI or a disposable one
+  (`e2e/env/`, containers) ([setup](e2e/README.md)).
 - `docs/`: [protocol](docs/protocol.md), [security model](docs/security.md).
 
 GLPI works unchanged when the server, Valkey or the plugin is absent.
@@ -66,13 +67,23 @@ Requirements: Rust ≥ 1.85, Node ≥ 22.6, `valkey-server` (integration tests),
 (cd client && npm ci && npm run build)
 ```
 
+End-to-end, against a disposable GLPI in containers (Docker or Podman; any
+`docker.io/glpi/glpi` tag with `GLPI_VERSION`):
+
+```bash
+e2e/env/up.sh && (cd e2e && npm ci && E2E_ENV_FILE=../.e2e.local.env npx playwright test)
+e2e/env/down.sh
+```
+
+The CI runs them on GLPI 11.0, 12.0.0, the latest 12.0 and the next one (nightly, warning only).
+
 ## Install
 
 `deploy/install.sh` only installs the project's own files: the server binary and the GLPI
 plugin. It never writes configuration: the files below are set up once, by you, from
 `deploy/examples/`, so that the project fits any distribution and upgrades never touch them.
 
-Requirements: GLPI 12 with the PHP `redis` extension (phpredis), Valkey ≥ 9.0 (or Redis ≥ 7.4,
+Requirements: GLPI 11 or 12 with the PHP `redis` extension (phpredis), Valkey ≥ 9.0 (or Redis ≥ 7.4,
 for hash field TTLs), systemd (or any supervisor), nginx or Apache httpd ≥ 2.4.47.
 
 ### 1. Build, then install the files (also for every upgrade)
@@ -128,7 +139,7 @@ filter) and raises `LimitNOFILE` for 20 000 connections.
 Protect it: whoever can write to Valkey can forge sessions. Give the server and GLPI an
 ACL user limited to `rt:*` keys and channels (`valkey.conf.example`); set its password in
 `config.toml` (`[valkey] username`, `password`) and in GLPI with
-`bin/console glpi:config:set --context=plugin:realtime valkey_password '…'` (encrypted
+`bin/console config:set --context=plugin:realtime valkey_password '…'` (encrypted
 with GLPI's key).
 
 
@@ -183,6 +194,17 @@ client bundle; Valkey (connection, ACL login, version, permissions); the server 
 (each publishes its status in Valkey: version, cookie name, allowed origins and item
 types, keyspace notifications), compared with GLPI's settings; and, from the browser, the
 web server's `/ws` location and a real WebSocket.
+
+The same checks from the command line, for scripts and monitoring (run as the user
+running GLPI; `deploy/install.sh` runs it at the end, `CHECK=0` to skip):
+
+```bash
+php bin/console plugins:realtime:check            # [--format=json] [--no-web]
+```
+
+The web server is checked through GLPI's URL (as browsers reach it): `/ws` must reach the
+server, and a WebSocket upgrade must get through with GLPI's origin. Exit code, as
+monitoring tools expect it: 0 everything works, 1 warnings, 2 errors.
 
 ### Releases
 

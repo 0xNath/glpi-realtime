@@ -53,6 +53,77 @@ jobs:
           (cd client && npm run -s build)
           git diff --exit-code -- plugin/public/realtime.js || { echo "run 'npm run build' in client/ and commit"; exit 1; }
 
+  # The server, static (musl), for the end-to-end environments below.
+  server-bin:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: server
+          key: musl
+      - run: sudo apt-get install -y musl-tools
+      - run: cargo build --release --locked --target x86_64-unknown-linux-musl
+        working-directory: server
+      - uses: actions/upload-artifact@v4
+        with:
+          name: glpi-realtime-musl
+          path: server/target/x86_64-unknown-linux-musl/release/glpi-realtime
+          retention-days: 3
+
+  # End-to-end, in Chromium, against disposable GLPIs (e2e/env): GLPI 11 (latest 11.0), the
+  # oldest and the latest 12.0 release, and the next one (nightly) as a warning only.
+  e2e:
+    needs: server-bin
+    runs-on: ubuntu-24.04
+    continue-on-error: ${{ matrix.experimental }}
+    strategy:
+      fail-fast: false
+      matrix:
+        glpi: ["11.0", "12.0.0", "12.0"]
+        experimental: [false]
+        include:
+          - glpi: "12.0-nightly"
+            experimental: true
+    name: e2e (GLPI ${{ matrix.glpi }})
+    env:
+      GLPI_VERSION: ${{ matrix.glpi }}
+      SERVER_SOURCE: server-prebuilt
+      COMPOSE: docker compose
+      E2E_ENV_FILE: ${{ github.workspace }}/.e2e.local.env
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: glpi-realtime-musl
+          path: e2e/env/bin
+      - run: chmod +x e2e/env/bin/glpi-realtime
+      - name: Disposable GLPI ${{ matrix.glpi }}, plugin checks
+        run: e2e/env/up.sh
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+      - run: npm ci && npx playwright install --with-deps chromium
+        working-directory: e2e
+      - run: npx playwright test
+        working-directory: e2e
+      - name: Logs
+        if: failure()
+        run: mkdir -p e2e/test-results && docker compose -f e2e/env/compose.yaml logs --no-color glpi > e2e/test-results/glpi.log 2>&1 || true
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-${{ matrix.glpi }}
+          path: |
+            e2e/test-results/
+            e2e/playwright-report/
+          retention-days: 7
+
   audit:
     runs-on: ubuntu-24.04
     steps:
@@ -67,7 +138,7 @@ jobs:
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [test, audit]
+    needs: [test, audit, e2e]
     runs-on: ubuntu-24.04
     permissions:
       contents: write

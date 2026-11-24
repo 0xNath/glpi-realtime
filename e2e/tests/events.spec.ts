@@ -1,6 +1,5 @@
-import { expect, test } from "@playwright/test";
 
-import { login, openAnswer, openTicketAsAllowed, room, ticketId, waitForFrame } from "./helpers.ts";
+import { login, openAnswer, openTicketAsAllowed, room, ticketId, waitForFrame, expect, test } from "./helpers.ts";
 
 const banner = `.glpi-rt-updates[data-room="${room}"]`; // field changes only
 

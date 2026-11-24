@@ -23,7 +23,7 @@ def po_escape(s):
 
 def extract():
     found = {}
-    for f in sorted([*PLUGIN.glob("*.php"), *PLUGIN.rglob("src/*.php"), *PLUGIN.rglob("ajax/*.php"), *PLUGIN.rglob("front/*.php")]):
+    for f in sorted([*PLUGIN.glob("*.php"), *(PLUGIN / "src").rglob("*.php"), *PLUGIN.rglob("ajax/*.php"), *PLUGIN.rglob("front/*.php")]):
         text = f.read_text()
         for m in CALL.finditer(text):
             line = text.count("\n", 0, m.start()) + 1

@@ -15,6 +15,6 @@ notify-keyspace-events Kgx
 #   user default off
 #   user glpi-rt on >CHANGE-ME ~rt:* &rt:* &__keyspace@*__:rt:* +@all -@dangerous
 # Then: config.toml [valkey] username/password, and in GLPI (stored encrypted):
-#   bin/console glpi:config:set --context=plugin:realtime valkey_username glpi-rt
-#   bin/console glpi:config:set --context=plugin:realtime valkey_password 'CHANGE-ME'
+#   bin/console config:set --context=plugin:realtime valkey_username glpi-rt
+#   bin/console config:set --context=plugin:realtime valkey_password 'CHANGE-ME'
 port 0

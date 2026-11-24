@@ -138,6 +138,11 @@ SessionToken::ensure(9);
 SessionToken::revoke();
 check($r->exists(SessionToken::sessionKey($h3)) === 0 && SessionToken::currentHash() === null, 'logout revokes the token');
 
+// --- valkey_socket: a socket path or host[:port] -----------------------------------
+check(Valkey::target('/run/valkey/valkey.sock') === ['/run/valkey/valkey.sock', 0], 'unix socket');
+check(Valkey::target('valkey:6380') === ['valkey', 6380] && Valkey::target('127.0.0.1') === ['127.0.0.1', 6379], 'host:port, default port');
+check(Valkey::target('redis://valkey:6379') === ['valkey', 6379] && Valkey::target('[::1]:6390') === ['::1', 6390], 'URL scheme and IPv6');
+
 // --- Valkey down: fail open ---------------------------------------------------------
 Valkey::$override = null;
 Config::$values = ['valkey_socket' => '/nonexistent/valkey.sock', 'valkey_timeout' => '0.05'];

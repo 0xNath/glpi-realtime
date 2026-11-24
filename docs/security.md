@@ -126,4 +126,4 @@ systemd sandbox: dedicated user, no capabilities, read-only system, no home, pri
 - Approvals (`validation.*`) and documents are announced to every reader of the ticket
   (kind and id only), even if their profile cannot open approvals.
 - Logout revocation relies on `post_init` running for `/front/logout.php` (verified by the
-  end-to-end tests on GLPI 12.0.0); the session TTL is the fallback.
+  end-to-end tests, on GLPI 11.0 and 12.0); the session TTL is the fallback.

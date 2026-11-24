@@ -19,7 +19,7 @@ use GlpiPlugin\Realtime\SessionToken;
 use GlpiPlugin\Realtime\SolutionGuard;
 
 define('PLUGIN_REALTIME_VERSION', '0.4.0');
-define('PLUGIN_REALTIME_MIN_GLPI', '12.0.0');
+define('PLUGIN_REALTIME_MIN_GLPI', '11.0.0');
 define('PLUGIN_REALTIME_MAX_GLPI', '12.0.99');
 
 spl_autoload_register(static function (string $class): void {

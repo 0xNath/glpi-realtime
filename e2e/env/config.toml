@@ -1,0 +1,17 @@
+# glpi-realtime in the disposable e2e environment (defaults otherwise).
+[listen]
+type = "unix"
+path = "/run/glpi-realtime/rt.sock"
+mode = 0o660
+group = "www-data"
+
+[valkey]
+url = "redis://valkey:6379"
+db = 6
+
+[security]
+allowed_origins = ["https://localhost:8443"]
+allowed_itemtypes = ["Ticket", "Change", "Problem"]
+
+[revocation]
+keyspace_events = true

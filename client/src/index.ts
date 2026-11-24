@@ -1,4 +1,5 @@
 import { ActivityTracker } from "./activity.ts";
+import { glpiHeaders } from "./http.ts";
 import { RealtimeClient } from "./client.ts";
 import { Bell, InboxController } from "./bell.ts";
 import { InboxApi, labelsFor } from "./inbox.ts";
@@ -120,7 +121,7 @@ function boot(): void {
         const resp = await fetch(`${rootDoc}/plugins/realtime/ajax/grants.php`, {
           method: "POST",
           credentials: "same-origin",
-          headers: { "Content-Type": "application/json", "X-Requested-With": "XMLHttpRequest" },
+          headers: glpiHeaders(document, true),
           body: JSON.stringify({ items }),
         });
         const data = resp.ok ? await resp.json() : null;

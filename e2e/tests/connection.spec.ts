@@ -1,6 +1,5 @@
-import { expect, test } from "@playwright/test";
 
-import { clientState, login, openTicket, openTicketAsAllowed, room, useProfile, waitForFrame } from "./helpers.ts";
+import { clientState, login, openTicket, openTicketAsAllowed, room, useProfile, waitForFrame, expect, test } from "./helpers.ts";
 
 test("two technicians on the same ticket are connected and subscribed", async ({ browser }) => {
   const alice = await login(browser, "alice");

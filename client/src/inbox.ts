@@ -1,4 +1,5 @@
 import { register } from "./i18n.ts";
+import { glpiHeaders } from "./http.ts";
 /**
  * The notification inbox ("bell"): data from GLPI (ajax/inbox.php), grouping and texts.
  * Queues, events and preferences follow the Notifier+ plugin.
@@ -358,7 +359,7 @@ export class InboxApi {
     const resp = await this.fetchFn(url, {
       method: body === undefined ? "GET" : "POST",
       credentials: "same-origin",
-      headers: { "X-Requested-With": "XMLHttpRequest", ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
+      headers: glpiHeaders(globalThis.document, body !== undefined),
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     if (!resp.ok && resp.status !== 403) return null;

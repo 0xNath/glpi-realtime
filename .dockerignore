@@ -1,0 +1,9 @@
+# Build context of e2e/env/Containerfile (the repository): sources only.
+.git
+server/target
+client/node_modules
+e2e/node_modules
+e2e/test-results
+e2e/playwright-report
+dist
+.e2e*.env

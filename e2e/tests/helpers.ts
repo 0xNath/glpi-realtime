@@ -1,4 +1,24 @@
-import { type Browser, type BrowserContext, expect, type Page } from "@playwright/test";
+import { test as base, type Browser, type BrowserContext, expect, type Page } from "@playwright/test";
+
+export { expect };
+
+/** Browser contexts opened by login(), closed after each test whatever its outcome. */
+const open = new Set<BrowserContext>();
+
+/**
+ * Playwright's test, closing the sessions a test opened even when it fails or is skipped
+ * half-way: a tab left open on the test ticket would show up in the next tests' presence.
+ */
+export const test = base.extend<{ closeSessions: void }>({
+  closeSessions: [
+    async ({}, use) => {
+      await use();
+      for (const c of open) await c.close().catch(() => {});
+      open.clear();
+    },
+    { auto: true },
+  ],
+});
 
 export type Who = "alice" | "bob" | "carol";
 
@@ -22,6 +42,8 @@ function password(who: Who): string {
 /** Logs a test account in, in its own isolated browser context. */
 export async function login(browser: Browser, who: Who): Promise<Session> {
   const context = await browser.newContext();
+  open.add(context);
+  context.on("close", () => open.delete(context));
   const page = await focusedPage(context);
   const frames: Session["frames"] = [];
   page.on("websocket", (ws) => {

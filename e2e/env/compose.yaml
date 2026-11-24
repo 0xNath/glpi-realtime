@@ -1,0 +1,33 @@
+# Disposable GLPI + glpi-realtime + Valkey + MariaDB for the end-to-end tests: see
+# e2e/README.md ("Disposable environment"). GLPI at https://localhost:8443.
+name: glpi-realtime-e2e
+services:
+  db:
+    image: docker.io/library/mariadb:11.8
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+      MARIADB_DATABASE: glpi
+      MARIADB_USER: glpi
+      MARIADB_PASSWORD: glpi
+    tmpfs: [/var/lib/mysql]
+
+  valkey:
+    image: docker.io/valkey/valkey:9.0
+    command: ["valkey-server", "--save", "", "--appendonly", "no", "--notify-keyspace-events", "Kgx"]
+
+  glpi:
+    build:
+      context: ../..
+      dockerfile: e2e/env/Containerfile
+      args:
+        GLPI_VERSION: ${GLPI_VERSION:-12.0}
+        SERVER_SOURCE: ${SERVER_SOURCE:-server-build}
+    image: localhost/glpi-realtime-e2e:${GLPI_VERSION:-12.0}
+    environment:
+      GLPI_DB_HOST: db
+      GLPI_DB_PORT: "3306"
+      GLPI_DB_NAME: glpi
+      GLPI_DB_USER: glpi
+      GLPI_DB_PASSWORD: glpi
+    depends_on: [db, valkey]
+    ports: ["127.0.0.1:8443:8443"]

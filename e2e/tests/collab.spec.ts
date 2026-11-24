@@ -1,6 +1,5 @@
-import { expect, test } from "@playwright/test";
 
-import { closeAnswer, login, openAnswer, openTicketAsAllowed, room, ticketId, typeAnswer, waitForFrame } from "./helpers.ts";
+import { closeAnswer, login, openAnswer, openTicketAsAllowed, room, ticketId, typeAnswer, waitForFrame, expect, test } from "./helpers.ts";
 
 test("while one technician edits the fields, the other's are read-only", async ({ browser }) => {
   const alice = await login(browser, "alice");

@@ -3,6 +3,22 @@
 Server and plugin share one version number. Upgrades never change your configuration:
 "Configuration" lists what to edit yourself.
 
+## Unreleased
+
+- `bin/console plugins:realtime:check`: the configuration page's checks from the command
+  line (text or JSON, exit code 0/1/2 for monitoring), including the web server's `/ws`
+  location and WebSocket upgrade; `deploy/install.sh` runs it at the end (`CHECK=0` to skip).
+- Plugin setting `valkey_socket` also accepts `host[:port]` (TCP), not only a unix socket.
+- Fixed: the commands given by the messages and the README are GLPI's `config:set` (not
+  `glpi:config:set`) and `php front/cron.php`.
+- Fixed: a presence update could keep a hovered avatar's user card from opening.
+- GLPI 11 is supported (11.0.0 or later). Fixed for it: list presence, the bell's actions,
+  notification preferences and "assign to me" were refused by GLPI 11's CSRF check (the
+  client now sends GLPI's token when the page has one).
+- Disposable end-to-end environment (`e2e/env/`: GLPI, glpi-realtime, Valkey, MariaDB in
+  containers); the CI runs the end-to-end tests on GLPI 11.0, 12.0.0, 12.0 and 12.0 nightly.
+- End-to-end tests close their browsers even when a test fails or is skipped.
+
 ## 0.4.0
 
 - GLPI refuses to save a ticket/change/problem fields form older than the database
