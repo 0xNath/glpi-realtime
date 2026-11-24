@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 
-import { expect, items, login, test } from "./helpers.ts";
+import { expect, items, login, test, waitForFrame } from "./helpers.ts";
 
 /** Opens the bell, with read notifications shown too (they stay listed once read). */
 async function openBell(page: Page) {
@@ -63,6 +63,13 @@ test("notification preferences are saved", async ({ browser }) => {
 test("assume: a technician assigns themselves an unassigned ticket from the bell", async ({ browser }) => {
   test.skip(!items.assignTicket, "RT_ASSIGN_TICKET_ID is not set (an unassigned ticket rt-alice may take)");
   const alice = await login(browser, "alice");
+  // The test assigns the ticket for good: on an environment where it already ran, there is
+  // nothing left to test (a fresh one, as in the CI, always runs it).
+  const aliceId = (await waitForFrame(alice, (f) => f.t === "hello", "hello")).user.id;
+  await alice.page.goto(`/front/ticket.form.php?id=${items.assignTicket}`);
+  const assigned = alice.page.locator("select[data-actor-type='assign']");
+  await expect(assigned).toBeAttached();
+  test.skip(await assigned.locator(`option[value='User_${aliceId}']`).count() > 0, "already assigned to rt-alice by an earlier run in this environment");
   const panel = await openBell(alice.page);
   const row = panel.locator(`.glpi-rt-n[data-key="Ticket:${items.assignTicket}"]`);
   await expect(row).toBeVisible();

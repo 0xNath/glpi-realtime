@@ -117,6 +117,10 @@ test("GLPI refuses a second solution, whatever the browser does", async ({ brows
   const alice = await login(browser, "alice");
   const bob = await login(browser, "bob");
   expect(await openItem(alice, "Ticket", items.solutionTicket)).toBe(200);
+  // The test solves the ticket for good: on an environment where it already ran, there is
+  // nothing left to test (a fresh one, as in the CI, always runs it).
+  await expect(alice.page.locator(".itil-timeline")).toBeVisible();
+  test.skip(await alice.page.locator(".itil-timeline").getByText("solution e2e").count() > 0, "already solved by an earlier run in this environment");
   expect(await openItem(bob, "Ticket", items.solutionTicket)).toBe(200);
   // Bob's page is loaded before Alice's solution exists. (Had he opened his solution form
   // first, Alice's would be locked: one solution is written at a time.)
