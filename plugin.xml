@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Description of the plugin for GLPI's plugin catalog (plugins.glpi-project.org). -->
+<root>
+   <name>Realtime</name>
+   <key>realtime</key>
+   <state>stable</state>
+   <logo>https://raw.githubusercontent.com/0xNath/glpi-realtime/master/docs/img/logo.png</logo>
+   <description>
+      <short>
+         <en>Real-time collaboration on tickets, changes and problems: presence, live timeline, instant notifications, a single editor, shared drafts.</en>
+         <fr>Collaboration en temps réel sur les tickets, changements et problèmes : présence, timeline en direct, notifications instantanées, un seul éditeur, brouillons partagés.</fr>
+      </short>
+      <long>
+         <en>Shows who is on an item and on each row of the lists, who is writing a followup, task or solution (and lets others follow the draft or take it over), adds new timeline entries without reloading, keeps a single editor of the fields and a single solution at a time (enforced by GLPI), and notifies instantly through a bell with queues, preferences, sound and desktop notifications. Requires the glpi-realtime server (included in the release archive) and Valkey; GLPI works unchanged without them. A configuration page checks the whole setup and says how to fix what is missing.</en>
+         <fr>Montre qui est sur un élément et sur chaque ligne des listes, qui rédige un suivi, une tâche ou une solution (que les autres peuvent suivre ou reprendre), ajoute les nouvelles entrées de la timeline sans recharger, garde un seul éditeur des champs et une seule solution à la fois (garanti par GLPI), et notifie instantanément via une cloche avec files, préférences, son et notifications du bureau. Nécessite le serveur glpi-realtime (fourni dans l'archive de release) et Valkey ; sans eux, GLPI fonctionne comme avant. Une page de configuration vérifie toute l'installation et indique comment corriger ce qui manque.</fr>
+      </long>
+   </description>
+   <homepage>https://github.com/0xNath/glpi-realtime</homepage>
+   <download>https://github.com/0xNath/glpi-realtime/releases</download>
+   <issues>https://github.com/0xNath/glpi-realtime/issues</issues>
+   <readme>https://github.com/0xNath/glpi-realtime/blob/master/README.md</readme>
+   <authors>
+      <author>glpi-realtime contributors</author>
+   </authors>
+   <versions>
+      <version>
+         <num>0.5.0</num>
+         <compatibility>~11.0.0</compatibility>
+         <compatibility>~12.0.0</compatibility>
+         <download_url>https://github.com/0xNath/glpi-realtime/releases/download/v0.5.0/glpi-plugin-realtime-0.5.0.tar.bz2</download_url>
+      </version>
+   </versions>
+   <langs>
+      <lang>en_GB</lang>
+      <lang>fr_FR</lang>
+   </langs>
+   <license>GPL v3+</license>
+   <tags>
+      <en>
+         <tag>realtime</tag>
+         <tag>collaboration</tag>
+         <tag>notifications</tag>
+         <tag>presence</tag>
+         <tag>websocket</tag>
+      </en>
+      <fr>
+         <tag>temps réel</tag>
+         <tag>collaboration</tag>
+         <tag>notifications</tag>
+         <tag>présence</tag>
+         <tag>websocket</tag>
+      </fr>
+   </tags>
+   <screenshots>
+      <screenshot>https://raw.githubusercontent.com/0xNath/glpi-realtime/master/docs/img/presence.png</screenshot>
+      <screenshot>https://raw.githubusercontent.com/0xNath/glpi-realtime/master/docs/img/bell.png</screenshot>
+      <screenshot>https://raw.githubusercontent.com/0xNath/glpi-realtime/master/docs/img/fields-lock.png</screenshot>
+      <screenshot>https://raw.githubusercontent.com/0xNath/glpi-realtime/master/docs/img/draft.png</screenshot>
+      <screenshot>https://raw.githubusercontent.com/0xNath/glpi-realtime/master/docs/img/list.png</screenshot>
+      <screenshot>https://raw.githubusercontent.com/0xNath/glpi-realtime/master/docs/img/checks.png</screenshot>
+   </screenshots>
+</root>

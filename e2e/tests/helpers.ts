@@ -25,6 +25,24 @@ export type Who = "alice" | "bob" | "carol";
 export const ticketId = Number(process.env.RT_TICKET_ID);
 export const room = `Ticket:${ticketId}`;
 
+/**
+ * Items of the tests that change them for good (assignment, solution), and changes and
+ * problems: created by e2e/env/up.sh; on your GLPI, the tests using one that is not set
+ * are skipped.
+ */
+export const items = {
+  assignTicket: Number(process.env.RT_ASSIGN_TICKET_ID ?? 0),
+  solutionTicket: Number(process.env.RT_SOLUTION_TICKET_ID ?? 0),
+  change: Number(process.env.RT_CHANGE_ID ?? 0),
+  problem: Number(process.env.RT_PROBLEM_ID ?? 0),
+};
+
+/** Opens an item's form; returns the HTTP status. */
+export async function openItem(s: Session, itemtype: "Ticket" | "Change" | "Problem", id: number): Promise<number> {
+  const resp = await s.page.goto(`/front/${itemtype.toLowerCase()}.form.php?id=${id}`);
+  return resp?.status() ?? 0;
+}
+
 export interface Session {
   who: Who;
   context: BrowserContext;
@@ -132,6 +150,8 @@ export async function waitForFrame(s: Session, pred: (f: Record<string, any>) =>
 
 /** Opens one of GLPI's answer forms (followup, solution...) and waits for its editor. */
 export async function openAnswer(page: Page, cls: string): Promise<void> {
+  // GLPI 12 loads the answer forms after the page.
+  await expect(page.locator(`#new-${cls}-block`), `no ${cls} answer form`).toBeAttached({ timeout: 15_000 });
   await page.evaluate((cls) => {
     const block = document.getElementById(`new-${cls}-block`);
     if (!block) throw new Error(`no ${cls} answer form`);
@@ -151,7 +171,7 @@ export async function typeAnswer(page: Page, cls: string, text: string): Promise
   await expect
     .poll(() => page.evaluate((cls) => {
       const area = document.querySelector<HTMLTextAreaElement>(`#new-${cls}-block textarea[name='content']`);
-      return !!(area && (window as any).tinymce?.get(area.id));
+      return !!(area && (window as any).tinymce?.get(area.id)?.initialized);
     }, cls))
     .toBe(true);
   await page.evaluate(({ cls, text }) => {

@@ -39,6 +39,9 @@ final class Health
      */
     public static ?\Closure $http = null;
 
+    /** What the checks do not explain, in detail. */
+    public const TROUBLESHOOTING = 'https://github.com/0xNath/glpi-realtime/blob/master/docs/troubleshooting.md';
+
     /** Groups of checks: those of the command line add the web server. */
     public const GROUPS = ['glpi', 'valkey', 'server', 'web'];
 

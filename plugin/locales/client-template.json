@@ -14,7 +14,7 @@
     "solution": "solution"
   },
   "editor": {
-    "other": "{0} is editing the fields of {2} {1}.",
+    "other": "{0} has been editing the fields of {2} {1}.",
     "solution": "{0} is adding a solution: the status of {1} will change, its fields are locked until it is sent.",
     "pending": "{0} is putting {1} on hold: its fields are locked until it is sent.",
     "takeOver": "Take over",

@@ -2,7 +2,7 @@
 
 /**
  * Client texts for the user's GLPI language, beyond the built-in French and English:
- * plugin/locales/client/<lang>.json (e.g. de_DE.json, or de.json), see template.json.
+ * plugin/locales/client/<lang>.json (e.g. de_DE.json, or de.json), see ../client-template.json.
  *
  * GET → {"namespace": {"key": "text"}} or {} when there is none.
  *

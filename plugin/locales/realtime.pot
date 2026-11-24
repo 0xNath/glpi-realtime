@@ -5,17 +5,17 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: src/Health.php:234
+#: src/Health.php:237
 #, php-format
 msgid "%d KiB, built %s."
 msgstr ""
 
-#: src/Health.php:334
+#: src/Health.php:337
 #, php-format
 msgid "%s %s does not expire hash fields (presence needs HEXPIRE)."
 msgstr ""
 
-#: src/Health.php:304
+#: src/Health.php:307
 #, php-format
 msgid "%s (as %s): %s"
 msgstr ""
@@ -25,22 +25,22 @@ msgstr ""
 msgid "%s changed this item while you were editing it: your changes were not saved. Refresh the page and try again."
 msgstr ""
 
-#: src/Health.php:537
+#: src/Health.php:540
 #, php-format
 msgid "%s is answered by GLPI itself (HTTP %d): the web server does not forward it."
 msgstr ""
 
-#: src/Health.php:545
+#: src/Health.php:548
 #, php-format
 msgid "%s reaches glpi-realtime (HTTP %d)."
 msgstr ""
 
-#: src/Health.php:306
+#: src/Health.php:309
 #, php-format
 msgid "%s, database %d."
 msgstr ""
 
-#: front/config.php:90
+#: front/config.php:101
 msgid "/ws is answered by GLPI itself (HTTP 404): the web server does not forward it."
 msgstr ""
 
@@ -48,46 +48,46 @@ msgstr ""
 msgid "A solution has already been proposed for this item. Refresh the page to see it."
 msgstr ""
 
-#: src/Health.php:453 src/Health.php:557
+#: src/Health.php:456 src/Health.php:560
 #, php-format
 msgid "Add \"%s\" to [security] allowed_origins in config.toml, then restart the server."
 msgstr ""
 
-#: front/config.php:91 src/Health.php:537
+#: front/config.php:102 src/Health.php:540
 msgid "Add the /ws location to the GLPI vhost (README, \"Web server\": nginx location or Apache ProxyPass), then reload the web server."
 msgstr ""
 
-#: src/Health.php:469
+#: src/Health.php:472
 #, php-format
 msgid "Add them to [security] allowed_itemtypes in config.toml (%s), then restart the server."
 msgstr ""
 
-#: src/Health.php:447 src/Health.php:450
+#: src/Health.php:450 src/Health.php:453
 msgid "Allowed origin"
 msgstr ""
 
-#: src/Health.php:231
+#: src/Health.php:234
 msgid "Browser client"
 msgstr ""
 
-#: src/Health.php:452
+#: src/Health.php:455
 #, php-format
 msgid "Browsers open the WebSocket from %s, the server only accepts %s: every connection is refused (403)."
 msgstr ""
 
-#: src/Health.php:236
+#: src/Health.php:239
 msgid "Build it (cd client && npm ci && npm run build) and run deploy/install.sh, or install a release archive."
 msgstr ""
 
-#: src/Health.php:480
+#: src/Health.php:483
 msgid "Cannot be verified: Valkey refuses CONFIG GET to the server (ACL). Make sure notify-keyspace-events contains K, g and x."
 msgstr ""
 
-#: src/Health.php:274
+#: src/Health.php:277
 msgid "Cannot try without the PHP redis extension."
 msgstr ""
 
-#: front/config.php:53
+#: front/config.php:60
 msgid "Check again"
 msgstr ""
 
@@ -95,27 +95,27 @@ msgstr ""
 msgid "Check everything the real-time layer needs (exit code: 0 ok, 1 warnings, 2 errors)"
 msgstr ""
 
-#: src/Health.php:534
+#: src/Health.php:537
 msgid "Check that GLPI's URL can be reached from this machine (DNS, firewall, certificate)."
 msgstr ""
 
-#: src/Health.php:282
+#: src/Health.php:285
 msgid "Check that Valkey runs and that its \"unixsocket\" (valkey.conf) is the plugin setting valkey_socket (bin/console config:set --context=plugin:realtime valkey_socket ...)."
 msgstr ""
 
-#: src/Health.php:302
+#: src/Health.php:305
 msgid "Check that Valkey runs, and the plugin settings valkey_socket and valkey_db."
 msgstr ""
 
-#: src/Health.php:291
+#: src/Health.php:294
 msgid "Check valkey_username and valkey_password (bin/console config:set --context=plugin:realtime valkey_password ...) against the ACL user of valkey.conf."
 msgstr ""
 
-#: front/config.php:72
+#: front/config.php:79
 msgid "Checking…"
 msgstr ""
 
-#: front/config.php:96
+#: front/config.php:107
 #, php-format
 msgid "Connected and authenticated as %s."
 msgstr ""
@@ -124,11 +124,11 @@ msgstr ""
 msgid "Do not request GLPI's URL (web server checks)"
 msgstr ""
 
-#: src/Health.php:214
+#: src/Health.php:217
 msgid "Enable it in Setup > Automatic actions (\"inboxpurge\")."
 msgstr ""
 
-#: src/Health.php:468
+#: src/Health.php:471
 #, php-format
 msgid "Enabled in GLPI but refused by the server: %s."
 msgstr ""
@@ -137,16 +137,16 @@ msgstr ""
 msgid "Error"
 msgstr ""
 
-#: front/config.php:35 src/Console/CheckCommand.php:87
+#: front/config.php:35 src/Console/CheckCommand.php:90
 msgid "Everything the real-time layer needs is available."
 msgstr ""
 
-#: src/Health.php:249
+#: src/Health.php:252
 #, php-format
 msgid "Files are revalidated every %d s."
 msgstr ""
 
-#: src/Health.php:474
+#: src/Health.php:477
 msgid "For instant revocation: notify-keyspace-events Kgx in valkey.conf, and keyspace_events = true in config.toml."
 msgstr ""
 
@@ -154,28 +154,28 @@ msgstr ""
 msgid "GLPI"
 msgstr ""
 
-#: src/Health.php:174
+#: src/Health.php:177
 msgid "GLPI's URL"
 msgstr ""
 
-#: src/Health.php:184
+#: src/Health.php:187
 #, php-format
 msgid "GLPI's URL is \"%s\" while this page is used at %s: links in GLPI's notifications point there, and the real-time server would refuse browsers coming from it."
 msgstr ""
 
-#: src/Health.php:528
+#: src/Health.php:531
 msgid "GLPI's URL is not set."
 msgstr ""
 
-#: src/Health.php:223
+#: src/Health.php:226
 msgid "GLPI's automatic actions do not seem to run: add a system cron job running \"php front/cron.php\" (in GLPI's directory) every minute as the user running GLPI (see GLPI's documentation)."
 msgstr ""
 
-#: src/Health.php:157
+#: src/Health.php:160
 msgid "HTTPS"
 msgstr ""
 
-#: front/config.php:98
+#: front/config.php:109
 msgid "If the line above is OK: the web server does not pass the upgrade (nginx: proxy_http_version 1.1 and the Upgrade/Connection headers; Apache: upgrade=websocket), or the server refused this origin or session (see the \"Allowed origin\" and \"Session cookie name\" checks, and journalctl -u glpi-realtime)."
 msgstr ""
 
@@ -183,73 +183,78 @@ msgstr ""
 msgid "Info"
 msgstr ""
 
-#: src/Health.php:112
+#: src/Health.php:115
 msgid "Install the \"redis\" extension (phpredis) for this PHP (Debian/Ubuntu: php-redis, Arch: php-redis or php-legacy-redis, RHEL: php-pecl-redis), enable it, and restart PHP (PHP-FPM, uWSGI or Apache)."
 msgstr ""
 
-#: src/Health.php:426
+#: src/Health.php:429
 msgid "Install the same version of both: deploy/install.sh installs the binary and the plugin together."
 msgstr ""
 
-#: src/Health.php:415
+#: src/Health.php:418
 #, php-format
 msgid "Instances: %d, connections: %d."
 msgstr ""
 
-#: src/Health.php:474 src/Health.php:476 src/Health.php:478 src/Health.php:480
+#: src/Health.php:477 src/Health.php:479 src/Health.php:481 src/Health.php:483
 msgid "Instant logout"
 msgstr ""
 
-#: src/Health.php:463 src/Health.php:466
+#: src/Health.php:466 src/Health.php:469
 msgid "Item types"
 msgstr ""
 
-#: src/Health.php:476
+#: src/Health.php:479
 msgid "Keyspace notifications are on."
 msgstr ""
 
-#: src/Health.php:222 src/Health.php:226
+#: src/Health.php:225 src/Health.php:229
 #, php-format
 msgid "Last run: %s."
 msgstr ""
 
-#: src/Health.php:201
+#: src/Health.php:204
 #, php-format
 msgid "Missing: %s."
 msgstr ""
 
-#: src/Health.php:222
+#: front/config.php:83 src/Console/CheckCommand.php:87
+#, php-format
+msgid "More on each problem: %s."
+msgstr ""
+
+#: src/Health.php:225
 msgid "Never run."
 msgstr ""
 
-#: src/Health.php:534
+#: src/Health.php:537
 #, php-format
 msgid "No answer from %s: %s"
 msgstr ""
 
-#: front/config.php:99
+#: front/config.php:110
 msgid "No answer within 5 s."
 msgstr ""
 
-#: src/Health.php:403
+#: src/Health.php:406
 msgid "No server instance reports to this Valkey database."
 msgstr ""
 
-#: src/Health.php:282
+#: src/Health.php:285
 #, php-format
 msgid "No socket at %s."
 msgstr ""
 
-#: src/Health.php:257
+#: src/Health.php:260
 msgid "No token was issued for your GLPI session (Valkey was probably unavailable when you logged in)."
 msgstr ""
 
-#: src/Health.php:111
+#: src/Health.php:114
 #, php-format
 msgid "Not loaded by the PHP that runs GLPI (%s)."
 msgstr ""
 
-#: src/Health.php:208
+#: src/Health.php:211
 msgid "Notification purge task"
 msgstr ""
 
@@ -257,11 +262,11 @@ msgstr ""
 msgid "OK"
 msgstr ""
 
-#: src/Health.php:474
+#: src/Health.php:477
 msgid "Off ([revocation] keyspace_events = false): a closed GLPI session is noticed within 15 s."
 msgstr ""
 
-#: src/Health.php:257
+#: src/Health.php:260
 msgid "Once the Valkey checks pass, log out and in again."
 msgstr ""
 
@@ -269,33 +274,33 @@ msgstr ""
 msgid "Output format: text or json"
 msgstr ""
 
-#: src/Health.php:241
+#: src/Health.php:244
 msgid "PHP opcache and upgrades"
 msgstr ""
 
-#: src/Health.php:103
+#: src/Health.php:106
 msgid "PHP redis extension"
 msgstr ""
 
-#: src/Health.php:425
+#: src/Health.php:428
 #, php-format
 msgid "Plugin %s, server %s."
 msgstr ""
 
-#: front/config.php:76
+#: front/config.php:87
 #, php-format
 msgid "Plugin settings (context plugin:realtime) are changed with: bin/console config:set --context=plugin:realtime <name> <value>. Current: valkey_socket=%s, valkey_db=%s, key_prefix=%s, cookie_name=%s, ws_path=%s."
 msgstr ""
 
-#: src/Health.php:192
+#: src/Health.php:195
 msgid "Plugin tables"
 msgstr ""
 
-#: src/Health.php:559
+#: src/Health.php:562
 msgid "Rate-limited by the web server (HTTP 429): try again in a minute."
 msgstr ""
 
-#: src/Health.php:366
+#: src/Health.php:369
 msgid "Read, write, publish and delete allowed."
 msgstr ""
 
@@ -303,72 +308,72 @@ msgstr ""
 msgid "Realtime"
 msgstr ""
 
-#: front/config.php:52
+#: front/config.php:59
 #, php-format
 msgid "Realtime %s: health checks"
 msgstr ""
 
-#: src/Health.php:246
+#: src/Health.php:249
 msgid "Reload PHP after every upgrade: deploy/install.sh with RELOAD_PHP (e.g. \"systemctl reload php-fpm\")."
 msgstr ""
 
-#: src/Health.php:260
+#: src/Health.php:263
 msgid "Reload the page: a new token is issued. If it keeps happening, check valkey_db and key_prefix."
 msgstr ""
 
-#: src/Health.php:211
+#: src/Health.php:214
 msgid "Run the plugin upgrade (deploy/install.sh) to register it."
 msgstr ""
 
-#: src/Health.php:202
+#: src/Health.php:205
 msgid "Run the plugin upgrade: deploy/install.sh, or bin/console plugin:install --force realtime then bin/console plugin:activate realtime (as the user running GLPI)."
 msgstr ""
 
-#: src/Health.php:167
+#: src/Health.php:170
 msgid "Serve GLPI over HTTPS (and set its URL in Setup > General > General setup, \"URL of the application\")."
 msgstr ""
 
-#: src/Health.php:420 src/Health.php:423
+#: src/Health.php:423 src/Health.php:426
 msgid "Server version"
 msgstr ""
 
-#: src/Health.php:432 src/Health.php:435
+#: src/Health.php:435 src/Health.php:438
 msgid "Session cookie name"
 msgstr ""
 
-#: src/Health.php:185
+#: src/Health.php:188
 #, php-format
 msgid "Set \"%s\" in Setup > General > General setup (\"URL of the application\")."
 msgstr ""
 
-#: src/Health.php:478
+#: src/Health.php:481
 msgid "Set \"notify-keyspace-events Kgx\" in valkey.conf (or CONFIG SET notify-keyspace-events Kgx) and restart Valkey."
 msgstr ""
 
-#: src/Health.php:528
+#: src/Health.php:531
 msgid "Set it in Setup > General > General setup (\"URL of the application\")."
 msgstr ""
 
-#: src/Health.php:405
+#: src/Health.php:408
 #, php-format
 msgid "Start it (systemctl start glpi-realtime; journalctl -u glpi-realtime shows why it stopped). Its config.toml must use the same Valkey as GLPI: [valkey] url, db = %d, key_prefix = \"%s\"."
 msgstr ""
 
-#: front/config.php:93 src/Health.php:540
+#: front/config.php:104 src/Health.php:543
 msgid "Start the server (systemctl status glpi-realtime). With a unix socket, the web server's user must be in the socket's group: [listen] group in config.toml, and the service's SupplementaryGroups."
 msgstr ""
 
-#: front/config.php:97
+#: front/config.php:108
 #, php-format
 msgid "The WebSocket was refused or closed before the server greeted it (close code %s)."
 msgstr ""
 
-#: src/Health.php:437
+#: src/Health.php:440
 #, php-format
 msgid "The plugin sets \"%s\", the server reads \"%s\": every connection is refused (401)."
 msgstr ""
 
-#: src/Console/CheckCommand.php:89
+#: src/Console/CheckCommand.php:92
 msgid "The real-time layer cannot work: fix the errors above, from the top."
 msgstr ""
 
@@ -376,73 +381,73 @@ msgstr ""
 msgid "The real-time layer cannot work: fix the errors below, from the top."
 msgstr ""
 
-#: front/config.php:36 src/Console/CheckCommand.php:88
+#: front/config.php:36 src/Console/CheckCommand.php:91
 msgid "The real-time layer works, with limitations: see the warnings."
 msgstr ""
 
-#: front/config.php:89
+#: front/config.php:100
 #, php-format
 msgid "The request reached glpi-realtime (HTTP %s)."
 msgstr ""
 
-#: src/Health.php:557
+#: src/Health.php:560
 #, php-format
 msgid "The server refuses the origin %s."
 msgstr ""
 
-#: src/Health.php:214
+#: src/Health.php:217
 msgid "The task is disabled: read notifications are never purged."
 msgstr ""
 
-#: src/Health.php:211
+#: src/Health.php:214
 msgid "The task is not registered."
 msgstr ""
 
-#: src/Health.php:558
+#: src/Health.php:561
 #, php-format
 msgid "The upgrade headers do not reach the server (HTTP %d: %s)."
 msgstr ""
 
-#: src/Health.php:556
+#: src/Health.php:559
 msgid "The upgrade reaches the server, which accepts GLPI's origin (and asks for a session: expected here)."
 msgstr ""
 
-#: src/Health.php:299
+#: src/Health.php:302
 #, php-format
 msgid "The user running PHP (%s) cannot open Valkey's socket: add it to the socket's group (valkey or redis, see \"unixsocketperm\" in valkey.conf) and restart PHP."
 msgstr ""
 
-#: front/config.php:92 src/Health.php:540
+#: front/config.php:103 src/Health.php:543
 #, php-format
 msgid "The web server cannot reach glpi-realtime (HTTP %s)."
 msgstr ""
 
-#: src/Health.php:166
+#: src/Health.php:169
 #, php-format
 msgid "This page is served over %s: the WebSocket cookie is \"Secure\" and browsers only send it over HTTPS."
 msgstr ""
 
-#: src/Health.php:543
+#: src/Health.php:546
 #, php-format
 msgid "Unexpected answer from %s: HTTP %d."
 msgstr ""
 
-#: src/Health.php:560
+#: src/Health.php:563
 #, php-format
 msgid "Unexpected answer: HTTP %d."
 msgstr ""
 
-#: front/config.php:94
+#: front/config.php:105
 #, php-format
 msgid "Unexpected answer: HTTP %s."
 msgstr ""
 
-#: src/Health.php:335
+#: src/Health.php:338
 #, php-format
 msgid "Upgrade to Valkey %s or later (or Redis %s or later)."
 msgstr ""
 
-#: src/Health.php:438
+#: src/Health.php:441
 msgid "Use the same name: [security] cookie_name in config.toml, plugin setting cookie_name."
 msgstr ""
 
@@ -450,37 +455,37 @@ msgstr ""
 msgid "Valkey"
 msgstr ""
 
-#: src/Health.php:270
+#: src/Health.php:273
 msgid "Valkey connection"
 msgstr ""
 
-#: src/Health.php:342
+#: src/Health.php:345
 msgid "Valkey permissions"
 msgstr ""
 
-#: src/Health.php:291
+#: src/Health.php:294
 msgid "Valkey refused the user name or password."
 msgstr ""
 
-#: src/Health.php:300
+#: src/Health.php:303
 msgid "Valkey requires a password: set valkey_username and valkey_password (bin/console config:set --context=plugin:realtime valkey_password ...)."
 msgstr ""
 
-#: src/Health.php:321
+#: src/Health.php:324
 msgid "Valkey version"
 msgstr ""
 
-#: src/Health.php:363
+#: src/Health.php:366
 #, php-format
 msgid "Valkey's ACL must allow the plugin's user the keys and channels \"%s*\" (see deploy/examples/valkey.conf.example)."
 msgstr ""
 
-#: src/Health.php:478
+#: src/Health.php:481
 #, php-format
 msgid "Valkey's notify-keyspace-events is %s: logouts are only noticed within 15 s."
 msgstr ""
 
-#: src/Health.php:105
+#: src/Health.php:108
 #, php-format
 msgid "Version %s, for %s."
 msgstr ""
@@ -493,27 +498,27 @@ msgstr ""
 msgid "Web server"
 msgstr ""
 
-#: front/config.php:70
+#: front/config.php:77
 msgid "Web server and browser"
 msgstr ""
 
-#: front/config.php:88 src/Health.php:526
+#: front/config.php:99 src/Health.php:529
 msgid "Web server forwards /ws"
 msgstr ""
 
-#: front/config.php:95
+#: front/config.php:106
 msgid "WebSocket from this browser"
 msgstr ""
 
-#: src/Health.php:547
+#: src/Health.php:550
 msgid "WebSocket upgrade"
 msgstr ""
 
-#: src/Health.php:249
+#: src/Health.php:252
 msgid "When upgrading, pass RELOAD_PHP to deploy/install.sh (otherwise it waits for opcache)."
 msgstr ""
 
-#: src/Health.php:301
+#: src/Health.php:304
 msgid "Wrong user name or password: check valkey_username and valkey_password against valkey.conf."
 msgstr ""
 
@@ -521,30 +526,34 @@ msgstr ""
 msgid "You are already assigned to this item."
 msgstr ""
 
-#: src/Health.php:254
+#: src/Health.php:257
 msgid "Your WebSocket session"
 msgstr ""
 
-#: src/Health.php:260
+#: src/Health.php:263
 msgid "Your token is not in Valkey any more (Valkey restarted, or another database/prefix)."
 msgstr ""
 
-#: front/config.php:24 src/Console/CheckCommand.php:58 src/Health.php:392
+#: front/config.php:24 src/Console/CheckCommand.php:58 src/Health.php:395
 msgid "glpi-realtime server"
 msgstr ""
 
-#: src/Health.php:558
+#: src/Health.php:561
 msgid "nginx: proxy_http_version 1.1, proxy_set_header Upgrade $http_upgrade and Connection \"upgrade\"; Apache: upgrade=websocket on the ProxyPass (README, \"Web server\")."
 msgstr ""
 
-#: src/Health.php:243
+#: src/Health.php:246
 msgid "opcache is off."
 msgstr ""
 
-#: src/Health.php:246
+#: src/Health.php:249
 msgid "opcache never revalidates files: after an upgrade, PHP keeps serving the old plugin files."
 msgstr ""
 
-#: src/Health.php:236
+#: src/Health.php:239
 msgid "public/realtime.js is missing."
+msgstr ""
+
+#: front/config.php:84
+msgid "troubleshooting guide"
 msgstr ""

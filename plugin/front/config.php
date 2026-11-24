@@ -24,10 +24,10 @@ $groups = [
     'server' => __('glpi-realtime server', 'realtime'),
 ];
 $badges = [
-    Health::OK      => ['bg-success', __('OK', 'realtime')],
-    Health::WARNING => ['bg-warning', __('Warning', 'realtime')],
-    Health::ERROR   => ['bg-danger', __('Error', 'realtime')],
-    Health::INFO    => ['bg-info', __('Info', 'realtime')],
+    Health::OK      => ['glpi-rt-badge-ok', __('OK', 'realtime')],
+    Health::WARNING => ['glpi-rt-badge-warning', __('Warning', 'realtime')],
+    Health::ERROR   => ['glpi-rt-badge-error', __('Error', 'realtime')],
+    Health::INFO    => ['glpi-rt-badge-info', __('Info', 'realtime')],
 ];
 $worst = in_array(Health::ERROR, array_column($checks, 'status'), true) ? Health::ERROR
     : (in_array(Health::WARNING, array_column($checks, 'status'), true) ? Health::WARNING : Health::OK);
@@ -40,13 +40,20 @@ $summary = [
 $row = static function (string $status, string $label, string $detail, string $fix, string $id = '') use ($badges): string {
     [$cls, $text] = $badges[$status];
     return '<tr' . ($id !== '' ? ' data-check="' . htmlescape($id) . '"' : '') . '>'
-        . '<td class="text-nowrap"><span class="badge ' . $cls . ' text-white">' . htmlescape($text) . '</span></td>'
+        . '<td class="text-nowrap"><span class="badge ' . $cls . '">' . htmlescape($text) . '</span></td>'
         . '<td class="fw-bold">' . htmlescape($label) . '</td>'
         . '<td>' . htmlescape($detail)
         . ($fix !== '' ? '<div class="text-secondary small mt-1"><i class="ti ti-tool me-1" aria-hidden="true"></i>' . htmlescape($fix) . '</div>' : '')
         . '</td></tr>';
 };
 
+// Badges readable on both themes (WCAG AA: 4.5:1), whatever GLPI's palette.
+echo '<style>#glpi-rt-health .glpi-rt-badge-ok{background:#1a7f37;color:#fff}'
+    . '#glpi-rt-health .glpi-rt-badge-warning{background:#f59f00;color:#1d273b}'
+    . '#glpi-rt-health .glpi-rt-badge-error{background:#c92a2a;color:#fff}'
+    . '#glpi-rt-health .glpi-rt-badge-info{background:#1c6fb8;color:#fff}'
+    // Same columns in every section.
+    . '#glpi-rt-health table{table-layout:fixed}#glpi-rt-health td:nth-child(1){width:7rem}#glpi-rt-health td:nth-child(2){width:30%}</style>';
 echo '<div class="container-xl my-3" id="glpi-rt-health">';
 echo '<div class="d-flex align-items-center gap-2 mb-3"><i class="ti ti-activity-heartbeat fs-1" aria-hidden="true"></i>';
 echo '<h1 class="h2 mb-0">' . htmlescape(sprintf(__('Realtime %s: health checks', 'realtime'), PLUGIN_REALTIME_VERSION)) . '</h1>';
@@ -72,6 +79,10 @@ echo '<div class="table-responsive"><table class="table table-vcenter card-table
 echo $row(Health::INFO, __('Checking…', 'realtime'), '', '');
 echo '</tbody></table></div></div>';
 
+echo '<p>' . sprintf(
+    htmlescape(__('More on each problem: %s.', 'realtime')),
+    '<a class="text-decoration-underline" href="' . htmlescape(Health::TROUBLESHOOTING) . '" target="_blank" rel="noopener">' . htmlescape(__('troubleshooting guide', 'realtime')) . '</a>'
+) . '</p>';
 echo '<p class="text-secondary small">' . htmlescape(sprintf(
     __('Plugin settings (context plugin:realtime) are changed with: bin/console config:set --context=plugin:realtime <name> <value>. Current: valkey_socket=%s, valkey_db=%s, key_prefix=%s, cookie_name=%s, ws_path=%s.', 'realtime'),
     Settings::get('valkey_socket'),
@@ -107,7 +118,7 @@ echo Html::scriptBlock('(function () {
     const tr = document.createElement("tr");
     const [cls, text] = t[status];
     const td = (cls2) => { const el = document.createElement("td"); if (cls2) el.className = cls2; tr.append(el); return el; };
-    const b = document.createElement("span"); b.className = "badge " + cls + " text-white"; b.textContent = text; td("text-nowrap").append(b);
+    const b = document.createElement("span"); b.className = "badge " + cls; b.textContent = text; td("text-nowrap").append(b);
     td("fw-bold").textContent = label;
     const d = td(); d.textContent = detail;
     if (fix) { const f = document.createElement("div"); f.className = "text-secondary small mt-1"; f.textContent = fix; d.append(f); }

@@ -88,7 +88,7 @@ const TEXT = register("editor", {
     since: (m: number) => (m < 1 ? "depuis un instant" : `depuis ${m} min`),
   },
   en: {
-    other: (n: string, since: string, it: string) => `${n} is editing the fields of ${it} ${since}.`,
+    other: (n: string, since: string, it: string) => `${n} has been editing the fields of ${it} ${since}.`,
     solution: (n: string, it: string) => `${n} is adding a solution: the status of ${it} will change, its fields are locked until it is sent.`,
     pending: (n: string, it: string) => `${n} is putting ${it} on hold: its fields are locked until it is sent.`,
     takeOver: "Take over",
@@ -96,7 +96,7 @@ const TEXT = register("editor", {
     mineStale: (n: string, it: string) => `${n || "Someone"} changed ${it} while you were editing: check before saving.`,
     lost: (n: string) => `${n} took over the fields. Your unsaved changes can no longer be saved.`,
     refresh: "Refresh",
-    since: (m: number) => (m < 1 ? "since a moment" : `for ${m} min`),
+    since: (m: number) => (m < 1 ? "for a moment" : `for ${m} min`),
   },
 });
 

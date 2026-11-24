@@ -18,7 +18,7 @@ use GlpiPlugin\Realtime\Grants;
 use GlpiPlugin\Realtime\SessionToken;
 use GlpiPlugin\Realtime\SolutionGuard;
 
-define('PLUGIN_REALTIME_VERSION', '0.4.0');
+define('PLUGIN_REALTIME_VERSION', '0.5.0');
 define('PLUGIN_REALTIME_MIN_GLPI', '11.0.0');
 define('PLUGIN_REALTIME_MAX_GLPI', '12.0.99');
 
@@ -40,7 +40,7 @@ function plugin_version_realtime(): array
         'version'      => PLUGIN_REALTIME_VERSION,
         'author'       => 'glpi-realtime contributors',
         'license'      => 'GPLv3+',
-        'homepage'     => '',
+        'homepage'     => 'https://github.com/0xNath/glpi-realtime',
         'requirements' => [
             'glpi' => ['min' => PLUGIN_REALTIME_MIN_GLPI, 'max' => PLUGIN_REALTIME_MAX_GLPI],
             'php'  => ['min' => '8.2'],

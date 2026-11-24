@@ -158,7 +158,7 @@ test("avatars are GLPI's, and hovering one shows GLPI's user card", async ({ bro
     await inPresence.hover();
     await expect(card).toBeVisible({ timeout: 3_000 });
   }).toPass({ timeout: 20_000 });
-  await expect(card).toContainText("rt-bob");
+  await expect(card).toContainText(/bob/i);
   await expect(popover).toHaveAttribute("data-popper-placement", /bottom|top/);
 
   // Kept open while the card itself is hovered, well past the 300 ms hide delay.

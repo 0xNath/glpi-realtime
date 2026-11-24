@@ -7,11 +7,12 @@ on:
 permissions:
   contents: read
 
+# Actions are pinned to a commit (the version in the comment); Dependabot updates them.
 jobs:
   test:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # Valkey >= 9.0 (hash field TTLs): its binary, from the official image.
       - name: Valkey
@@ -21,19 +22,20 @@ jobs:
           docker rm "$id"
           valkey-server --version
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # stable branch, 2026-10-15
         with:
+          toolchain: stable
           components: clippy, rustfmt
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: server
 
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: "8.3"
           extensions: redis, igbinary
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -57,25 +59,28 @@ jobs:
   server-bin:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # stable branch, 2026-10-15
         with:
+          toolchain: stable
           targets: x86_64-unknown-linux-musl
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: server
           key: musl
       - run: sudo apt-get install -y musl-tools
       - run: cargo build --release --locked --target x86_64-unknown-linux-musl
         working-directory: server
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: glpi-realtime-musl
           path: server/target/x86_64-unknown-linux-musl/release/glpi-realtime
           retention-days: 3
 
-  # End-to-end, in Chromium, against disposable GLPIs (e2e/env): GLPI 11 (latest 11.0), the
-  # oldest and the latest 12.0 release, and the next one (nightly) as a warning only.
+  # End-to-end, in Chromium, against disposable GLPIs (e2e/env), the plugin installed with
+  # deploy/install.sh: GLPI 11 (latest 11.0), the oldest and the latest 12.0 release; the
+  # next 12.0 (nightly) and GLPI's main branch (dev-nightly, the plugin's version bound
+  # lifted) as warnings only; and an upgrade from the previous release.
   e2e:
     needs: server-bin
     runs-on: ubuntu-24.04
@@ -83,27 +88,35 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        glpi: ["11.0", "12.0.0", "12.0"]
-        experimental: [false]
         include:
-          - glpi: "12.0-nightly"
-            experimental: true
-    name: e2e (GLPI ${{ matrix.glpi }})
+          - { glpi: "11.0", experimental: false }
+          - { glpi: "12.0.0", experimental: false }
+          - { glpi: "12.0", experimental: false }
+          - { glpi: "12.0", upgrade: true, experimental: false }
+          - { glpi: "12.0-nightly", experimental: true }
+          - { glpi: "dev-nightly", max: "99.99.99", experimental: true }
+    name: e2e (GLPI ${{ matrix.glpi }}${{ matrix.upgrade && ', upgrade' || '' }})
     env:
       GLPI_VERSION: ${{ matrix.glpi }}
+      PLUGIN_MAX_GLPI: ${{ matrix.max }}
       SERVER_SOURCE: server-prebuilt
       COMPOSE: docker compose
       E2E_ENV_FILE: ${{ github.workspace }}/.e2e.local.env
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0 # tags, for the upgrade test
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: glpi-realtime-musl
           path: e2e/env/bin
       - run: chmod +x e2e/env/bin/glpi-realtime
+      - name: Previous release
+        if: matrix.upgrade
+        run: echo "UPGRADE_FROM=$(git describe --tags --abbrev=0 --match 'v*' HEAD^)" >> "$GITHUB_ENV"
       - name: Disposable GLPI ${{ matrix.glpi }}, plugin checks
         run: e2e/env/up.sh
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -115,10 +128,10 @@ jobs:
       - name: Logs
         if: failure()
         run: mkdir -p e2e/test-results && docker compose -f e2e/env/compose.yaml logs --no-color glpi > e2e/test-results/glpi.log 2>&1 || true
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: failure()
         with:
-          name: e2e-${{ matrix.glpi }}
+          name: e2e-${{ matrix.glpi }}${{ matrix.upgrade && '-upgrade' || '' }}
           path: |
             e2e/test-results/
             e2e/playwright-report/
@@ -127,42 +140,71 @@ jobs:
   audit:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: taiki-e/install-action@cargo-audit
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: cargo-audit
       - name: Rust dependencies
         run: cargo audit
         working-directory: server
       - name: npm dependencies (build tools only)
         run: npm audit --audit-level=high
         working-directory: client
+      - name: npm dependencies (end-to-end tests)
+        run: npm audit --audit-level=high
+        working-directory: e2e
+
+  # Release archives for v* tags: one per architecture (static binaries, built natively),
+  # then published together with their checksums and build provenance attestations
+  # (gh attestation verify <archive> --repo <owner>/glpi-realtime).
+  release-build:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [test, audit, e2e]
+    strategy:
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - id: arch
+        run: echo "arch=$(uname -m)" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # stable branch, 2026-10-15
+        with:
+          toolchain: stable
+          targets: ${{ steps.arch.outputs.arch }}-unknown-linux-musl
+      - run: sudo apt-get install -y musl-tools
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      - run: npm ci
+        working-directory: client
+      - name: Archives (the suites ran in the test job)
+        run: SKIP_TESTS=1 scripts/release.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-${{ steps.arch.outputs.arch }}
+          path: dist/*.tar.*
+          retention-days: 3
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [test, audit, e2e]
+    needs: release-build
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     steps:
-      - uses: actions/checkout@v4
-      - name: Valkey
-        run: |
-          id=$(docker create valkey/valkey:9.0)
-          sudo docker cp "$id":/usr/local/bin/valkey-server /usr/local/bin/valkey-server
-          docker rm "$id"
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          targets: x86_64-unknown-linux-musl
-          components: clippy
-      - run: sudo apt-get install -y musl-tools
-      - uses: shivammathur/setup-php@v2
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+      - run: cd dist && ls -l && sha256sum ./*.tar.* > SHA256SUMS && cat SHA256SUMS
+      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
         with:
-          php-version: "8.3"
-          extensions: redis, igbinary
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - run: scripts/release.sh
-      - uses: softprops/action-gh-release@v2
+          subject-path: dist/*.tar.*
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           files: |
             dist/*.tar.*

@@ -195,6 +195,7 @@ export function syncTimeline(
 
 const STYLE = `
 .glpi-rt-composing .timeline-content { border-style:dashed; opacity:.85; }
+.glpi-rt-composing .glpi-rt-muted { color:var(--tblr-body-color, #1d273b); font-style:italic; }
 .glpi-rt-composing .glpi-rt-dots::after { content:"…"; animation:glpi-rt-dots 1.2s steps(4) infinite; display:inline-block; width:1.2em; overflow:hidden; vertical-align:bottom; }
 @keyframes glpi-rt-dots { 0% { width:0 } 100% { width:1.2em } }
 .glpi-rt-composing .glpi-rt-avatar { width:2.5rem; height:2.5rem; border-radius:50%; display:inline-flex; align-items:center; justify-content:center;
@@ -475,7 +476,7 @@ export class LiveTimeline {
           h("div", { class: "col-auto d-flex flex-column" }, avatar),
           h("div", { class: "col-12 col-sm" },
             h("div", { class: "mt-2 timeline-content card" },
-              h("div", { class: "card-body px-3 py-2 text-secondary" }, icon("pencil"), " ", h("span", { class: "glpi-rt-dots", text })),
+              h("div", { class: "card-body px-3 py-2 glpi-rt-muted" }, icon("pencil"), " ", h("span", { class: "glpi-rt-dots", text })),
             ),
           ),
         ),
@@ -502,7 +503,7 @@ export class LiveTimeline {
       }
       el.replaceChildren(
         h("div", { class: "mt-2 timeline-content card" },
-          h("div", { class: "card-body px-3 py-2 text-secondary" }, icon("file-text"), " ", this.drafts.leftLabel(kind, info)),
+          h("div", { class: "card-body px-3 py-2 glpi-rt-muted" }, icon("file-text"), " ", this.drafts.leftLabel(kind, info)),
         ),
       );
       this.drafts.decorate(el, kind, info.writer!.id);

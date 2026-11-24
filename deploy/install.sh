@@ -116,6 +116,8 @@ fi
 if [[ -n "$SERVICE" ]] && command -v systemctl >/dev/null && systemctl cat "$SERVICE" >/dev/null 2>&1; then
     echo "==> Restarting $SERVICE"
     systemctl try-restart "$SERVICE"
+elif [[ -z "$SERVICE" ]]; then
+    echo "   service not restarted (SERVICE is empty): restart the server yourself"
 else
     echo "   service not restarted (no systemd unit '$SERVICE'): restart the server yourself"
 fi

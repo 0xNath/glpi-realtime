@@ -83,6 +83,9 @@ final class CheckCommand extends AbstractCommand
             }
         }
         $output->writeln('');
+        if ($code !== self::EXIT_OK) {
+            $output->writeln($e(sprintf(__('More on each problem: %s.', 'realtime'), Health::TROUBLESHOOTING)));
+        }
         $output->writeln(match ($code) {
             self::EXIT_OK      => '<info>' . $e(__('Everything the real-time layer needs is available.', 'realtime')) . '</info>',
             self::EXIT_WARNING => '<comment>' . $e(__('The real-time layer works, with limitations: see the warnings.', 'realtime')) . '</comment>',

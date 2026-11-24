@@ -272,7 +272,7 @@ export class SharedDrafts {
       body.append(h("div", { class: "glpi-rt-draft-view" }, frame));
       actions.append(h("button", { type: "button", class: "btn btn-sm btn-outline-secondary", text: t.leave, onclick: () => this.unwatch() }));
     } else {
-      actions.append(h("button", { type: "button", class: "btn btn-sm btn-outline-primary", onclick: () => this.watch(kind) }, icon("eye"), " ", t.join));
+      actions.append(h("button", { type: "button", class: "btn btn-sm btn-outline-secondary", onclick: () => this.watch(kind) }, icon("eye"), " ", t.join));
     }
     if (info.away) {
       actions.append(h("button", { type: "button", class: "btn btn-sm btn-primary", text: t.take, onclick: () => this.take(kind) }));

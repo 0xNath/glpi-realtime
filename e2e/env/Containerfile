@@ -1,6 +1,8 @@
 # Disposable GLPI for the end-to-end tests: the official GLPI image, plus glpi-realtime
-# (on a unix socket, as in production), the plugin, HTTPS (self-signed) and the /ws
-# location of deploy/examples/apache-glpi.conf. Built from the repository's root:
+# (on a unix socket, as in production), HTTPS (self-signed) and the /ws location of
+# deploy/examples/apache-glpi.conf. /opt/release is laid out like a release archive: up.sh
+# installs the plugin from it with deploy/install.sh, as users do. /opt/realtime-old holds
+# an older plugin for the upgrade test (UPGRADE_FROM). Built from the repository's root:
 #   docker build -f e2e/env/Containerfile --build-arg GLPI_VERSION=12.0 .
 # SERVER_SOURCE=server-prebuilt takes e2e/env/bin/glpi-realtime (a static binary, CI)
 # instead of compiling it.
@@ -34,6 +36,9 @@ COPY e2e/env/ports.conf /etc/apache2/ports.conf
 COPY e2e/env/supervisor-realtime.conf /etc/supervisor/conf.d/realtime.conf
 COPY e2e/env/config.toml /etc/glpi-realtime/config.toml
 COPY --from=server /glpi-realtime /usr/local/bin/glpi-realtime
-COPY plugin/ /var/www/glpi/plugins/realtime/
-COPY e2e/env/rtseed/ /var/www/glpi/plugins/rtseed/
+COPY --from=server /glpi-realtime /opt/release/bin/glpi-realtime
+COPY plugin/ /opt/release/plugin/
+COPY deploy/ /opt/release/deploy/
+COPY e2e/env/.old/ /opt/realtime-old/
+COPY --chown=www-data e2e/env/rtseed/ /var/www/glpi/plugins/rtseed/
 USER www-data

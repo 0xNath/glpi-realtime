@@ -111,7 +111,9 @@ const CSS = `
 .glpi-rt-icon-btn:hover { background:var(--tblr-bg-surface-secondary, #f1f5f9); }
 .glpi-rt-tabs { display:flex; flex-wrap:wrap; gap:.25rem; padding:.5rem .75rem; border-bottom:1px solid var(--tblr-border-color, #e6e7e9); }
 .glpi-rt-tab { border:1px solid var(--tblr-border-color, #e6e7e9); background:none; color:inherit; border-radius:1rem; padding:.1rem .6rem; font-size:.8rem; }
-.glpi-rt-tab.is-active { background:var(--tblr-primary, #206bc4); border-color:var(--tblr-primary, #206bc4); color:#fff; }
+.glpi-rt-tab.is-active { background:var(--tblr-primary, #206bc4); border-color:var(--tblr-primary, #206bc4); color:var(--tblr-primary-fg, #fff); }
+/* Status of an item: readable on both themes (GLPI's -lt badges are too pale, WCAG AA). */
+.glpi-rt-status { background:var(--tblr-bg-surface-secondary, #f1f5f9); color:var(--tblr-body-color, #1d273b); border:1px solid var(--tblr-border-color, #e6e7e9); font-weight:500; }
 .glpi-rt-tab .glpi-rt-count { margin-left:.3rem; font-weight:700; }
 .glpi-rt-list { list-style:none; margin:0; padding:0; overflow-y:auto; flex:1; }
 .glpi-rt-empty { padding:2rem; text-align:center; color:var(--tblr-secondary, #667382); }
@@ -199,7 +201,7 @@ export class Bell {
       this.o.ctl.withRead = (e.target as HTMLInputElement).checked;
       void this.o.ctl.load();
     } }) as HTMLInputElement;
-    const viewAll = h("a", { class: "btn btn-sm btn-outline-primary glpi-rt-view-all", href: `${this.o.rootDoc}/plugins/realtime/front/notifications.php`, text: t.viewAll });
+    const viewAll = h("a", { class: "btn btn-sm btn-outline-secondary glpi-rt-view-all", href: `${this.o.rootDoc}/plugins/realtime/front/notifications.php`, text: t.viewAll });
     this.panel = h(
       "div",
       { class: "glpi-rt-bell-panel", role: "dialog", "aria-label": t.title, hidden: true },
@@ -369,7 +371,7 @@ export class Bell {
         h(
           "div",
           { class: "glpi-rt-n-meta" },
-          g.object.status_label ? h("span", { class: "badge bg-secondary-lt", text: g.object.status_label }) : null,
+          g.object.status_label ? h("span", { class: "badge glpi-rt-status", text: g.object.status_label }) : null,
           h("span", { text: actorName(list, latest.actor, t) }),
           h("span", { text: timeAgo(g.date, new Date(), t), title: g.date }),
         ),
@@ -423,8 +425,9 @@ export function openPreferences(doc: Document, list: InboxList, t: Labels, save:
   const helpdesk = list.interface === "helpdesk";
   const box = (key: string, label: string) =>
     h("label", {}, h("input", { type: "checkbox", class: "form-check-input m-0", name: key, checked: !!p[key] }), label);
-  const select = (key: string, options: Record<string, string>) =>
-    h("select", { class: "form-select form-select-sm", name: key }, ...Object.entries(options).map(([v, l]) => h("option", { value: v, selected: p[key] === v, text: l })));
+  // Named after the heading above it (screen readers announce the list's purpose).
+  const select = (key: string, options: Record<string, string>, label: string) =>
+    h("select", { class: "form-select form-select-sm", name: key, "aria-label": label }, ...Object.entries(options).map(([v, l]) => h("option", { value: v, selected: p[key] === v, text: l })));
   const types = Object.entries(t.p.types).map(([slug, label]) =>
     h(
       "tr",
@@ -450,12 +453,12 @@ export function openPreferences(doc: Document, list: InboxList, t: Labels, save:
       ? h("label", {}, h("input", { type: "checkbox", class: "form-check-input m-0", "data-desktop": "1", checked: desktopEnabled(doc.defaultView ?? window) }), t.p.desktop)
       : null,
     h("h3", { text: t.p.style }),
-    select("update_message_style", t.p.styles),
+    select("update_message_style", t.p.styles, t.p.style),
     ...(helpdesk ? [] : [
       h("h3", { text: t.p.ended }),
       box("show_resolved", t.p.showResolved),
       box("show_closed", t.p.showClosed),
-      select("resolved_closed_style", t.p.endedStyles),
+      select("resolved_closed_style", t.p.endedStyles, t.p.ended),
     ]),
     h(
       "div",

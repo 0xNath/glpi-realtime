@@ -13,9 +13,19 @@ single editor for the fields, one solution at a time, and shared answer drafts.
   `examples/`: configuration, systemd unit, system user, Valkey, nginx and Apache vhosts.
 - `e2e/`: end-to-end tests in a real Chromium, against your GLPI or a disposable one
   (`e2e/env/`, containers) ([setup](e2e/README.md)).
-- `docs/`: [protocol](docs/protocol.md), [security model](docs/security.md).
+- `docs/`: [protocol](docs/protocol.md), [security model](docs/security.md),
+  [troubleshooting](docs/troubleshooting.md).
 
 GLPI works unchanged when the server, Valkey or the plugin is absent.
+
+| | |
+|---|---|
+| ![Who else is on the ticket, with GLPI's user card](docs/img/presence.png) | ![The bell: queues, read and unread, assume](docs/img/bell.png) |
+| Who else is on the item, with GLPI's user card on hover | Notifications: queues, read/unread, assume, preferences |
+| ![One editor of the fields at a time](docs/img/fields-lock.png) | ![Following a colleague's draft live](docs/img/draft.png) |
+| One editor of the fields at a time | Who is writing, and their draft followed live |
+| ![Presence on the ticket list](docs/img/list.png) | ![The plugin's checks](docs/img/checks.png) |
+| Who is on each row of the lists | Checks of the whole setup, with how to fix |
 
 ## Architecture
 
@@ -59,8 +69,8 @@ the end: point it to a test Valkey, not production's.
 ## Install
 
 Requirements: GLPI 11 or 12 with the PHP `redis` extension (phpredis), Valkey ≥ 9.0 (or
-Redis ≥ 7.4), systemd, nginx or Apache httpd ≥ 2.4.47, HTTPS. Linux x86_64 (the server
-is a static binary).
+Redis ≥ 7.4), systemd, nginx or Apache httpd ≥ 2.4.47, HTTPS. Linux on x86_64 or aarch64
+(the server is a static binary).
 
 The project never writes configuration: the files of steps 3 to 5 are yours, set up once
 from `deploy/examples/`, and upgrades never touch them.
@@ -70,12 +80,15 @@ from `deploy/examples/`, and upgrades never touch them.
 From [Releases](https://github.com/0xNath/glpi-realtime/releases):
 
 ```bash
-VERSION=0.4.0
+VERSION=0.5.0 ARCH=$(uname -m)                  # x86_64 or aarch64
 BASE=https://github.com/0xNath/glpi-realtime/releases/download/v$VERSION
-curl -LO "$BASE/glpi-realtime-$VERSION-linux-x86_64.tar.gz" -LO "$BASE/SHA256SUMS"
+curl -LO "$BASE/glpi-realtime-$VERSION-linux-$ARCH.tar.gz" -LO "$BASE/SHA256SUMS"
 sha256sum --check --ignore-missing SHA256SUMS
-tar xzf "glpi-realtime-$VERSION-linux-x86_64.tar.gz" && cd "glpi-realtime-$VERSION"
+tar xzf "glpi-realtime-$VERSION-linux-$ARCH.tar.gz" && cd "glpi-realtime-$VERSION"
 ```
+
+Archives are built by the CI, with a provenance attestation you can verify with GitHub's
+CLI: `gh attestation verify glpi-realtime-$VERSION-linux-$ARCH.tar.gz --repo 0xNath/glpi-realtime`.
 
 It holds the server (`bin/`), the GLPI plugin (`plugin/`), `deploy/` and the docs.
 `glpi-plugin-realtime-<version>.tar.bz2` is the plugin alone, for `<GLPI>/plugins/`.
@@ -202,6 +215,9 @@ The web server is checked through GLPI's URL (as browsers reach it): `/ws` must 
 server, and a WebSocket upgrade must get through with GLPI's origin. Exit code, as
 monitoring tools expect it: 0 everything works, 1 warnings, 2 errors.
 
+Something wrong? [docs/troubleshooting.md](docs/troubleshooting.md) explains the usual
+causes.
+
 ### Upgrading
 
 Download the new release (step 1) and run step 2 again. Configuration is never changed
@@ -228,7 +244,11 @@ e2e/env/up.sh && (cd e2e && npm ci && E2E_ENV_FILE=../.e2e.local.env npx playwri
 e2e/env/down.sh
 ```
 
-The CI runs them on GLPI 11.0, 12.0.0, the latest 12.0 and the next one (nightly, warning only).
+The CI runs them on GLPI 11.0, 12.0.0 and the latest 12.0, after an upgrade from the
+previous release (`UPGRADE_FROM`), and, as warnings only, on the next 12.0 and GLPI's main
+branch. They include accessibility checks (axe-core, WCAG 2.1 AA) of the real-time
+layer's elements. The README's screenshots come from the same environment:
+`npx playwright test --config screenshots.config.ts` in `e2e/`.
 
 Release archives (what users install): `scripts/release.sh` builds
 `dist/glpi-realtime-<version>-linux-<arch>.tar.gz` (static binary when the
@@ -249,9 +269,20 @@ and must match the server.
 - Plugin messages: GLPI's gettext, domain `realtime` (`plugin/locales/*.po`, compiled
   `.mo`). Maintainers: `scripts/i18n.py` extracts the strings and compiles.
 - Browser texts: French and English are built in. Any other language:
-  `cd client && npm run i18n-template` writes `plugin/locales/client/template.json`; copy it
-  to `<lang>.json` (`de_DE.json` or `de.json`, after GLPI's language codes), translate
+  `cd client && npm run i18n-template` writes `plugin/locales/client-template.json`; copy it
+  to `plugin/locales/client/<lang>.json` (`de_DE.json` or `de.json`, after GLPI's language codes), translate
   the texts (`{0}`, `{1}`… are values), and deploy: no rebuild.
+
+Translators can also work on a hosted Weblate (e.g. hosted.weblate.org, free for libre
+projects), set up by a maintainer with two components on this repository:
+
+| Component | File format | File mask | Template |
+|---|---|---|---|
+| Plugin | gettext PO | `plugin/locales/*.po` | `plugin/locales/realtime.pot` |
+| Browser | JSON nested structure | `plugin/locales/client/*.json` | `plugin/locales/client-template.json` |
+
+with the "Compile MO files" add-on on the first one. Weblate opens pull requests; the CI
+checks that the template matches the sources (`scripts/i18n.py --check`).
 
 ## Operations
 

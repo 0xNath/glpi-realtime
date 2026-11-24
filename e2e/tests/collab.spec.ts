@@ -1,5 +1,5 @@
 
-import { closeAnswer, login, openAnswer, openTicketAsAllowed, room, ticketId, typeAnswer, waitForFrame, expect, test } from "./helpers.ts";
+import { closeAnswer, expect, items, login, openAnswer, openItem, openTicketAsAllowed, room, test, ticketId, typeAnswer, waitForFrame } from "./helpers.ts";
 
 test("while one technician edits the fields, the other's are read-only", async ({ browser }) => {
   const alice = await login(browser, "alice");
@@ -28,7 +28,7 @@ test("who is writing shows in the timeline, and the draft can be followed live",
   await waitForFrame(bob, (f) => f.t === "subscribed" && f.room === room, "subscribed");
 
   await openAnswer(alice.page, "ITILFollowup");
-  const placeholder = bob.page.locator(".itil-timeline > .glpi-rt-composing");
+  const placeholder = bob.page.locator(".itil-timeline > .glpi-rt-composing:not(.glpi-rt-draft-left)");
   await expect(placeholder).toContainText(/alice/i);
 
   const draft = `brouillon e2e ${Date.now()}`;
@@ -80,4 +80,65 @@ test("the ticket list shows who is on each ticket", async ({ browser }) => {
   expect(last.users.length, "nobody added by looking at the list").toBe(before);
   await alice.context.close();
   await bob.context.close();
+});
+
+test("a draft left by a closed tab can be taken over, with its text", async ({ browser }) => {
+  const alice = await login(browser, "alice");
+  const bob = await login(browser, "bob");
+  await openTicketAsAllowed(alice);
+  await openTicketAsAllowed(bob);
+  await waitForFrame(bob, (f) => f.t === "subscribed" && f.room === room, "subscribed");
+
+  await openAnswer(alice.page, "ITILFollowup");
+  const draft = `reprise e2e ${Date.now()}`;
+  await typeAnswer(alice.page, "ITILFollowup", draft);
+  await expect(bob.page.locator(".itil-timeline > .glpi-rt-composing:not(.glpi-rt-draft-left)")).toContainText(/alice/i);
+  await alice.page.waitForTimeout(1500); // the draft is shared as she types (debounced)
+
+  // Alice's tab goes: Bob may take the draft over, into his own followup form.
+  await alice.context.close();
+  const left = bob.page.locator(".itil-timeline > .glpi-rt-draft-left[data-kind='followup']");
+  await left.getByRole("button", { name: /take over|prendre la suite/i }).click();
+  await expect
+    .poll(() => bob.page.evaluate(() => {
+      const area = document.querySelector<HTMLTextAreaElement>("#new-ITILFollowup-block textarea[name='content']");
+      try {
+        return area ? ((window as any).tinymce?.get(area.id)?.getContent() ?? "") : "";
+      } catch {
+        return ""; // editor not initialized yet
+      }
+    }))
+    .toContain(draft);
+  await closeAnswer(bob.page, "ITILFollowup");
+});
+
+test("GLPI refuses a second solution, whatever the browser does", async ({ browser }) => {
+  test.skip(!items.solutionTicket, "RT_SOLUTION_TICKET_ID is not set (a ticket rt-alice and rt-bob may solve, which the test solves)");
+  const alice = await login(browser, "alice");
+  const bob = await login(browser, "bob");
+  expect(await openItem(alice, "Ticket", items.solutionTicket)).toBe(200);
+  expect(await openItem(bob, "Ticket", items.solutionTicket)).toBe(200);
+  // Bob's page is loaded before Alice's solution exists. (Had he opened his solution form
+  // first, Alice's would be locked: one solution is written at a time.)
+  await openAnswer(alice.page, "ITILSolution");
+  await typeAnswer(alice.page, "ITILSolution", `solution e2e ${Date.now()}`);
+  // GLPI 12 saves it without reloading the page; GLPI 11 reloads it.
+  await alice.page.locator("#new-ITILSolution-block button[type=submit][name=add]").click();
+  await expect(alice.page.locator(".itil-timeline")).toContainText("solution e2e", { timeout: 20_000 });
+
+  // Bob's page now says the solution is taken, and blocks his: he sends it anyway, as a
+  // browser without the real-time client would, from his old page.
+  await openAnswer(bob.page, "ITILSolution");
+  await typeAnswer(bob.page, "ITILSolution", "second solution e2e");
+  const answer = await bob.page.evaluate(async () => {
+    const form = document.querySelector<HTMLFormElement>("#new-ITILSolution-block form")!;
+    (window as any).tinymce?.triggerSave?.();
+    const body = new FormData(form);
+    body.set("add", "1");
+    const resp = await fetch(form.action, { method: "POST", body, credentials: "same-origin" });
+    return resp.text(); // after GLPI's redirect: the page with its message
+  });
+  expect(answer).toMatch(/already been proposed|déjà été proposée/i);
+  await bob.page.reload();
+  await expect(bob.page.locator(".itil-timeline")).not.toContainText("second solution e2e");
 });

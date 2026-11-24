@@ -1,0 +1,24 @@
+# Weekly dependency updates, grouped per ecosystem (one pull request each). The CI runs
+# every suite, the audits and the end-to-end tests on them.
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /server
+    schedule: { interval: weekly }
+    groups:
+      rust: { patterns: ["*"] }
+  - package-ecosystem: npm
+    directory: /client
+    schedule: { interval: weekly }
+    groups:
+      client: { patterns: ["*"] }
+  - package-ecosystem: npm
+    directory: /e2e
+    schedule: { interval: weekly }
+    groups:
+      e2e: { patterns: ["*"] }
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+    groups:
+      actions: { patterns: ["*"] }

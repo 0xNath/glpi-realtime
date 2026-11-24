@@ -6,7 +6,7 @@ mode = 0o660
 group = "www-data"
 
 [valkey]
-url = "redis://valkey:6379"
+url = "unix:///run/valkey/valkey.sock"
 db = 6
 
 [security]

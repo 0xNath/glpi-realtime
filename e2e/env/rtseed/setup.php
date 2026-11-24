@@ -13,7 +13,7 @@ function plugin_version_rtseed(): array
         'name'         => 'Realtime e2e seed (tests only)',
         'version'      => '1.0.0',
         'license'      => 'GPLv3+',
-        'requirements' => ['glpi' => ['min' => '11.0.0', 'max' => '12.99.99']],
+        'requirements' => ['glpi' => ['min' => '11.0.0', 'max' => '99.99.99']],
     ];
 }
 

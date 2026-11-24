@@ -114,7 +114,7 @@ export class InboxPage {
     const href = safeHref(o.url);
     const style = list.preferences.update_message_style;
     const actions = h("div", { class: "btn-group btn-group-sm" },
-      href ? h("a", { class: "btn btn-outline-primary", href, title: t.open, "aria-label": t.open, onclick: (e) => {
+      href ? h("a", { class: "btn btn-outline-secondary", href, title: t.open, "aria-label": t.open, onclick: (e) => {
         e.preventDefault();
         void this.ctl.act({ action: "read_item", item: g.key }).finally(() => (location.href = href));
       } }, icon("external-link")) : null,
@@ -134,7 +134,7 @@ export class InboxPage {
       h("td", {}, href ? h("a", { href, text: o.title }) : o.title),
       h("td", { text: String(o.id) }),
       h("td", { text: g.date, class: "text-nowrap" }),
-      h("td", {}, o.status_label ? h("span", { class: "badge bg-secondary-lt", text: o.status_label }) : ""),
+      h("td", {}, o.status_label ? h("span", { class: "badge glpi-rt-status", text: o.status_label }) : ""),
       h("td", { text: o.priority_label ?? "" }),
       h("td", { text: o.entity ?? "" }),
       h("td", { text: (o.requesters ?? []).join(", ") }),

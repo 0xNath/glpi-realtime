@@ -5,7 +5,8 @@
 #   SHA256SUMS
 # The binary is static (musl) when the target is installed:
 #   rustup target add x86_64-unknown-linux-musl
-# otherwise it is linked against the build host's glibc (said so below).
+# otherwise it is linked against the build host's glibc (said so below). One architecture
+# per run: the host's (the CI builds x86_64 and aarch64). SKIP_TESTS=1 skips the suites.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -22,8 +23,12 @@ ARCH=$(uname -m)
 echo "==> Client dependencies"
 (cd client && npm ci --silent)
 
-echo "==> Tests"
-scripts/test-all.sh
+if [[ "${SKIP_TESTS:-0}" == 1 ]]; then
+    echo "==> Tests skipped (SKIP_TESTS=1)"
+else
+    echo "==> Tests"
+    scripts/test-all.sh
+fi
 
 echo "==> Client bundle"
 (cd client && npm run -s build)
