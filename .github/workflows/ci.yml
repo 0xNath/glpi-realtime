@@ -172,9 +172,12 @@ jobs:
           tool: cargo-fuzz
       - name: Fuzz
         working-directory: server
+        # The host's target: cargo-fuzz defaults to the one it was built for, and the
+        # prebuilt binary is a static (musl) one, which sanitizers refuse.
         run: |
+          host=$(rustc +nightly -vV | sed -n 's/^host: //p')
           for t in message room batch handshake; do
-            cargo +nightly fuzz run "$t" --fuzz-dir fuzz -- -max_total_time=60
+            cargo +nightly fuzz run "$t" --fuzz-dir fuzz --target "$host" -- -max_total_time=60
           done
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: failure()
