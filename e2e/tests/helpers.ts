@@ -36,11 +36,27 @@ export async function login(browser: Browser, who: Who): Promise<Session> {
       }
     });
   });
-  await page.goto("/");
-  await page.fill("#login_name", `rt-${who}`);
-  await page.fill("#login_password", password(who));
-  await Promise.all([page.waitForURL((u) => !u.pathname.endsWith("/") || u.search !== ""), page.click("button[name=submit]")]);
-  await expect(page.locator("#login_name")).toHaveCount(0); // logged in
+  // The web server may rate-limit logins (HTTP 429, e.g. nginx limit_req on login.php):
+  // several tests log in quickly one after the other, so wait and try again.
+  for (let attempt = 1; ; attempt++) {
+    await page.goto("/");
+    await page.fill("#login_name", `rt-${who}`);
+    await page.fill("#login_password", password(who));
+    const [resp] = await Promise.all([
+      page.waitForResponse((r) => r.request().method() === "POST" && new URL(r.url()).pathname.endsWith("/login.php")),
+      page.click("button[name=submit]"),
+    ]);
+    if (resp.status() === 429 && attempt < 8) {
+      await page.waitForTimeout(1_000 * attempt);
+      continue;
+    }
+    expect(resp.status(), `rt-${who}: login answered HTTP ${resp.status()}`).toBeLessThan(400);
+    break;
+  }
+  await page.waitForLoadState();
+  // Logged in: GLPI's user menu is there, not the login form.
+  await expect(page.locator("#login_name")).toHaveCount(0);
+  await expect(page.locator("header .avatar").first()).toBeVisible();
   return { who, context, page, frames };
 }
 

@@ -222,6 +222,7 @@ export function render(doc: Document, room: string, users: PresenceUser[], selfI
   const shown = list.slice(0, MAX_AVATARS);
   const existing = new Map<string, HTMLElement>();
   avatars.querySelectorAll<HTMLElement>(".glpi-rt-avatar[data-uid]").forEach((el) => existing.set(el.dataset.uid!, el));
+  let prev: Element | null = null;
   for (const u of shown) {
     let el = existing.get(String(u.id));
     existing.delete(String(u.id));
@@ -231,7 +232,11 @@ export function render(doc: Document, room: string, users: PresenceUser[], selfI
       attachCard(el, u.id);
     }
     paint(el, u, u.active ? t.active : t.inactive);
-    avatars.appendChild(el); // (re)ordered by arrival
+    // (Re)ordered by arrival, moving only what is out of place: a moved element loses
+    // :hover until the pointer moves again, and its user card would not open.
+    const want: Element | null = prev ? prev.nextElementSibling : avatars.firstElementChild;
+    if (want !== el) avatars.insertBefore(el, want);
+    prev = el;
   }
   for (const el of existing.values()) {
     disposeCard(el);

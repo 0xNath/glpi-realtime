@@ -132,16 +132,41 @@ test("avatars are GLPI's, and hovering one shows GLPI's user card", async ({ bro
   }
 
   // Hover: GLPI's user card, below the avatar, kept open while hovered.
-  await inPresence.hover();
-  const card = alice.page.locator(".popover.glpi-rt-card .user-info-card");
-  await expect(card).toBeVisible();
+  const page = alice.page;
+  const popover = page.locator(".popover.glpi-rt-card");
+  const card = popover.locator(".user-info-card");
+  // A point away from both the avatar and the card, where nothing keeps the card open.
+  const away = async () => {
+    const boxes = [await inPresence.boundingBox()];
+    if ((await popover.count()) > 0) boxes.push(await popover.first().boundingBox());
+    boxes.splice(0, boxes.length, ...boxes.filter((b) => b));
+    const vp = page.viewportSize()!;
+    const candidates = [
+      { x: 5, y: vp.height - 5 },
+      { x: vp.width - 5, y: vp.height - 5 },
+      { x: 5, y: vp.height / 2 },
+    ];
+    const free = candidates.find((p) => boxes.every((b) => p.x < b!.x - 10 || p.x > b!.x + b!.width + 10 || p.y < b!.y - 10 || p.y > b!.y + b!.height + 10));
+    await page.mouse.move(free!.x, free!.y);
+  };
+  // The card comes from an ajax request and opens only if the avatar is still hovered when
+  // it arrives: leave and enter again until it shows (a fresh mouseenter each time).
+  await expect(async () => {
+    await away();
+    await inPresence.hover();
+    await expect(card).toBeVisible({ timeout: 3_000 });
+  }).toPass({ timeout: 20_000 });
   await expect(card).toContainText("rt-bob");
-  await expect(alice.page.locator(".popover.glpi-rt-card")).toHaveAttribute("data-popper-placement", /bottom|top/);
+  await expect(popover).toHaveAttribute("data-popper-placement", /bottom|top/);
+
+  // Kept open while the card itself is hovered, well past the 300 ms hide delay.
   await card.hover();
-  await alice.page.waitForTimeout(600);
+  await page.waitForTimeout(800);
   await expect(card).toBeVisible();
-  await alice.page.mouse.move(400, 400);
-  await expect(card).toBeHidden();
+
+  // Closed once the pointer is elsewhere.
+  await away();
+  await expect(popover).toBeHidden({ timeout: 5_000 });
 
   await alice.context.close();
   await bob.context.close();
