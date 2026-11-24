@@ -3,6 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::drafts::{Draft, Kind};
 use crate::events::{Actor, Event};
 use crate::locks::{Holder, Scope};
 use crate::presence::PresenceUser;
@@ -75,6 +76,31 @@ pub enum ClientMsg {
         #[serde(default)]
         scope: Scope,
     },
+    /// The writer's draft (editor HTML, pasted images removed). The first one makes the
+    /// sender the writer of this shared draft; `locked` when someone else is.
+    Draft {
+        room: String,
+        kind: Kind,
+        html: String,
+        #[serde(default)]
+        private: bool,
+    },
+    /// The writer sent or discarded the draft.
+    DraftEnd {
+        room: String,
+        kind: Kind,
+    },
+    /// Follow (or stop following) a draft, read-only.
+    DraftWatch {
+        room: String,
+        kind: Kind,
+        on: bool,
+    },
+    /// Become the writer of a draft whose writer is inactive or gone.
+    DraftTake {
+        room: String,
+        kind: Kind,
+    },
     /// Writing an answer in the timeline (`followup`, `task`, `solution`, `validation`,
     /// `document`), or `null` when done. Shown to the other members (presence).
     Compose {
@@ -91,6 +117,10 @@ pub enum ErrorCode {
     Forbidden,
     RateLimited,
     TooManyRooms,
+    /// Someone else holds it (shared draft).
+    Locked,
+    /// Content larger than allowed (shared draft).
+    TooLarge,
     Internal,
 }
 
@@ -102,6 +132,8 @@ impl ErrorCode {
             ErrorCode::Forbidden => "forbidden",
             ErrorCode::RateLimited => "rate_limited",
             ErrorCode::TooManyRooms => "too_many_rooms",
+            ErrorCode::Locked => "locked",
+            ErrorCode::TooLarge => "too_large",
             ErrorCode::Internal => "internal",
         }
     }
@@ -156,6 +188,24 @@ pub enum ServerMsg {
     /// No event is delivered for this room until then.
     Regrant {
         room: String,
+    },
+    /// A shared draft, to those who follow it (and to its new writer after a takeover).
+    /// `null`: sent or discarded.
+    Draft {
+        room: String,
+        kind: Kind,
+        draft: Option<Draft>,
+    },
+    /// Who writes a shared draft (no content), to members who may follow it.
+    /// `writer: null`: no draft any more.
+    DraftInfo {
+        room: String,
+        kind: Kind,
+        writer: Option<Holder>,
+        private: bool,
+        updated: Option<u64>,
+        /// The writer's tab is inactive or gone: the draft can be taken over.
+        away: bool,
     },
     /// Who edits the item's fields (`null`: nobody). After `subscribed`, on change, and in
     /// reply to `lock` / `unlock`.

@@ -83,7 +83,11 @@ export type ClientMsg =
   | { t: "activity"; active: boolean }
   | { t: "lock"; room: string; force?: boolean; scope?: LockScope }
   | { t: "unlock"; room: string; scope?: LockScope }
-  | { t: "compose"; room: string; kind: string | null };
+  | { t: "compose"; room: string; kind: string | null }
+  | { t: "draft"; room: string; kind: string; html: string; private: boolean }
+  | { t: "draft_end"; room: string; kind: string }
+  | { t: "draft_watch"; room: string; kind: string; on: boolean }
+  | { t: "draft_take"; room: string; kind: string };
 
 /** Close code meaning "session revoked": do not reconnect before a new GLPI page load. */
 export const CLOSE_REVOKED = 4001;

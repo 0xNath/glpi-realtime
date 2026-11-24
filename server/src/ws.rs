@@ -17,6 +17,7 @@ use tokio::time::Instant;
 use tracing::{info, warn};
 
 use crate::auth;
+use crate::drafts::DraftError;
 use crate::events::{self, Delivery};
 use crate::locks;
 use crate::presence::{self, Entry};
@@ -241,6 +242,12 @@ impl Connection {
                 self.app.locks.forget(&room);
             }
             self.app.presence.leave(&room, self.reg.id).await;
+            // After presence: our drafts are then seen as left, ready to be taken over.
+            self.app.drafts.unwatch_all(&room, self.reg.id);
+            self.app
+                .drafts
+                .writer_left(&room, &self.reg.id.to_string())
+                .await;
         }
         let end = end.unwrap_or(End::Gone);
         let reason = match &end {
@@ -304,6 +311,10 @@ impl Connection {
                 self.handle_lock(tx, room, scope, false, false, id).await
             }
             ClientMsg::Compose { room, kind } => self.handle_compose(tx, room, kind, id).await,
+            m @ (ClientMsg::Draft { .. }
+            | ClientMsg::DraftEnd { .. }
+            | ClientMsg::DraftWatch { .. }
+            | ClientMsg::DraftTake { .. }) => self.handle_draft(tx, m, id).await,
             ClientMsg::Unsub { room } => {
                 if let Some(r) = Room::parse(&room, &self.app.cfg.security.allowed_itemtypes) {
                     self.leave(&r).await;
@@ -345,6 +356,19 @@ impl Connection {
                         // Who edits the fields, right away.
                         for scope in locks::Scope::ALL {
                             if let Some(msg) = self.app.locks.state(&r, scope).await
+                                && let Some(end) = reply(tx, &msg, None)
+                            {
+                                return Some(end);
+                            }
+                        }
+                        // Shared drafts in progress (or left), for those who may follow them.
+                        let grant = self
+                            .rooms
+                            .get(&r)
+                            .map(|j| j.grant.clone())
+                            .unwrap_or_default();
+                        for (kind, msg, private) in self.app.drafts.infos(&r).await {
+                            if kind.allows(&grant, private)
                                 && let Some(end) = reply(tx, &msg, None)
                             {
                                 return Some(end);
@@ -405,6 +429,108 @@ impl Connection {
                 self.app.locks.forget(r);
             }
             self.app.presence.leave(r, self.reg.id).await;
+            self.app.drafts.unwatch_all(r, self.reg.id);
+            self.app
+                .drafts
+                .writer_left(r, &self.reg.id.to_string())
+                .await;
+        }
+    }
+
+    /// A joined room whose grant is current (no pending regrant).
+    fn usable(&self, room: &str) -> Option<(Room, Grant)> {
+        let r = Room::parse(room, &self.app.cfg.security.allowed_itemtypes)?;
+        let j = self.rooms.get(&r).filter(|j| j.stale_until.is_none())?;
+        Some((r, j.grant.clone()))
+    }
+
+    /// Shared drafts: write, end, follow, take over (see drafts.rs). The content is never logged.
+    async fn handle_draft(
+        &mut self,
+        tx: &mpsc::Sender<Message>,
+        msg: ClientMsg,
+        id: Option<u32>,
+    ) -> Option<End> {
+        let room = match &msg {
+            ClientMsg::Draft { room, .. }
+            | ClientMsg::DraftEnd { room, .. }
+            | ClientMsg::DraftWatch { room, .. }
+            | ClientMsg::DraftTake { room, .. } => room.clone(),
+            _ => return None,
+        };
+        let Some((r, grant)) = self.usable(&room) else {
+            return self.error(tx, ErrorCode::Forbidden, "not subscribed", id);
+        };
+        let conn = self.reg.id.to_string();
+        let me = || {
+            locks::holder(
+                self.reg.id,
+                self.session.uid,
+                &self.session.name,
+                self.session.avatar.clone(),
+            )
+        };
+        match msg {
+            ClientMsg::Draft {
+                kind,
+                html,
+                private,
+                ..
+            } => {
+                if !grant.has(kind.right()) {
+                    return self.error(tx, ErrorCode::Forbidden, "cannot write this answer", id);
+                }
+                match self.app.drafts.write(&r, kind, me(), html, private).await {
+                    Ok(()) => None,
+                    Err(DraftError::Locked(_)) => {
+                        self.error(tx, ErrorCode::Locked, "someone else writes it", id)
+                    }
+                    Err(DraftError::TooLarge) => {
+                        self.error(tx, ErrorCode::TooLarge, "draft too large", id)
+                    }
+                    Err(DraftError::Unavailable) => {
+                        self.error(tx, ErrorCode::Internal, "temporarily unavailable", id)
+                    }
+                }
+            }
+            ClientMsg::DraftEnd { kind, .. } => {
+                self.app.drafts.end(&r, kind, &conn).await;
+                None
+            }
+            ClientMsg::DraftWatch { kind, on, .. } => {
+                if !on {
+                    self.app.drafts.unwatch(&r, kind, self.reg.id);
+                    return None;
+                }
+                match self.app.drafts.content(&r, kind, &grant).await {
+                    Some(text) if grant.has(kind.right()) => {
+                        self.app
+                            .drafts
+                            .watch(&r, kind, self.reg.id, self.ev_tx.clone(), grant);
+                        push_text(tx, text)
+                    }
+                    _ => self.error(tx, ErrorCode::Forbidden, "cannot follow this draft", id),
+                }
+            }
+            ClientMsg::DraftTake { kind, .. } => {
+                match self.app.drafts.take(&r, kind, me(), &grant).await {
+                    Ok(Some(d)) => reply(
+                        tx,
+                        &ServerMsg::Draft {
+                            room: r.to_string(),
+                            kind,
+                            draft: Some(d),
+                        },
+                        id,
+                    ),
+                    Ok(None) => self.error(tx, ErrorCode::Forbidden, "no draft to take", id),
+                    Err(DraftError::Locked(_)) => {
+                        self.error(tx, ErrorCode::Locked, "the writer is still there", id)
+                    }
+                    Err(_) => self.error(tx, ErrorCode::Internal, "temporarily unavailable", id),
+                }
+            }
+            _ => None,
         }
     }
 
@@ -453,6 +579,18 @@ impl Connection {
     fn deliver(&mut self, tx: &mpsc::Sender<Message>, d: Delivery) -> Option<End> {
         let (room, batch) = match d {
             Delivery::Text(text) => return push_text(tx, text),
+            Delivery::DraftInfo(room, text, kind, private) => {
+                // Only to members who could follow it.
+                let ok = self
+                    .rooms
+                    .get(&room)
+                    .is_some_and(|j| kind.allows(&j.grant, private));
+                return if ok {
+                    push_text(tx, (*text).clone())
+                } else {
+                    None
+                };
+            }
             Delivery::Room(room, batch) => (room, batch),
         };
         let Some(j) = self.rooms.get_mut(&room) else {

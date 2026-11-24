@@ -49,6 +49,10 @@ regrant_timeout_secs = 30
 ttl_secs = 30
 sweep_secs = 5                      # how often expired locks are noticed
 
+[drafts]
+# A shared draft left by a closed tab can be taken over for this long.
+ttl_secs = 900
+
 [shutdown]
 grace_secs = 5
 

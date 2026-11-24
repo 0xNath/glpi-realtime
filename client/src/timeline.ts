@@ -1,3 +1,4 @@
+import { type DraftKind, SharedDrafts } from "./drafts.ts";
 import { h, icon } from "./dom.ts";
 import { look } from "./presence.ts";
 import type { Holder, PresenceUser } from "./protocol.ts";
@@ -215,12 +216,16 @@ export class LiveTimeline {
   private pending = new Set<string>();
   private timer: ReturnType<typeof setTimeout> | null = null;
   private users: PresenceUser[] = [];
+  /** Shared answer drafts (step 5): Join / Take over on the placeholders. */
+  readonly drafts: SharedDrafts;
 
   constructor(doc: Document, client: TimelineClient, room: string, lang: string) {
     this.doc = doc;
     this.client = client;
     this.room = room;
     this.t = TEXT[langOf(lang)];
+    this.drafts = new SharedDrafts(doc, client as any, room, lang);
+    this.drafts.onChange = () => this.renderComposing();
     const style = doc.createElement("style");
     style.textContent = STYLE;
     doc.head.appendChild(style);
@@ -348,13 +353,13 @@ export class LiveTimeline {
     this.note(why);
   }
 
-  /** One placeholder per other user writing something here. */
+  /** One placeholder per other user writing something here, and per draft left behind. */
   private renderComposing(): void {
     const timeline = this.timeline();
     if (!timeline) return;
     const writers = this.users.filter((u) => u.composing && u.id !== this.client.user?.id);
     const existing = new Map<string, Element>();
-    timeline.querySelectorAll(":scope > .glpi-rt-composing").forEach((el) => existing.set((el as HTMLElement).dataset.uid!, el));
+    timeline.querySelectorAll(":scope > .glpi-rt-composing:not(.glpi-rt-draft-left)").forEach((el) => existing.set((el as HTMLElement).dataset.uid!, el));
     for (const u of writers) {
       const text = (this.t.composing[u.composing!] ?? this.t.composing.followup)(u.name).replace(/…$/, "");
       let el = existing.get(String(u.id)) as HTMLElement | undefined;
@@ -381,6 +386,31 @@ export class LiveTimeline {
       );
     }
     for (const el of existing.values()) el.remove();
+
+    // Join / Take over on shared drafts (followups, tasks, solutions).
+    for (const u of writers) {
+      const el = timeline.querySelector<HTMLElement>(`:scope > .glpi-rt-composing[data-uid="${u.id}"]`);
+      if (el && ["followup", "task", "solution"].includes(u.composing!)) this.drafts.decorate(el, u.composing as DraftKind, u.id);
+    }
+    const left = this.drafts.leftBehind().filter(([, i]) => !writers.some((u) => u.id === i.writer?.id));
+    const keep = new Set(left.map(([k]) => k));
+    timeline.querySelectorAll<HTMLElement>(":scope > .glpi-rt-draft-left").forEach((el) => {
+      if (!keep.has(el.dataset.kind as DraftKind)) el.remove();
+    });
+    for (const [kind, info] of left) {
+      let el = timeline.querySelector<HTMLElement>(`:scope > .glpi-rt-draft-left[data-kind="${kind}"]`);
+      if (!el) {
+        el = h("div", { class: "timeline-item mb-3 glpi-rt-composing glpi-rt-draft-left", "data-kind": kind });
+        const [parent, before] = newItemsPlace(timeline);
+        parent.insertBefore(el, before);
+      }
+      el.replaceChildren(
+        h("div", { class: "mt-2 timeline-content card" },
+          h("div", { class: "card-body px-3 py-2 text-secondary" }, icon("file-text"), " ", this.drafts.leftLabel(kind, info)),
+        ),
+      );
+      this.drafts.decorate(el, kind, info.writer!.id);
+    }
   }
 
   private schedule(): void {

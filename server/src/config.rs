@@ -18,6 +18,7 @@ pub struct Config {
     pub presence: PresenceConfig,
     pub events: EventsConfig,
     pub locks: LocksConfig,
+    pub drafts: DraftsConfig,
     pub shutdown: ShutdownConfig,
     pub log: LogConfig,
 }
@@ -208,6 +209,20 @@ impl Default for LocksConfig {
             ttl_secs: 30,
             sweep_secs: 5,
         }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct DraftsConfig {
+    /// A shared draft is kept this long after its last change, so that a draft left by a
+    /// closed tab can be taken over.
+    pub ttl_secs: u64,
+}
+
+impl Default for DraftsConfig {
+    fn default() -> Self {
+        Self { ttl_secs: 900 }
     }
 }
 

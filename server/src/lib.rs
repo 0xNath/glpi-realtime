@@ -6,6 +6,7 @@
 pub mod auth;
 pub mod avatar;
 pub mod config;
+pub mod drafts;
 pub mod events;
 pub mod locks;
 pub mod presence;

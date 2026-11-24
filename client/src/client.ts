@@ -125,7 +125,8 @@ export class RealtimeClient {
     return this.joined.has(room);
   }
 
-  private send(msg: ClientMsg): number {
+  /** Sends a message on the open socket; returns its id (replies and errors echo it). */
+  send(msg: ClientMsg): number {
     const id = this.nextId++;
     this.ws?.send(JSON.stringify({ v: VERSION, id, ...msg }));
     return id;

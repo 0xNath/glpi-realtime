@@ -30,7 +30,7 @@ Browser ──wss /ws──► nginx ──unix socket──► glpi-realtime (R
 | 2 | Presence | done |
 | 3 | Ticket events, notifications (bell with queues, preferences, sound, full page) | done |
 | 4 | Single editor for ticket fields | done |
-| 5 | Collaborative answers (TipTap + Yjs) | — |
+| 5 | Shared answer drafts: follow live, take over | done |
 | 6 | Load test at 20 000 connections, hardening | — |
 
 ## Build and test

@@ -191,6 +191,9 @@ pub enum Delivery {
     Room(Room, Arc<Batch>),
     /// Encoded `notification` frame, already targeted.
     Text(String),
+    /// Encoded `draft_info` (who writes, no content): the connection checks it may join
+    /// that kind of draft, private or not.
+    DraftInfo(Room, Arc<String>, crate::drafts::Kind, bool),
 }
 
 struct UserConn {
@@ -263,6 +266,29 @@ impl Hub {
     }
 
     /// Sends the same encoded frame to every local member of a room.
+    /// `draft_info` to every local member; each connection filters it with its grant.
+    pub fn broadcast_info(
+        &self,
+        room: &Room,
+        (msg, private, kind): (ServerMsg, bool, crate::drafts::Kind),
+    ) {
+        let text = Arc::new(protocol::encode(&msg, None));
+        let members: Vec<(Uuid, mpsc::Sender<Delivery>)> = self
+            .rooms
+            .lock()
+            .expect("hub poisoned")
+            .get(room)
+            .map(|m| m.iter().map(|(id, tx)| (*id, tx.clone())).collect())
+            .unwrap_or_default();
+        for (id, tx) in members {
+            self.deliver(
+                id,
+                &tx,
+                Delivery::DraftInfo(room.clone(), Arc::clone(&text), kind, private),
+            );
+        }
+    }
+
     pub fn broadcast(&self, room: &Room, d: Delivery) {
         let Delivery::Text(text) = d else { return };
         let members: Vec<(Uuid, mpsc::Sender<Delivery>)> = self

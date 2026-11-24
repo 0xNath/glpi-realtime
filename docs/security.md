@@ -7,8 +7,9 @@
 2. **Fail open for GLPI, fail closed for real time.** If Valkey or the server is down, GLPI
    works as without the plugin (50 ms timeout, then Valkey is skipped for the request).
    If a check cannot be made, the server refuses (401/503, `forbidden`, `internal`).
-3. **No content in transit** except collaborative drafts (step 5), only to authorized
-   participants, never logged. Item events carry kinds, ids and changed field names;
+3. **No content in transit** except shared answer drafts (step 5), only to members GLPI
+   allows to add that kind of answer (and to see private ones when the draft is private),
+   never logged, shown in a sandboxed frame. Item events carry kinds, ids and changed field names;
    browsers reload the content from GLPI.
 
 ## Session token
@@ -67,6 +68,14 @@ Timeline items are never sent over the WebSocket: each browser reloads its ticke
 GLPI, in its own session, and merges the timeline entries GLPI rendered for it. A second
 solution is refused by GLPI itself (plugin `pre_item_add`, serialized per item with
 MariaDB `GET_LOCK`), whatever the browsers do.
+
+## Shared drafts
+
+A draft's HTML comes from another user's editor: followers render it in an
+`<iframe sandbox>` (no scripts, opaque origin) whose CSP forbids any load, so it can
+neither run code in their page nor reveal them to a remote host. The server checks the
+writer's and each follower's grant flags; drafts are capped at 48 KiB and expire 15 min
+after their last change.
 
 ## Values displayed in other users' pages
 

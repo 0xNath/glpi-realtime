@@ -28,6 +28,10 @@ Every message carries `"v": 1`. A client may add an integer `"id"`, echoed in th
 | `activity` | `active` (bool) | none; presence lists change for the other members |
 | `lock` | `room`, `force?`, `scope?` (`fields`, `solution`) | `lock` (see [Single editor](#single-editor)) |
 | `unlock` | `room`, `scope?` | `lock` |
+| `draft` | `room`, `kind` (`followup`, `task`, `solution`), `html`, `private` | none, or `error` `locked` / `too_large` / `forbidden` |
+| `draft_end` | `room`, `kind` | none |
+| `draft_watch` | `room`, `kind`, `on` | `draft` (current content) when `on` |
+| `draft_take` | `room`, `kind` | `draft` (now ours) or `error` `locked` |
 | `compose` | `room`, `kind` (`followup`, `task`, `solution`, `validation`, `document`) or `null` | none; presence lists change |
 
 A `sub` succeeds only if GLPI wrote a grant `rt:g:{hash}:{room}` with `read=1` for this
@@ -49,10 +53,12 @@ grant is gone, removes the connection from the room and answers `forbidden`.
 | `event` | `room`, `kind`, `by{id,name}`, `item{type,id}?`, `fields[]?` | something changed on the item |
 | `regrant` | `room` | rights on the item may have changed |
 | `lock` | `room`, `scope`, `holder{conn,id,name,since,avatar?}` or `null` | after `subscribed`, on change, reply to `lock`/`unlock` |
+| `draft` | `room`, `kind`, `draft{writer,html,private,updated}` or `null` | to followers, on each change |
+| `draft_info` | `room`, `kind`, `writer` or `null`, `private`, `updated`, `away` | to members allowed to follow it, after `subscribed` and on change |
 | `notification` | `nid`, `kind`, `room`, `by{id,name}`, `alert` | the user's notifications changed |
 
 Error codes: `bad_request`, `unsupported_version`, `forbidden`, `rate_limited`,
-`too_many_rooms`, `internal`.
+`too_many_rooms`, `locked`, `too_large`, `internal`.
 
 ## Presence
 
@@ -148,6 +154,23 @@ main item. The timeline (followups, tasks, solutions) is not locked.
   that is not refused, under a MariaDB `GET_LOCK` so that two simultaneous saves cannot
   both pass.
 
+## Shared drafts
+
+One shared draft per item and kind (`followup`, `task`, `solution`), written in GLPI's own
+editor (TinyMCE). The writer's client sends `draft` as they type (pasted images removed);
+the first one makes it the writer, others get `locked` and keep a personal draft.
+
+- Members allowed to follow it get `draft_info` (who writes, no content): the grant flag
+  `add_followup`, `add_task` or `solve`, plus `see_private_followup` / `see_private_task`
+  when the draft is private. "Join" sends `draft_watch`; followers receive `draft` on each
+  change and show it read-only in a sandboxed frame (no script, no remote load).
+- `draft_take` makes the caller the writer when the writer's tab is inactive or gone
+  (`away: true` in `draft_info`); the reply carries the text, which opens in the caller's
+  own answer form. The former writer is told someone took it over.
+- Submitting or closing the form sends `draft_end`. A draft whose writer closed the tab is
+  kept `drafts.ttl_secs` (15 min) in `rt:d:{room}:{kind}`, written atomically (Lua).
+- The content is never logged. Rights are those of the grant GLPI wrote for each session.
+
 ## Notifications
 
 Personal notifications ("bell", Notifier+ feature set) are **stored by GLPI** in
@@ -203,4 +226,4 @@ Reconnection delay: exponential from 0.5 s to 30 s with jitter (`client/src/back
 
 ## Binary frames
 
-Reserved for collaborative drafts (Yjs, step 5); rejected with `bad_request` until then.
+Not used: rejected with `bad_request`.
