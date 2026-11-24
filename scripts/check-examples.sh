@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Runs the examples of deploy/ through the software they are written for, so that the
 # documentation stays true: the server's configurations, Valkey's, nginx's and Apache's
-# vhosts, the Caddyfile and the compose file. Needs Docker or Podman (CONTAINER=...) and
+# vhosts, the Caddyfile, the compose file, the Prometheus rules; and the metrics the
+# README, the dashboard and the rules name are the server's. Needs Docker or Podman (CONTAINER=...) and
 # cargo (server). Exit code 1 on the first broken example.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -16,6 +17,7 @@ NGINX=docker.io/library/nginx:1.31.8
 HTTPD=docker.io/library/httpd:2.4.70
 CADDY=docker.io/library/caddy:2.11.8
 VALKEY=docker.io/valkey/valkey:9.0
+PROMETHEUS=docker.io/prom/prometheus:v3.5.0
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 # check <label> <command...>: the command must succeed (its output shown only if not).
@@ -84,5 +86,19 @@ check "Caddyfile.example" run -e GLPI_HOST=glpi.example.org -v "$EX/Caddyfile.ex
 echo "== Compose"
 # shellcheck disable=SC2086
 check "compose.yaml" env GLPI_HOST=glpi.example.org GLPI_DB_PASSWORD=example $COMPOSE -f "$EX/compose.yaml" config
+
+echo "== Prometheus"
+check "prometheus-rules.yml" run --entrypoint promtool -v "$EX/prometheus-rules.yml:/conf/rules.yml:ro" "$PROMETHEUS" \
+    check rules /conf/rules.yml
+
+echo "== Metrics"
+# The server's metrics (from its sources) against those the README lists (all of them)
+# and those the dashboard and the alerts use (no other).
+names() { grep -ohE "$1" "${@:2}" | grep -oE 'rt_[a-z_]+' | sort -u; }
+names 'metrics::(counter|gauge|histogram)!\("rt_[a-z_]+"' -r "$ROOT/server/src" > "$TMP/server"
+names '`rt_[a-z_]+`' "$ROOT/README.md" > "$TMP/readme"
+names 'rt_[a-z_]+' "$EX/grafana-dashboard.json" "$EX/prometheus-rules.yml" > "$TMP/used"
+check "README lists every metric of the server" diff "$TMP/server" "$TMP/readme"
+check "dashboard and alerts use the server's metrics only" sh -c "comm -13 '$TMP/server' '$TMP/used' | (! grep .)"
 
 echo "All examples are valid."

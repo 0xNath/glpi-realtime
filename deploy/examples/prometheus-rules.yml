@@ -1,0 +1,52 @@
+# Alerts for glpi-realtime, for Prometheus (rule_files: in prometheus.yml). Adjust the job
+# name to your scrape configuration and the thresholds to your instance. Every alert is
+# about something users notice: no real-time, or tabs that cannot connect.
+groups:
+  - name: glpi-realtime
+    rules:
+      - alert: GlpiRealtimeDown
+        expr: up{job="glpi-realtime"} == 0
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "glpi-realtime on {{ $labels.instance }} is not answering"
+          description: "GLPI works without it, but nothing is real-time: no presence, no live updates, no instant notifications."
+
+      # The server answers but Valkey does not: handshakes are refused as "unavailable".
+      - alert: GlpiRealtimeValkeyUnavailable
+        expr: sum by (instance) (rate(rt_handshakes_total{result="unavailable"}[5m])) > 0
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "glpi-realtime on {{ $labels.instance }} cannot reach Valkey"
+          description: "Browsers are refused (HTTP 503 on /ws). See docs/troubleshooting.md."
+
+      # Most handshakes refused: a session or origin problem (GLPI's URL, allowed_origins,
+      # the plugin's Valkey settings), usually after a configuration change.
+      - alert: GlpiRealtimeHandshakesRefused
+        expr: |
+          sum by (instance) (rate(rt_handshakes_total{result=~"unauthorized|origin"}[15m]))
+            > 0.5 * sum by (instance) (rate(rt_handshakes_total[15m]))
+          and sum by (instance) (rate(rt_handshakes_total[15m])) > 0.01
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "glpi-realtime on {{ $labels.instance }} refuses most connections"
+          description: "More than half of the handshakes are refused (unauthorized or origin). Run the plugin's checks: php bin/console plugins:realtime:check."
+
+      # Connection limits reached: users get no real-time in new tabs.
+      - alert: GlpiRealtimeConnectionLimit
+        expr: sum by (instance) (increase(rt_handshakes_total{result=~"user_full|instance_full"}[15m])) > 10
+        labels: { severity: info }
+        annotations:
+          summary: "glpi-realtime on {{ $labels.instance }} refuses connections at its limits"
+          description: "Raise limits.max_connections or limits.max_connections_per_user in config.toml if this is regular use."
+
+      # Event batches from Valkey that do not parse: a plugin and server of different
+      # versions, or something else writing to the stream.
+      - alert: GlpiRealtimeEventsRejected
+        expr: sum by (instance) (increase(rt_events_rejected_total[15m])) > 0
+        labels: { severity: warning }
+        annotations:
+          summary: "glpi-realtime on {{ $labels.instance }} rejects events from Valkey"
+          description: "Check that the plugin and the server are the same version (deploy/install.sh installs both)."

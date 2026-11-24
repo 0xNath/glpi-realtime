@@ -8,6 +8,10 @@ Server and plugin share one version number. Upgrades never change your configura
 - Accessibility: the bell's button is named by what it shows ("Notifications 3", or
   "99+"), as WCAG 2.5.3 asks; its label used to say the exact count while the badge
   showed "99+" (found by axe-core 4.14).
+- Monitoring: the README lists every metric with its labels;
+  `deploy/examples/prometheus-rules.yml` has alerts (server down, Valkey unreachable,
+  handshakes refused, connection limits, events rejected). The CI checks that the README,
+  the Grafana dashboard and the alerts match the server's metrics.
 
 ## 0.7.0
 

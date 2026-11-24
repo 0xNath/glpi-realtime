@@ -356,8 +356,23 @@ checks that the template matches the sources (`scripts/i18n.py --check`).
   `curl --unix-socket /run/glpi-realtime/rt.sock http://localhost/health`
 - Valkey restarted, even without persistence: the server reconnects and subscribes again;
   open tabs get a new session from GLPI and their grants again, without reloading.
-- Metrics (Prometheus): `.../metrics` — `rt_connections`, `rt_handshakes_total{result}`,
-  `rt_messages_in_total`, `rt_messages_out_total`, `rt_errors_total{code}`,
-  `rt_disconnects_total{reason}`, `rt_revocations_total`, `rt_events_total`,
-  `rt_events_rejected_total`.
+- Metrics (Prometheus): `.../metrics`, next to `/health`. A dashboard
+  ([`grafana-dashboard.json`](deploy/examples/grafana-dashboard.json)) and alerts
+  ([`prometheus-rules.yml`](deploy/examples/prometheus-rules.yml)) are in
+  `deploy/examples/`.
+
+  | Metric | Labels | Counts |
+  |---|---|---|
+  | `rt_connections` | | open WebSocket connections (gauge) |
+  | `rt_handshakes_total` | `result`: `ok`, `unauthorized`, `origin`, `user_full`, `instance_full`, `unavailable` | connection attempts |
+  | `rt_disconnects_total` | `reason` | connections closed |
+  | `rt_revocations_total` | | connections closed because GLPI revoked their session (logout, rights) |
+  | `rt_messages_in_total`, `rt_messages_out_total` | | frames from and to browsers |
+  | `rt_errors_total` | `code` | errors sent to browsers (protocol `error` frames) |
+  | `rt_events_total` | | item events received from GLPI |
+  | `rt_events_rejected_total` | | event batches from Valkey refused as malformed |
+  | `rt_notifications_total` | `alert`: `yes`, `no` | notifications pushed to tabs |
+  | `rt_locks_total` | `scope`: `fields`, `solution`; `result` | single-editor requests (`taken`, `renewed`, `busy`) |
+  | `rt_drafts_total` | `op`: `write`, `take`, `locked` | shared draft writes and takeovers |
+  | `rt_watch_total` | | list pages watched (presence on the lists) |
 - Browser debug: `localStorage.setItem('glpi-realtime-debug', '1')`, then reload.
