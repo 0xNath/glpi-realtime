@@ -38,6 +38,8 @@ export interface Holder {
   /** Unix seconds. */
   since: number;
   avatar?: Avatar;
+  /** Fields held for an answer that changes the status, not to edit them. */
+  reason?: "solution" | "pending";
 }
 
 /** Who did it; id 0 for GLPI itself (crons, mail collector). */
@@ -81,7 +83,7 @@ export type ClientMsg =
   | { t: "unsub"; room: string }
   | { t: "ping" }
   | { t: "activity"; active: boolean }
-  | { t: "lock"; room: string; force?: boolean; scope?: LockScope }
+  | { t: "lock"; room: string; force?: boolean; scope?: LockScope; reason?: "solution" | "pending" }
   | { t: "unlock"; room: string; scope?: LockScope }
   | { t: "compose"; room: string; kind: string | null }
   | { t: "draft"; room: string; kind: string; html: string; private: boolean }

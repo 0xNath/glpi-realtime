@@ -68,7 +68,8 @@ export class EditorState {
 
   /** What to tell the server on each keepalive tick. */
   tick(now: number, focused: boolean): "renew" | "release" | null {
-    if (!this.mine()) return null;
+    // Held for a solution or a pending answer: the timeline renews and releases it.
+    if (!this.mine() || this.holder?.reason) return null;
     return this.dirty || focused || now - this.lastInput < IDLE_MS ? "renew" : "release";
   }
 }
@@ -76,6 +77,8 @@ export class EditorState {
 const TEXT = {
   fr: {
     other: (n: string, since: string, it: string) => `${n} modifie les champs de ${it} ${since}.`,
+    solution: (n: string, it: string) => `${n} ajoute une solution : le statut de ${it} va changer, ses champs sont bloqués jusqu'à l'envoi.`,
+    pending: (n: string, it: string) => `${n} met ${it} en attente : ses champs sont bloqués jusqu'à l'envoi.`,
     takeOver: "Prendre la main",
     stale: (n: string, it: string) => `${n || "Quelqu'un"} a modifié ${it}. Actualisez avant de modifier ses champs.`,
     mineStale: (n: string, it: string) => `${n || "Quelqu'un"} a modifié ${it} pendant votre saisie : vérifiez avant d'enregistrer.`,
@@ -85,6 +88,8 @@ const TEXT = {
   },
   en: {
     other: (n: string, since: string, it: string) => `${n} is editing the fields of ${it} ${since}.`,
+    solution: (n: string, it: string) => `${n} is adding a solution: the status of ${it} will change, its fields are locked until it is sent.`,
+    pending: (n: string, it: string) => `${n} is putting ${it} on hold: its fields are locked until it is sent.`,
     takeOver: "Take over",
     stale: (n: string, it: string) => `${n || "Someone"} changed ${it}. Refresh before editing its fields.`,
     mineStale: (n: string, it: string) => `${n || "Someone"} changed ${it} while you were editing: check before saving.`,
@@ -252,8 +257,11 @@ export class FieldsEditor {
     switch (mode) {
       case "other": {
         const minutes = Math.floor((Date.now() / 1000 - (holder?.since ?? 0)) / 60);
-        children.push(icon("lock"), h("span", { class: "glpi-rt-editor-text", text: t.other(holder?.name ?? "", t.since(minutes), this.it) }));
-        if (!this.holderActive) {
+        const name = holder?.name ?? "";
+        const text = holder?.reason === "solution" ? t.solution(name, this.it) : holder?.reason === "pending" ? t.pending(name, this.it) : t.other(name, t.since(minutes), this.it);
+        children.push(icon("lock"), h("span", { class: "glpi-rt-editor-text", text }));
+        // Held for an answer being written: taking it over would change the status under them.
+        if (!this.holderActive && !holder?.reason) {
           children.push(h("button", { type: "button", class: "btn btn-sm btn-outline-warning", text: t.takeOver, onclick: () => this.client.lock(this.room, true) }));
         }
         break;

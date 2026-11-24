@@ -26,7 +26,7 @@ Every message carries `"v": 1`. A client may add an integer `"id"`, echoed in th
 | `unsub` | `room` | `unsubscribed` |
 | `ping` | — | `pong` |
 | `activity` | `active` (bool) | none; presence lists change for the other members |
-| `lock` | `room`, `force?`, `scope?` (`fields`, `solution`) | `lock` (see [Single editor](#single-editor)) |
+| `lock` | `room`, `force?`, `scope?` (`fields`, `solution`), `reason?` (`solution`, `pending`) | `lock` (see [Single editor](#single-editor)) |
 | `unlock` | `room`, `scope?` | `lock` |
 | `draft` | `room`, `kind` (`followup`, `task`, `solution`), `html`, `private` | none, or `error` `locked` / `too_large` / `forbidden` |
 | `draft_end` | `room`, `kind` | none |
@@ -122,6 +122,11 @@ main item. The timeline (followups, tasks, solutions) is not locked.
   `lock_ttl / 3` seconds while editing; `unlock` after a minute without input when nothing
   is unsaved. Saving reloads the page: the connection closes and the server releases the
   lock. A lock that is not renewed expires after `locks.ttl_secs` (30 s).
+- **Answers that change the status hold the fields too.** Writing a solution, or a
+  followup/task with *Put on hold* checked, takes the fields lock with
+  `reason: "solution"` / `"pending"` (needs `solve` / `add_followup` or `add_task` instead
+  of `update`). Others see the fields locked and why (no take over); and while someone
+  else edits the fields, the Solution button is disabled and *Put on hold* is unchecked.
 - Taking the lock needs the grant flag `update`, and no pending `regrant`
   (`forbidden` otherwise). `force: true` takes it from a holder whose tab is inactive
   (presence) or who left the item; otherwise the reply names the current holder.

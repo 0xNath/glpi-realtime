@@ -62,19 +62,35 @@ pub struct Holder {
     pub since: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub avatar: Option<Avatar>,
+    /// Why the fields are held without being edited: an answer that changes the status
+    /// (`solution`, `pending`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
 }
 
-/// Takes the lock, renews it (same connection) or returns the current holder.
-/// ARGV: conn, holder JSON, force ("1"), ttl ms.
+/// Reasons a fields lock may be taken for, besides editing the fields.
+pub const REASONS: [&str; 2] = ["solution", "pending"];
+
+/// Takes the lock, renews it (same connection, updating its reason) or returns the
+/// current holder. ARGV: conn, holder JSON, force ("1"), ttl ms.
+/// Returns "1" or "0" (changed for the others or not) followed by the stored JSON.
 const ACQUIRE: &str = r#"
 local cur = redis.call('GET', KEYS[1])
 if cur and ARGV[3] ~= '1' then
-  if cjson.decode(cur).conn ~= ARGV[1] then return cur end
+  local h = cjson.decode(cur)
+  if h.conn ~= ARGV[1] then return '0' .. cur end
+  local n = cjson.decode(ARGV[2])
+  if h.reason ~= n.reason then
+    h.reason = n.reason
+    local v = cjson.encode(h)
+    redis.call('SET', KEYS[1], v, 'PX', ARGV[4])
+    return '1' .. v
+  end
   redis.call('PEXPIRE', KEYS[1], ARGV[4])
-  return cur
+  return '0' .. cur
 end
 redis.call('SET', KEYS[1], ARGV[2], 'PX', ARGV[4])
-return ARGV[2]
+return '1' .. ARGV[2]
 "#;
 
 /// Releases the lock if this connection holds it. ARGV: conn.
@@ -176,11 +192,12 @@ impl Locks {
                 warn!(error = %e, %room, "locks: acquire failed");
                 LockError::Unavailable
             })?;
-        // Newly taken (not a renewal, not someone else's): everyone must know.
-        if cur == json {
+        // Newly taken, or its reason changed: everyone must know.
+        let (changed, stored) = cur.split_at(cur.len().min(1));
+        if changed == "1" {
             self.changed(room, scope).await;
         }
-        Ok(serde_json::from_str(&cur).ok())
+        Ok(serde_json::from_str(stored).ok())
     }
 
     /// Releases the lock if `conn` holds it (unlock, leaving the room, disconnection).
@@ -347,5 +364,6 @@ pub fn holder(conn: Uuid, uid: u64, name: &str, avatar: Option<Avatar>) -> Holde
         name: name.to_string(),
         since: now(),
         avatar,
+        reason: None,
     }
 }

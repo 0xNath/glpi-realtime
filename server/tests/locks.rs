@@ -306,3 +306,96 @@ async fn composing_is_shown_in_presence() {
     assert_eq!(recv(&mut a).await["code"], "bad_request");
     srv.stop().await.unwrap();
 }
+
+#[tokio::test]
+async fn fields_held_for_a_solution_or_a_pending_answer() {
+    let vk = valkey_or_skip!();
+    let (srv, addr) = start(config(&vk)).await;
+    let tech = session(&vk, 70, "Tech").await;
+    let other = session(&vk, 71, "Other").await;
+    let requester = session(&vk, 72, "Requester").await;
+    // An assigned technician may solve without the general update right.
+    grant(
+        &vk,
+        &tech,
+        "Ticket:13",
+        &[("read", "1"), ("solve", "1"), ("add_followup", "1")],
+    )
+    .await;
+    grant(&vk, &other, "Ticket:13", EDIT).await;
+    grant(
+        &vk,
+        &requester,
+        "Ticket:13",
+        &[("read", "1"), ("add_followup", "0")],
+    )
+    .await;
+    let (mut t, _) = editor(addr, &tech, "Ticket:13").await;
+    let (mut o, _) = editor(addr, &other, "Ticket:13").await;
+    let (mut q, _) = editor(addr, &requester, "Ticket:13").await;
+
+    send(
+        &mut t,
+        json!({"v":1,"id":1,"t":"lock","room":"Ticket:13","reason":"solution"}),
+    )
+    .await;
+    let r = recv_matching(&mut t, Duration::from_secs(3), |m| m["id"] == 1)
+        .await
+        .unwrap();
+    assert_eq!(
+        (r["holder"]["id"].as_u64(), r["holder"]["reason"].as_str()),
+        (Some(70), Some("solution"))
+    );
+    let seen = recv_lock(&mut o, "Ticket:13").await;
+    assert_eq!(
+        seen["holder"]["reason"], "solution",
+        "the others know why the fields are held"
+    );
+    assert_eq!(
+        lock(&mut o, "Ticket:13", false).await["holder"]["id"],
+        70,
+        "and cannot edit them"
+    );
+
+    // Same holder, other reason: told again.
+    send(
+        &mut t,
+        json!({"v":1,"t":"lock","room":"Ticket:13","reason":"pending"}),
+    )
+    .await;
+    assert_eq!(
+        recv_lock(&mut o, "Ticket:13").await["holder"]["reason"],
+        "pending"
+    );
+    // A renewal for the same reason is not broadcast.
+    send(
+        &mut t,
+        json!({"v":1,"t":"lock","room":"Ticket:13","reason":"pending"}),
+    )
+    .await;
+    assert!(
+        recv_matching(&mut o, Duration::from_millis(500), |m| m["t"] == "lock")
+            .await
+            .is_none()
+    );
+
+    send(
+        &mut q,
+        json!({"v":1,"id":2,"t":"lock","room":"Ticket:13","reason":"pending"}),
+    )
+    .await;
+    let r = recv_matching(&mut q, Duration::from_secs(3), |m| m["id"] == 2)
+        .await
+        .unwrap();
+    assert_eq!(r["code"], "forbidden", "needs the right to add the answer");
+    send(
+        &mut q,
+        json!({"v":1,"id":3,"t":"lock","room":"Ticket:13","reason":"delete_all"}),
+    )
+    .await;
+    let r = recv_matching(&mut q, Duration::from_secs(3), |m| m["id"] == 3)
+        .await
+        .unwrap();
+    assert_eq!(r["code"], "bad_request");
+    srv.stop().await.unwrap();
+}

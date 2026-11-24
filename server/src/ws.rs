@@ -91,6 +91,15 @@ enum End {
     Slow,
 }
 
+/// A `lock` / `unlock` request.
+struct LockReq {
+    room: String,
+    scope: locks::Scope,
+    take: bool,
+    force: bool,
+    reason: Option<String>,
+}
+
 struct Joined {
     /// Flags GLPI computed for this session; filter the item's events.
     grant: Grant,
@@ -304,11 +313,30 @@ impl Connection {
                 }
                 None
             }
-            ClientMsg::Lock { room, force, scope } => {
-                self.handle_lock(tx, room, scope, true, force, id).await
+            ClientMsg::Lock {
+                room,
+                force,
+                scope,
+                reason,
+            } => {
+                let req = LockReq {
+                    room,
+                    scope,
+                    take: true,
+                    force,
+                    reason,
+                };
+                self.handle_lock(tx, req, id).await
             }
             ClientMsg::Unlock { room, scope } => {
-                self.handle_lock(tx, room, scope, false, false, id).await
+                let req = LockReq {
+                    room,
+                    scope,
+                    take: false,
+                    force: false,
+                    reason: None,
+                };
+                self.handle_lock(tx, req, id).await
             }
             ClientMsg::Compose { room, kind } => self.handle_compose(tx, room, kind, id).await,
             m @ (ClientMsg::Draft { .. }
@@ -539,12 +567,22 @@ impl Connection {
     async fn handle_lock(
         &mut self,
         tx: &mpsc::Sender<Message>,
-        room: String,
-        scope: locks::Scope,
-        take: bool,
-        force: bool,
+        req: LockReq,
         id: Option<u32>,
     ) -> Option<End> {
+        let LockReq {
+            room,
+            scope,
+            take,
+            force,
+            reason,
+        } = req;
+        if reason
+            .as_deref()
+            .is_some_and(|r| scope != locks::Scope::Fields || !locks::REASONS.contains(&r))
+        {
+            return self.error(tx, ErrorCode::BadRequest, "unknown reason", id);
+        }
         let Some(r) = Room::parse(&room, &self.app.cfg.security.allowed_itemtypes) else {
             return self.error(tx, ErrorCode::BadRequest, "unknown room", id);
         };
@@ -552,19 +590,26 @@ impl Connection {
         if !take {
             self.app.locks.release(&r, scope, &conn).await;
         } else {
-            let allowed = self
-                .rooms
-                .get(&r)
-                .is_some_and(|j| j.stale_until.is_none() && j.grant.has(scope.right()));
+            let allowed = self.rooms.get(&r).is_some_and(|j| {
+                // Editing the fields needs `update`; holding them for an answer that
+                // changes the status needs the right to add that answer.
+                let right = match reason.as_deref() {
+                    Some("solution") => j.grant.has("solve"),
+                    Some(_) => j.grant.has("add_followup") || j.grant.has("add_task"),
+                    None => j.grant.has(scope.right()),
+                };
+                j.stale_until.is_none() && right
+            });
             if !allowed {
                 return self.error(tx, ErrorCode::Forbidden, "cannot edit this item", id);
             }
-            let me = locks::holder(
+            let mut me = locks::holder(
                 self.reg.id,
                 self.session.uid,
                 &self.session.name,
                 self.session.avatar.clone(),
             );
+            me.reason = reason;
             if self.app.locks.acquire(&r, scope, me, force).await.is_err() {
                 return self.error(tx, ErrorCode::Internal, "temporarily unavailable", id);
             }

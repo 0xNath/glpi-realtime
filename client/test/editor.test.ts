@@ -82,3 +82,14 @@ test("without the update right: never holds it, still respects it", () => {
   s.onLock(bob);
   assert.ok(!s.canEdit());
 });
+
+test("held for an answer: the fields editor neither renews nor releases it", () => {
+  const s = state();
+  s.onLock({ ...me, reason: "solution" });
+  assert.equal(s.mode(), "mine", "the writer may still edit the fields");
+  assert.equal(s.tick(10 * IDLE_MS, false), null);
+  const o = state();
+  o.onLock({ ...bob, reason: "pending" });
+  assert.equal(o.mode(), "other");
+  assert.ok(!o.canEdit(), "the others cannot edit the fields meanwhile");
+});

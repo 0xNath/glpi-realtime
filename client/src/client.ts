@@ -102,9 +102,9 @@ export class RealtimeClient {
   }
 
   /** Takes or renews a lock of a joined room (fields: editor.ts, solution: timeline.ts). */
-  lock(room: string, force = false, scope: LockScope = "fields"): void {
+  lock(room: string, force = false, scope: LockScope = "fields", reason?: "solution" | "pending"): void {
     if (this.state === "open" && this.joined.has(room)) {
-      this.send({ t: "lock", room, ...(force ? { force } : {}), ...(scope !== "fields" ? { scope } : {}) });
+      this.send({ t: "lock", room, ...(force ? { force } : {}), ...(scope !== "fields" ? { scope } : {}), ...(reason ? { reason } : {}) });
     }
   }
 

@@ -1,5 +1,6 @@
 import { type DraftKind, SharedDrafts } from "./drafts.ts";
 import { h, icon } from "./dom.ts";
+import { noun } from "./updates.ts";
 import { look } from "./presence.ts";
 import type { Holder, PresenceUser } from "./protocol.ts";
 
@@ -43,6 +44,7 @@ const TEXT = {
     solutionBusy: (n: string) => `${n} rédige déjà une solution.`,
     solutionDone: (n: string) => `${n} a déjà proposé une solution. Actualisez la page pour la voir.`,
     solutionLost: (n: string) => `${n} a pris la main sur la solution : la vôtre ne peut pas être enregistrée.`,
+    fieldsBusy: (n: string, it: string) => `${n} modifie les champs de ${it} : attendez qu'il ait enregistré avant d'ajouter une solution ou de le mettre en attente.`,
   },
   en: {
     composing: {
@@ -55,6 +57,7 @@ const TEXT = {
     solutionBusy: (n: string) => `${n} is already writing a solution.`,
     solutionDone: (n: string) => `${n} already proposed a solution. Refresh the page to see it.`,
     solutionLost: (n: string) => `${n} took over the solution: yours cannot be saved.`,
+    fieldsBusy: (n: string, it: string) => `${n} is editing the fields of ${it}: wait until they save before adding a solution or putting it on hold.`,
   },
 };
 
@@ -199,7 +202,7 @@ export interface TimelineClient {
   conn: string | null;
   user: { id: number; name: string } | null;
   lockTtl: number;
-  lock(room: string, force?: boolean, scope?: "fields" | "solution"): void;
+  lock(room: string, force?: boolean, scope?: "fields" | "solution", reason?: "solution" | "pending"): void;
   unlock(room: string, scope?: "fields" | "solution"): void;
   compose(room: string, kind: string | null): void;
   on(type: string, h: (msg: any) => void): () => void;
@@ -212,6 +215,12 @@ export class LiveTimeline {
   private readonly t: (typeof TEXT)["en"];
   private composing: string | null = null;
   private solutionHolder: Holder | null = null;
+  /** Who holds the item's fields (step 4 lock). */
+  private fieldsHolder: Holder | null = null;
+  /** We hold the fields for an answer that changes the status. */
+  private heldFor: "solution" | "pending" | null = null;
+  /** "ce ticket", "this change"... */
+  private readonly it: string;
   private solutionDoneBy: string | null = null;
   private pending = new Set<string>();
   private timer: ReturnType<typeof setTimeout> | null = null;
@@ -224,7 +233,10 @@ export class LiveTimeline {
     this.client = client;
     this.room = room;
     this.t = TEXT[langOf(lang)];
+    this.it = noun(room.split(":")[0], langOf(lang)).this;
     this.drafts = new SharedDrafts(doc, client as any, room, lang);
+    // "Put on hold" changes the status like a solution: the fields must be free.
+    doc.addEventListener("change", (e) => this.onPending(e.target as Element), true);
     this.drafts.onChange = () => this.renderComposing();
     const style = doc.createElement("style");
     style.textContent = STYLE;
@@ -242,6 +254,11 @@ export class LiveTimeline {
       this.renderComposing();
     });
     client.on("lock", (m) => {
+      if (m.room === room && m.scope === "fields") {
+        this.fieldsHolder = m.holder;
+        this.applySolution();
+        return;
+      }
       if (m.room !== room || m.scope !== "solution") return;
       const wasMine = this.solutionHolder?.conn === client.conn && !!client.conn;
       this.solutionHolder = m.holder;
@@ -262,10 +279,12 @@ export class LiveTimeline {
       if (m.room === room && this.composing) {
         client.compose(room, this.composing);
         if (this.composing === "solution") client.lock(room, false, "solution");
+        if (this.heldFor) client.lock(room, false, "fields", this.heldFor);
       }
     });
     const renew = () => {
       if (this.composing === "solution") client.lock(room, false, "solution");
+      if (this.heldFor) client.lock(room, false, "fields", this.heldFor);
       setTimeout(renew, Math.max(1, client.lockTtl / 3) * 1000);
     };
     setTimeout(renew, Math.max(1, client.lockTtl / 3) * 1000);
@@ -286,7 +305,12 @@ export class LiveTimeline {
     if (shown) {
       this.composing = kind;
       this.client.compose(this.room, kind);
-      if (kind === "solution") this.client.lock(this.room, false, "solution");
+      if (kind === "solution") {
+        this.client.lock(this.room, false, "solution");
+        this.holdFields("solution");
+      }
+      // GLPI loads the form after the block opens; "on hold" may be checked by default.
+      for (const ms of [300, 1000, 2500]) setTimeout(() => this.checkPending(target), ms);
     } else if (this.composing === kind) {
       this.done();
     }
@@ -294,6 +318,7 @@ export class LiveTimeline {
 
   private done(): void {
     if (this.composing === "solution") this.client.unlock(this.room, "solution");
+    this.releaseFields();
     this.composing = null;
     this.client.compose(this.room, null);
   }
@@ -324,7 +349,57 @@ export class LiveTimeline {
 
   private solutionFree(): boolean {
     const h = this.solutionHolder;
-    return !this.solutionDoneBy && (!h || h.conn === this.client.conn);
+    return !this.solutionDoneBy && (!h || h.conn === this.client.conn) && !this.fieldsBusy();
+  }
+
+  /** Someone else holds the fields: no status change may be prepared meanwhile. */
+  private fieldsBusy(): boolean {
+    const h = this.fieldsHolder;
+    return !!h && h.conn !== this.client.conn;
+  }
+
+  /** Holds the fields for an answer that changes the status. False when someone else has them. */
+  private holdFields(reason: "solution" | "pending"): boolean {
+    if (this.fieldsBusy()) return false;
+    this.heldFor = reason;
+    this.client.lock(this.room, false, "fields", reason);
+    return true;
+  }
+
+  private releaseFields(): void {
+    if (!this.heldFor) return;
+    this.heldFor = null;
+    this.client.unlock(this.room, "fields");
+  }
+
+  /** The "Put on hold" switch of a followup or task being written. */
+  private onPending(el: Element | null): void {
+    if (!(el instanceof HTMLInputElement) || el.name !== "pending" || el.type !== "checkbox") return;
+    const block = el.closest("[id^='new-'][id$='-block']");
+    if (!block) return;
+    if (el.checked) {
+      if (!this.holdFields("pending")) {
+        el.click(); // unchecks it, and closes GLPI's pending reasons
+        this.blockNote(block, this.t.fieldsBusy(this.fieldsHolder?.name ?? "", this.it));
+      }
+    } else if (this.heldFor === "pending") {
+      this.releaseFields();
+    }
+  }
+
+  private checkPending(block: Element): void {
+    const box = block.querySelector<HTMLInputElement>("input[type=checkbox][name='pending']");
+    if (box?.checked && this.heldFor !== "pending" && block.classList.contains("show")) this.onPending(box);
+  }
+
+  private blockNote(block: Element, text: string): void {
+    const body = block.querySelector(".card-body") ?? block;
+    let el = body.querySelector<HTMLElement>(".glpi-rt-solution-note");
+    if (!el) {
+      el = h("div", { class: "glpi-rt-solution-note", role: "status" });
+      body.prepend(el);
+    }
+    el.textContent = text;
   }
 
   private note(text: string): void {
@@ -340,7 +415,14 @@ export class LiveTimeline {
   private applySolution(): void {
     const h = this.solutionHolder;
     const other = h && h.conn !== this.client.conn ? h.name : null;
-    const why = this.solutionDoneBy ? this.t.solutionDone(this.solutionDoneBy) : other ? this.t.solutionBusy(other) : "";
+    const fields = this.fieldsBusy() ? this.fieldsHolder!.name : null;
+    const why = this.solutionDoneBy
+      ? this.t.solutionDone(this.solutionDoneBy)
+      : other
+        ? this.t.solutionBusy(other)
+        : fields
+          ? this.t.fieldsBusy(fields, this.it)
+          : "";
     this.doc.querySelectorAll<HTMLElement>("[data-bs-target='#new-ITILSolution-block']").forEach((b) => {
       if (b.closest("#new-ITILSolution-block")) return; // its own close button
       b.classList.toggle("disabled", !!why);

@@ -69,6 +69,9 @@ pub enum ClientMsg {
         force: bool,
         #[serde(default)]
         scope: Scope,
+        /// Fields held for an answer that changes the status (`solution`, `pending`).
+        #[serde(default)]
+        reason: Option<String>,
     },
     /// Release a lock.
     Unlock {
