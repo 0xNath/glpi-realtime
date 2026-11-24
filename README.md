@@ -174,6 +174,16 @@ For 20 000 WebSockets, raise the web server's limits (nginx: `worker_rlimit_nofi
 `worker_connections`; Apache event MPM: `MaxRequestWorkers` and related), as noted in the
 examples.
 
+### 5. Check
+
+**Setup > Plugins > Realtime** (the plugin's configuration page, for users who may
+change GLPI's configuration) checks everything the real-time layer needs and says how to
+fix what is missing: PHP's redis extension, HTTPS, the plugin's tables and cron task, the
+client bundle; Valkey (connection, ACL login, version, permissions); the server instances
+(each publishes its status in Valkey: version, cookie name, allowed origins and item
+types, keyspace notifications), compared with GLPI's settings; and, from the browser, the
+web server's `/ws` location and a real WebSocket.
+
 ### Releases
 
 `scripts/release.sh` builds `dist/glpi-realtime-<version>-linux-<arch>.tar.gz` (the

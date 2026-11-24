@@ -27,7 +27,7 @@ use crate::presence::Presence;
 use crate::protocol::ByeReason;
 use crate::registry::Registry;
 use crate::store::Store;
-use crate::{revocation, ws};
+use crate::{revocation, status, ws};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -146,6 +146,12 @@ pub async fn start(cfg: Config, metrics: Option<PrometheusHandle>) -> anyhow::Re
     );
     tokio::spawn(Arc::clone(&state.locks).listen(Arc::clone(&cfg), stop_rx.clone()));
     tokio::spawn(Arc::clone(&state.drafts).listen(Arc::clone(&cfg), stop_rx.clone()));
+    tokio::spawn(status::announce(
+        Arc::clone(&cfg),
+        store.clone(),
+        Arc::clone(&registry),
+        stop_rx.clone(),
+    ));
     tokio::spawn(revocation::sweep(
         store.clone(),
         Arc::clone(&registry),

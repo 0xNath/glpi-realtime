@@ -14,5 +14,6 @@ pub mod protocol;
 pub mod registry;
 pub mod revocation;
 pub mod server;
+pub mod status;
 pub mod store;
 pub mod ws;

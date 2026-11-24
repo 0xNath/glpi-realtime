@@ -97,6 +97,11 @@ function plugin_init_realtime(): void
             ['Ticket', 'Change', 'Problem'],
             [ConcurrencyGuard::class, 'onPreUpdate']
         );
+
+        // Setup > Plugins > Realtime: health checks (everything needed, and how to fix it).
+        if (Session::haveRight('config', UPDATE)) {
+            $PLUGIN_HOOKS[Hooks::CONFIG_PAGE]['realtime'] = 'front/config.php';
+        }
     } catch (\Throwable $e) {
         Toolbox::logInFile('realtime', 'plugin init skipped (files being upgraded?): ' . $e->getMessage() . "\n");
     }

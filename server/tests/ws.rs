@@ -382,3 +382,39 @@ async fn valkey_acl_user() {
         "wrong password: refused at start"
     );
 }
+
+/// What the plugin's configuration page reads (health checks).
+#[tokio::test]
+async fn instances_publish_their_status_for_glpi() {
+    let vk = valkey_or_skip!();
+    let (srv, _) = start(config(&vk)).await;
+    let mut found = None;
+    for _ in 0..50 {
+        let keys: Vec<String> = vk
+            .client
+            .custom(fred::cmd!("KEYS"), vec!["rt:srv:*"])
+            .await
+            .unwrap_or_default();
+        if let Some(k) = keys.first() {
+            let raw: Option<String> = vk.client.get(k).await.unwrap();
+            found = raw;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    let s: serde_json::Value = serde_json::from_str(&found.expect("status published")).unwrap();
+    assert_eq!(s["version"], env!("CARGO_PKG_VERSION"));
+    assert_eq!(s["cookie_name"], "glpi_rt");
+    assert_eq!(s["allowed_origins"][0], ORIGIN);
+    assert_eq!(
+        s["keyspace_config"], "ok",
+        "the test Valkey has notify-keyspace-events Kgx"
+    );
+    srv.stop().await.unwrap();
+    let left: Vec<String> = vk
+        .client
+        .custom(fred::cmd!("KEYS"), vec!["rt:srv:*"])
+        .await
+        .unwrap_or_default();
+    assert!(left.is_empty(), "removed when the instance stops");
+}

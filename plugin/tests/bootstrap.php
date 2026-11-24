@@ -72,6 +72,11 @@ function __(string $str, string $domain = 'glpi'): string
     return $str;
 }
 
+function _n(string $singular, string $plural, int $nb, string $domain = 'glpi'): string
+{
+    return $nb > 1 ? $plural : $singular;
+}
+
 function getUserName(int|string $id, int $link = 0, bool $disable_anon = false): string
 {
     return User::$db[(int) $id]['name'] ?? '';
