@@ -3,6 +3,12 @@
 Server and plugin share one version number. Upgrades never change your configuration:
 "Configuration" lists what to edit yourself.
 
+## Unreleased
+
+- Accessibility: the bell's button is named by what it shows ("Notifications 3", or
+  "99+"), as WCAG 2.5.3 asks; its label used to say the exact count while the badge
+  showed "99+" (found by axe-core 4.14).
+
 ## 0.7.0
 
 - Plugin settings in GLPI: Setup > Plugins > Realtime has a "Settings" form (item types,
