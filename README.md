@@ -103,7 +103,7 @@ It holds the server (`bin/`), the GLPI plugin (`plugin/`), `deploy/` and the doc
 ### 2. Install the files (also for every upgrade)
 
 ```bash
-sudo GLPI_DIR=/var/www/glpi PHP=php8.3 RELOAD_PHP="systemctl reload php8.3-fpm" deploy/install.sh
+sudo GLPI_DIR=/var/www/glpi PHP=php8.4 RELOAD_PHP="systemctl reload php8.4-fpm" deploy/install.sh
 ```
 
 It installs the binary in `/usr/local/bin`, copies the plugin into
@@ -114,8 +114,8 @@ with the checks of step 6 (errors are expected on a first install, before steps 
 | Setting | Default | |
 |---|---|---|
 | `GLPI_DIR` | `/var/www/glpi` | GLPI's directory (holds `bin/console`) |
-| `PHP` | `php` | PHP command line, e.g. `php8.3` |
-| `RELOAD_PHP` | — | reloads GLPI's PHP after the copy, e.g. `systemctl reload php8.3-fpm` or `systemctl reload apache2` (mod_php); without it the script waits 65 s for PHP's opcache to see the new files |
+| `PHP` | `php` | PHP command line, e.g. `php8.4` |
+| `RELOAD_PHP` | — | reloads GLPI's PHP after the copy, e.g. `systemctl reload php8.4-fpm` or `systemctl reload apache2` (mod_php); without it the script waits 65 s for PHP's opcache to see the new files |
 | `PREFIX` | `/usr/local` | the binary goes to `$PREFIX/bin` |
 | `GLPI_USER` | owner of `$GLPI_DIR/files` | user running GLPI's console |
 | `SERVICE` | `glpi-realtime` | systemd unit restarted |

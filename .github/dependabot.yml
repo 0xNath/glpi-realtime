@@ -13,6 +13,10 @@ updates:
     directory: /client
     schedule: { interval: weekly }
     cooldown: { default-days: 14 }
+    ignore:
+      # Node's types follow the Node version the client is built with (22: CI, README).
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
     groups:
       client: { patterns: ["*"] }
   - package-ecosystem: npm

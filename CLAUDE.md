@@ -8,8 +8,9 @@ docs/security.md the trust model (GLPI is the only authority, Valkey a trust bou
 ## Working rules (the maintainer's)
 
 - Answer the maintainer in French; code, comments, docs, commit messages in English.
-- Commit only when asked. Never push: there are no GitHub credentials here; the
-  maintainer pushes and tags.
+- Commit only when asked; push only when asked, through `gh` without touching git's
+  configuration: `git -c credential.helper= -c credential.helper='!gh auth git-credential' push origin master`.
+  Tags (they publish a release) are the maintainer's.
 - Never write system configuration (vhosts, units, /etc): the project ships examples in
   `deploy/examples/`, users set things up themselves. `deploy/install.sh` only installs
   the project's own files.

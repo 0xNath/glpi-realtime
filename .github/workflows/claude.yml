@@ -92,11 +92,13 @@ jobs:
             --allowedTools "Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh issue edit:*),Bash(gh label list:*),Read,Grep,Glob"
 
   # Pull requests from branches of this repository (forks get no secret): a review with
-  # this project's priorities.
+  # this project's priorities. Not Dependabot's: GitHub gives its runs no repository
+  # secret; those are reviewed in a Claude Code session ("@claude" works on them too).
   review:
     if: |
       vars.CLAUDE_ENABLED == 'true' && github.event_name == 'pull_request' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login != 'dependabot[bot]' &&
       !github.event.pull_request.draft
     runs-on: ubuntu-24.04
     timeout-minutes: 20

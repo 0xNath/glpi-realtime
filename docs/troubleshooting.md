@@ -40,7 +40,7 @@ GLPI keeps working whatever fails here: the real-time layer only adds to it.
 GLPI deactivates a plugin whose version changed until it is upgraded, and PHP's opcache
 may serve old plugin files next to new ones for `opcache.revalidate_freq` seconds.
 `deploy/install.sh` handles both: run it with `RELOAD_PHP` (e.g. `systemctl reload
-php8.3-fpm`), or let it wait for opcache. If you copied the files yourself:
+php8.4-fpm`), or let it wait for opcache. If you copied the files yourself:
 
 ```bash
 php bin/console plugin:install --force --username=<admin> realtime

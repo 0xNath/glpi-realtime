@@ -15,7 +15,7 @@
 #   GLPI_DIR=/var/www/glpi            GLPI installation (contains bin/console)
 #   PREFIX=/usr/local                 the binary goes to $PREFIX/bin/glpi-realtime
 #   CONFIG=/etc/glpi-realtime/config.toml   only read, to check it before switching binaries
-#   PHP=php                           PHP CLI command, e.g. PHP=php8.3, PHP=php-legacy, or
+#   PHP=php                           PHP CLI command, e.g. PHP=php8.4, PHP=php-legacy, or
 #                                     PHP="env PHP_INI_SCAN_DIR=:/etc/webapps/glpi/php-cli php-legacy"
 #   GLPI_USER=<owner of $GLPI_DIR/files>   system user running GLPI's console
 #   SERVICE=glpi-realtime             systemd unit restarted if it exists ("" to skip)
@@ -23,7 +23,7 @@
 #                                     plugin install/upgrade yourself)
 #   RELOAD_PHP=                       command reloading GLPI's PHP once the files are copied, so
 #                                     that opcache serves no old file next to new ones, e.g.
-#                                     "systemctl reload php8.3-fpm",
+#                                     "systemctl reload php8.4-fpm",
 #                                     "systemctl reload apache2" (empty: the script waits until
 #                                     PHP revalidates, see OPCACHE_WAIT)
 #   OPCACHE_WAIT=65                   seconds waited without RELOAD_PHP (opcache.revalidate_freq + 5;
