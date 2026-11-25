@@ -45,7 +45,31 @@ const REFRESH_INTERVAL_MS = 30_000;
  * if the GLPI session has ended, the tab stays disconnected.
  */
 export class RealtimeClient {
-  state: State = "idle";
+  private _state: State = "idle";
+  private readonly stateListeners = new Set<(s: State) => void>();
+  /** Connection state; listeners (onState) hear each change. */
+  get state(): State {
+    return this._state;
+  }
+  set state(s: State) {
+    if (s === this._state) return;
+    this._state = s;
+    for (const l of this.stateListeners) {
+      try {
+        l(s);
+      } catch (e) {
+        this.o.debug?.("realtime: state listener failed", e);
+      }
+    }
+  }
+  /** Whether the last attempt failed (reconnecting after a loss, not the first connection). */
+  get retrying(): boolean {
+    return this.attempt > 0;
+  }
+  onState(cb: (s: State) => void): () => void {
+    this.stateListeners.add(cb);
+    return () => this.stateListeners.delete(cb);
+  }
   user: { id: number; name: string } | null = null;
   /** Id of the current connection (from `hello`). */
   conn: string | null = null;
@@ -157,6 +181,11 @@ export class RealtimeClient {
     return this.locks.get(room) ?? null;
   }
 
+  /** Items this tab follows (subscribed, joined or not). */
+  followed(): string[] {
+    return [...this.rooms];
+  }
+
   isJoined(room: string): boolean {
     return this.joined.has(room);
   }
@@ -213,9 +242,9 @@ export class RealtimeClient {
     if (!msg) return;
     switch (msg.t) {
       case "hello":
-        this.state = "open";
         this.attempt = 0;
         this.refused = 0;
+        this.state = "open"; // listeners see it no longer retrying
         this.user = msg.user;
         this.conn = msg.conn;
         if (msg.lock_ttl) this.lockTtl = msg.lock_ttl;
@@ -313,8 +342,8 @@ export class RealtimeClient {
   }
 
   private retry(): void {
-    this.state = "waiting";
     const delay = backoff(this.attempt++, this.o.random);
+    this.state = "waiting"; // after counting the attempt: listeners see it as retrying
     this.o.debug?.(`realtime: reconnecting in ${delay} ms`);
     this.timer = this.o.setTimeout(() => this.connect(), delay);
   }

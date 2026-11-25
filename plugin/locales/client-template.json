@@ -190,7 +190,21 @@
     "also": "Also on %:",
     "more": "and {0} more",
     "active": "active on %",
-    "inactive": "inactive (tab in background or unused)"
+    "inactive": "inactive (tab in background or unused)",
+    "status": {
+      "live": "Live",
+      "connecting": "Connecting…",
+      "retrying": "Offline",
+      "offline": "Offline",
+      "unavailable": "Not live"
+    },
+    "statusTitle": {
+      "live": "Connected: changes and who is here show live.",
+      "connecting": "Connecting to the real-time server…",
+      "retrying": "Connection lost, trying again. Reload the page to see the latest changes.",
+      "offline": "Disconnected. Reload the page to connect again.",
+      "unavailable": "Real-time is not available for this item."
+    }
   },
   "timeline": {
     "composing": {

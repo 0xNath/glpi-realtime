@@ -1,5 +1,21 @@
+import type { State } from "./client.ts";
 import { register } from "./i18n.ts";
 import type { Avatar, PresenceUser } from "./protocol.ts";
+
+/**
+ * The tab's real-time link for an item, shown in its presence bar even when nobody else
+ * is there: live; connecting (first attempt); retrying (lost, trying again); offline
+ * (GLPI must issue a new session: reload); unavailable (not followed for this item).
+ */
+export type LiveStatus = "live" | "connecting" | "retrying" | "offline" | "unavailable";
+
+export function liveStatus(state: State, retrying: boolean, joined: boolean, forbidden: boolean): LiveStatus {
+  if (forbidden) return "unavailable";
+  if (state === "open") return joined ? "live" : "connecting";
+  if (state === "revoked" || state === "stopped") return "offline";
+  if (state === "waiting" || retrying) return "retrying";
+  return "connecting";
+}
 
 export const MAX_AVATARS = 5;
 
@@ -26,6 +42,10 @@ interface Labels {
   more: (n: number) => string;
   active: string;
   inactive: string;
+  /** Next to the dot when nobody else is there. */
+  status: Record<LiveStatus, string>;
+  /** The dot's tooltip and accessible name. */
+  statusTitle: Record<LiveStatus, string>;
 }
 
 const LABELS = register<Record<string, Labels>>("presence", {
@@ -34,12 +54,28 @@ const LABELS = register<Record<string, Labels>>("presence", {
     more: (n) => `et ${n} autre${n > 1 ? "s" : ""}`,
     active: "actif sur %",
     inactive: "inactif (onglet en arrière-plan ou inutilisé)",
+    status: { live: "En direct", connecting: "Connexion…", retrying: "Hors ligne", offline: "Hors ligne", unavailable: "Pas de temps réel" },
+    statusTitle: {
+      live: "Connecté au temps réel : les modifications et les personnes présentes s'affichent ici en direct.",
+      connecting: "Connexion au temps réel…",
+      retrying: "Connexion au temps réel perdue, nouvelle tentative en cours. Rechargez la page pour voir les dernières modifications.",
+      offline: "Déconnecté du temps réel. Rechargez la page pour vous reconnecter.",
+      unavailable: "Le temps réel n'est pas disponible pour cet élément.",
+    },
   },
   en: {
     also: "Also on %:",
     more: (n) => `and ${n} more`,
     active: "active on %",
     inactive: "inactive (tab in background or unused)",
+    status: { live: "Live", connecting: "Connecting…", retrying: "Offline", offline: "Offline", unavailable: "Not live" },
+    statusTitle: {
+      live: "Connected: changes and who is here show live.",
+      connecting: "Connecting to the real-time server…",
+      retrying: "Connection lost, trying again. Reload the page to see the latest changes.",
+      offline: "Disconnected. Reload the page to connect again.",
+      unavailable: "Real-time is not available for this item.",
+    },
   },
 });
 
@@ -67,6 +103,15 @@ const CSS = `
 .glpi-rt-presence .glpi-rt-avatar.is-active { box-shadow:0 0 0 2px var(--tblr-bg-surface, #fff), 0 0 0 4px var(--tblr-green, #2fb344); }
 .glpi-rt-presence .glpi-rt-avatar.is-inactive { opacity:.55; box-shadow:0 0 0 2px var(--tblr-bg-surface, #fff), 0 0 0 4px var(--tblr-gray-400, #9ba9be); }
 .glpi-rt-presence .glpi-rt-more { background:var(--tblr-secondary, #667382); }
+/* The link's status: green live, amber connecting, red lost or offline, grey unavailable. */
+.glpi-rt-presence .glpi-rt-status { width:.6rem; height:.6rem; border-radius:50%; flex:none; background:var(--tblr-gray-400, #9ba9be); }
+.glpi-rt-presence .glpi-rt-status.is-live { background:var(--tblr-green, #2fb344); box-shadow:0 0 0 3px color-mix(in srgb, var(--tblr-green, #2fb344) 25%, transparent); }
+.glpi-rt-presence .glpi-rt-status.is-connecting { background:var(--tblr-yellow, #f59f00); }
+.glpi-rt-presence .glpi-rt-status.is-retrying, .glpi-rt-presence .glpi-rt-status.is-offline { background:var(--tblr-red, #d63939); }
+@media (prefers-reduced-motion: no-preference) {
+  .glpi-rt-presence .glpi-rt-status.is-connecting { animation:glpi-rt-blink 1.2s ease-in-out infinite; }
+}
+@keyframes glpi-rt-blink { 50% { opacity:.35; } }
 `;
 
 function ensureStyle(doc: Document): void {
@@ -190,10 +235,27 @@ function paint(el: HTMLElement, u: PresenceUser, status: string): void {
   el.setAttribute("aria-label", `${u.name} — ${status}`);
 }
 
-/** Renders (or hides) the presence bar of `room`. Avatars are updated in place, so that
- *  an open user card is not destroyed by an unrelated change. */
+const lastUsers = new Map<string, PresenceUser[]>();
+const lastStatus = new Map<string, LiveStatus>();
+
+/** The link's status for `room` changed: its bar shows it (people are shown only when live). */
+export function setStatus(doc: Document, room: string, status: LiveStatus, selfId: number | undefined): void {
+  if (lastStatus.get(room) === status && doc.getElementById(barId(room))) return;
+  lastStatus.set(room, status);
+  render(doc, room, lastUsers.get(room) ?? [], selfId);
+}
+
+function barId(room: string): string {
+  return `glpi-rt-presence-${room.replace(/[^A-Za-z0-9_-]/g, "-")}`;
+}
+
+/** Renders the presence bar of `room`: the link's status, then who else is there.
+ *  Avatars are updated in place, so that an open user card is not destroyed by an
+ *  unrelated change. */
 export function render(doc: Document, room: string, users: PresenceUser[], selfId: number | undefined): void {
-  const id = `glpi-rt-presence-${room.replace(/[^A-Za-z0-9_-]/g, "-")}`;
+  lastUsers.set(room, users);
+  const status = lastStatus.get(room) ?? "connecting";
+  const id = barId(room);
   let bar = doc.getElementById(id);
   if (!bar) {
     const at = anchor(doc);
@@ -204,20 +266,29 @@ export function render(doc: Document, room: string, users: PresenceUser[], selfI
     bar.className = "glpi-rt-presence";
     bar.setAttribute("data-room", room);
     bar.setAttribute("aria-live", "polite");
+    const dot = doc.createElement("span");
+    dot.className = "glpi-rt-status";
+    dot.setAttribute("role", "img");
     const label = doc.createElement("span");
     label.className = "glpi-rt-label";
     const avatars = doc.createElement("span");
     avatars.className = "glpi-rt-avatars";
-    bar.append(label, avatars);
+    bar.append(dot, label, avatars);
     at.parent.insertBefore(bar, at.before);
   }
   const label = bar.querySelector<HTMLElement>(".glpi-rt-label")!;
   const avatars = bar.querySelector<HTMLElement>(".glpi-rt-avatars")!;
 
-  const list = others(users, selfId);
-  bar.hidden = list.length === 0;
+  // Who else is here is only known while live.
+  const list = status === "live" ? others(users, selfId) : [];
+  bar.hidden = false;
+  bar.dataset.status = status;
   const t = labels(doc.documentElement.lang || navigator.language || "en", room.split(":")[0]);
-  label.textContent = t.also;
+  const dot = bar.querySelector<HTMLElement>(".glpi-rt-status")!;
+  dot.className = `glpi-rt-status is-${status}`;
+  dot.title = t.statusTitle[status];
+  dot.setAttribute("aria-label", t.statusTitle[status]);
+  label.textContent = list.length ? t.also : t.status[status];
 
   const shown = list.slice(0, MAX_AVATARS);
   const existing = new Map<string, HTMLElement>();
