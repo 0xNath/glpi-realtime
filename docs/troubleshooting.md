@@ -13,6 +13,35 @@ causes in more detail. The server's log: `journalctl -u glpi-realtime`. In a bro
 
 GLPI keeps working whatever fails here: the real-time layer only adds to it.
 
+## The checks, one by one
+
+Each check of the configuration page and of `plugins:realtime:check`, by the name it
+shows (French in parentheses), with what to do when it fails. The page says the same,
+with the values of your installation.
+
+| Check | When it fails | Fix |
+|---|---|---|
+| **PHP redis extension** (Extension PHP redis) | The PHP running GLPI has no phpredis | Install it for that PHP (Debian/Ubuntu `php-redis`, Arch `php-redis` or `php-legacy-redis`, RHEL `php-pecl-redis`), then restart PHP. |
+| **HTTPS** (HTTPS) | GLPI is served over plain HTTP | Serve it over HTTPS: the session cookie is `Secure`. |
+| **GLPI's URL** (URL de GLPI) | GLPI's URL setting differs from the address people use | Set the address shown in Setup > General > General setup, "URL of the application". |
+| **Plugin tables** (Tables du plugin) | The plugin's tables are missing | Run the upgrade: `deploy/install.sh` (or `bin/console plugin:install --force realtime`, then `plugin:activate`). |
+| **Notification purge task** (Tâche de purge des notifications) | Not registered, disabled, or never run | Run the upgrade; enable `inboxpurge` in Setup > Automatic actions; GLPI's cron (below). |
+| **Time-to-resolve alerts task** (Tâche des alertes d'échéance de résolution) | Not registered, or not run for 30 minutes | Run the upgrade; a system cron job running `php front/cron.php` every minute, the task in mode CLI. |
+| **Browser client** (Client navigateur) | `public/realtime.js` is missing | Install a release archive, or build it (`cd client && npm ci && npm run build`) and run `deploy/install.sh`. |
+| **PHP opcache and upgrades** (Opcache PHP et mises à jour) | opcache never revalidates files | Reload PHP after each upgrade: `deploy/install.sh` with `RELOAD_PHP`. |
+| **Your WebSocket session** (Votre session WebSocket) | No token for your GLPI session, or Valkey lost it | Log out and in again once the Valkey checks pass; if it recurs, check `valkey_db` and `key_prefix`. |
+| **Valkey connection** (Connexion à Valkey) | No socket, refused, wrong password, or permission denied | See "Valkey" below: the socket path (`valkey_socket`), the socket's group, the ACL user and password. |
+| **Valkey version** (Version de Valkey) | Older than Valkey 9.0 (or Redis 7.4) | Upgrade it: presence needs hash field expiry (`HEXPIRE`). |
+| **Valkey permissions** (Droits sur Valkey) | The ACL refuses one of the plugin's commands | Allow the keys and channels of `key_prefix` (`deploy/examples/valkey.conf.example`). |
+| **glpi-realtime server** (Serveur glpi-realtime) | No server reports to this Valkey database | Start it (`systemctl start glpi-realtime`, `journalctl -u glpi-realtime`); its `config.toml` must use GLPI's Valkey: same `url`, `db`, `key_prefix`. |
+| **Server version** (Version du serveur) | Plugin and server versions differ | Install both from the same release: `deploy/install.sh` does. |
+| **Session cookie name** (Nom du cookie de session) | The plugin and the server use different names | The same `cookie_name` in `config.toml` (`[security]`) and in the plugin's settings. |
+| **Allowed origin** (Origine autorisée) | The server refuses the address people use | Add it to `[security] allowed_origins` in `config.toml`, restart the server. |
+| **Item types** (Types d'éléments) | The server refuses item types enabled in GLPI | Remove `[security] allowed_itemtypes` (the server then follows GLPI), or add them. |
+| **Instant logout** (Déconnexion immédiate) | Keyspace notifications are off or not verifiable | `notify-keyspace-events Kgx` in `valkey.conf`; otherwise logouts take up to 15 s to close WebSockets. |
+| **Web server forwards /ws** (Le serveur web transmet /ws) | GLPI answers `/ws`, or the server is unreachable behind the proxy | See "Nothing real-time happens" below: the `/ws` location, the socket's group. |
+| **WebSocket upgrade** (Upgrade WebSocket) | The proxy drops the upgrade headers, or refuses the origin | nginx `proxy_http_version 1.1` and the `Upgrade`/`Connection` headers; `allowed_origins`. |
+
 ## Nothing real-time happens in the browser
 
 | Symptom | Cause | Fix |

@@ -30,3 +30,4 @@ sleep 0.3
 "$PHP" "${PHPX[@]}" "$ROOT/plugin/tests/health_test.php" "$PORT"
 "$PHP" "${PHPX[@]}" "$ROOT/plugin/tests/settings_test.php"
 "$PHP" "${PHPX[@]}" "$ROOT/plugin/tests/sla_test.php"
+"$PHP" "$ROOT/plugin/tests/docs_test.php"
