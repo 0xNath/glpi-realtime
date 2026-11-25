@@ -5,6 +5,9 @@ Server and plugin share one version number. Upgrades never change your configura
 
 ## Unreleased
 
+- Checks: the time-to-resolve alerts task (registered, enabled, run in the last 30
+  minutes, from the command line) tells whether GLPI's cron runs often enough, on which
+  the alerts and the notifications of the mail collector's changes depend.
 - `deploy/install.sh` ends with what it knows: installed, upgraded from which version
   (with the "Configuration" notes of the versions in between, to edit yourself), or
   reinstalled; then what is left to do (the configuration file or the systemd unit it did

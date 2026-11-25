@@ -62,6 +62,7 @@ final class Health
         if (!self::$skipDatabase) {
             $add('glpi', self::tables());
             $add('glpi', self::cron());
+            $add('glpi', self::slaTask());
         }
         $add('glpi', self::bundle());
         if (!$cli) {
@@ -227,6 +228,40 @@ final class Health
             );
         }
         return self::check('cron', $label, self::OK, sprintf(__('Last run: %s.', 'realtime'), $last));
+    }
+
+    /**
+     * The time-to-resolve alerts' task, every 5 minutes: it tells whether GLPI's cron runs
+     * often enough, which also decides when changes made by automatic actions (the mail
+     * collector...) are notified.
+     */
+    private static function slaTask(): array
+    {
+        $label = __('Time-to-resolve alerts task', 'realtime');
+        $cron = __('GLPI\'s automatic actions must run every minute: a system cron job running "php front/cron.php" (in GLPI\'s directory) as the user running GLPI (see GLPI\'s documentation).', 'realtime');
+        $task = new \CronTask();
+        if (!$task->getFromDBbyName(Inbox::class, 'slaalert')) {
+            return self::check('cron_sla', $label, self::WARNING, __('The task is not registered: no alert of tickets nearing their time to resolve.', 'realtime'), __('Run the plugin upgrade (deploy/install.sh) to register it.', 'realtime'));
+        }
+        if ((int) $task->fields['state'] === \CronTask::STATE_DISABLE) {
+            return self::check('cron_sla', $label, self::INFO, __('The task is disabled: technicians are not warned of tickets nearing their time to resolve.', 'realtime'), __('Enable it in Setup > Automatic actions ("slaalert") to warn them.', 'realtime'));
+        }
+        $last = (string) ($task->fields['lastrun'] ?? '');
+        if ($last === '' || strtotime($last) < time() - 30 * MINUTE_TIMESTAMP) {
+            return self::check(
+                'cron_sla',
+                $label,
+                self::WARNING,
+                $last === ''
+                    ? __('Never run: GLPI\'s automatic actions do not seem to run. Alerts, and the notifications of changes made by the mail collector, are missing.', 'realtime')
+                    : sprintf(__('Last run: %s (it runs every 5 minutes): GLPI\'s automatic actions do not run, or not often enough. Alerts, and the notifications of changes made by the mail collector, are late.', 'realtime'), $last),
+                $cron
+            );
+        }
+        if ((int) ($task->fields['mode'] ?? \CronTask::MODE_EXTERNAL) !== \CronTask::MODE_EXTERNAL) {
+            return self::check('cron_sla', $label, self::INFO, sprintf(__('Last run: %s; run by GLPI\'s pages (mode GLPI): only while someone browses GLPI.', 'realtime'), $last), __('Set its mode to CLI in Setup > Automatic actions, with a system cron job running "php front/cron.php" every minute.', 'realtime'));
+        }
+        return self::check('cron_sla', $label, self::OK, sprintf(__('Last run: %s.', 'realtime'), $last));
     }
 
     private static function bundle(): array
