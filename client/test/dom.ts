@@ -40,10 +40,19 @@ export function page(html = "<!doctype html><html><head></head><body></body></ht
   const d = document as any;
   if (d.activeElement === undefined) Object.defineProperty(d, "activeElement", { get: () => d.focused ?? d.body, configurable: true });
   if (typeof d.hasFocus !== "function") d.hasFocus = () => d.pageFocused ?? true;
+  // No Node.DOCUMENT_POSITION_* constants (compareDocumentPosition itself works).
+  const N = window.Node as any;
+  if (N.DOCUMENT_POSITION_FOLLOWING === undefined) {
+    Object.assign(N, { DOCUMENT_POSITION_DISCONNECTED: 1, DOCUMENT_POSITION_PRECEDING: 2, DOCUMENT_POSITION_FOLLOWING: 4, DOCUMENT_POSITION_CONTAINS: 8, DOCUMENT_POSITION_CONTAINED_BY: 16 });
+  }
   Object.assign(globalThis, {
     window,
     document,
     Element: window.Element,
+    Node: window.Node,
+    DOMParser: window.DOMParser,
+    // CSS.escape for identifiers (Node has no CSS object).
+    CSS: { escape: (v: string) => String(v).replace(/[^A-Za-z0-9_-]/g, (c) => `\\${c}`) },
     HTMLElement: window.HTMLElement,
     HTMLInputElement: window.HTMLInputElement,
     HTMLSelectElement: window.HTMLSelectElement,
