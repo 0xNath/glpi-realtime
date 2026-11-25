@@ -111,7 +111,7 @@ published release.
 `.github/workflows/ci.yml` runs everything above plus the e2e matrix, load test, fuzzing
 and, for tags, the release jobs; on pull requests (not on pushes to other branches:
 a branch's CI starts with its pull request), master, tags, and every Monday at 02:00 UTC
-(the GLPI nightly jobs). Follow a run with `gh run watch` / `gh run view --log-failed`,
+(the GLPI nightly jobs; each e2e test 3 times on GLPI 12.0, to catch flaky ones). Follow a run with `gh run watch` / `gh run view --log-failed`,
 `gh pr checks`, or `/loop` to check back.
 
 `.github/workflows/claude.yml`: Claude on GitHub (@claude from maintainers, triage of
