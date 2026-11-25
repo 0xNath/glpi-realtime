@@ -124,8 +124,10 @@ export class InboxPage {
         : latest.id > 0
           ? h("button", { type: "button", class: "btn btn-outline-secondary", title: t.unread, "aria-label": t.unread, onclick: () => void this.ctl.act({ action: "unread", id: latest.id }) }, icon("eye-off"))
           : null,
+      // Assume, the row's main action: primary (white on blue); Tabler's outline green on a
+      // light row has a contrast of 2.55:1, under WCAG's 4.5:1 (axe).
       g.queue === "new" && o.can_assign
-        ? h("button", { type: "button", class: "btn btn-outline-success", title: t.assume, "aria-label": t.assume, onclick: async () => {
+        ? h("button", { type: "button", class: "btn btn-primary", title: t.assume, "aria-label": t.assume, onclick: async () => {
             await this.api.assign(g.key);
             await this.ctl.load();
           } }, icon("user-plus"), " ", t.assume)
