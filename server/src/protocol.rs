@@ -328,6 +328,58 @@ pub fn decode(text: &str) -> Decoded {
 mod tests {
     use super::*;
 
+    /// docs/protocol.md lists every close reason (its "Closing" table) and error code: a
+    /// variant added here fails this test until it is documented.
+    #[test]
+    fn bye_reasons_and_error_codes_are_documented() {
+        let doc = include_str!("../../docs/protocol.md");
+        let name = |v: serde_json::Value| v.as_str().unwrap().to_string();
+        // The matches stop compiling when a variant is added: add it to the list below.
+        let reasons = {
+            use ByeReason::*;
+            let _all = |r: ByeReason| match r {
+                Revoked | Shutdown | Policy | Slow | Idle => (),
+            };
+            [Revoked, Shutdown, Policy, Slow, Idle]
+        };
+        for r in reasons {
+            let n = name(serde_json::to_value(r).unwrap());
+            assert!(
+                doc.contains(&format!("| `{n}` |")),
+                "bye reason `{n}` is not in docs/protocol.md's Closing table"
+            );
+        }
+        let codes = {
+            use ErrorCode::*;
+            let _all = |c: ErrorCode| match c {
+                BadRequest | UnsupportedVersion | Forbidden | RateLimited | TooManyRooms
+                | Locked | TooLarge | Internal => (),
+            };
+            [
+                BadRequest,
+                UnsupportedVersion,
+                Forbidden,
+                RateLimited,
+                TooManyRooms,
+                Locked,
+                TooLarge,
+                Internal,
+            ]
+        };
+        let listed = &doc[doc
+            .find("Error codes:")
+            .expect("an \"Error codes:\" paragraph")..];
+        let listed = &listed[..listed.find("\n\n").unwrap_or(listed.len())];
+        for c in codes {
+            assert_eq!(name(serde_json::to_value(c).unwrap()), c.as_str());
+            assert!(
+                listed.contains(&format!("`{}`", c.as_str())),
+                "error code `{}` is not in docs/protocol.md's \"Error codes:\"",
+                c.as_str()
+            );
+        }
+    }
+
     fn types() -> Vec<String> {
         vec!["Ticket".into()]
     }
