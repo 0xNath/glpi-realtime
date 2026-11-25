@@ -5,6 +5,8 @@ Server and plugin share one version number. Upgrades never change your configura
 
 ## Unreleased
 
+- A page opened (or reconnected) while Valkey was unreachable joins its item once Valkey
+  is back, without a reload: the browser asks again, with the reconnection's backoff.
 - Server: `[limits] outbound_queue` below 128 is raised to 128, with a warning in the log
   and in `--check`. A batch of item events from GLPI holds up to 64 frames: with a smaller
   queue, one batch dropped every member of the item, including those reading. Nothing to
