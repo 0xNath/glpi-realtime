@@ -81,7 +81,7 @@ recipient: clients hide their own user id.
 
 - `active`: the user is active on at least one tab — visible, focused (focus inside an
   iframe such as the rich-text editor counts) and used within the last 5 minutes.
-  Clients send `activity` only when their state changes (after 1 s of stability) and,
+  Clients send `activity` only when their state changes (after 200 ms of stability) and,
   after a reconnection, before subscribing if they are inactive (the server assumes
   active for a new connection).
 - `avatar`: `{picture, initials, color, fg}` computed by the plugin with GLPI's own

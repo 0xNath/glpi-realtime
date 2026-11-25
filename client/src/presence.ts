@@ -98,7 +98,7 @@ const CSS = `
 .glpi-rt-presence .glpi-rt-avatar { width:1.75rem; height:1.75rem; border-radius:50%; display:inline-flex;
   align-items:center; justify-content:center; font-size:.7rem; font-weight:600; color:#fff;
   background-size:cover; background-position:center;
-  box-shadow:0 0 0 2px var(--tblr-bg-surface, #fff); cursor:default; transition:box-shadow .3s, opacity .3s; }
+  box-shadow:0 0 0 2px var(--tblr-bg-surface, #fff); cursor:default; transition:box-shadow .15s, opacity .15s; }
 /* Ring: green = active on their tab, grey = inactive. */
 .glpi-rt-presence .glpi-rt-avatar.is-active { box-shadow:0 0 0 2px var(--tblr-bg-surface, #fff), 0 0 0 4px var(--tblr-green, #2fb344); }
 .glpi-rt-presence .glpi-rt-avatar.is-inactive { opacity:.55; box-shadow:0 0 0 2px var(--tblr-bg-surface, #fff), 0 0 0 4px var(--tblr-gray-400, #9ba9be); }

@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import { ActivityTracker } from "../src/activity.ts";
 
-function setup(start: { visible?: boolean; focus?: boolean } = {}) {
+function setup(start: { visible?: boolean; focus?: boolean; defaultSettle?: boolean } = {}) {
   let t = 0;
   const timers: { at: number; fn: () => void; id: number }[] = [];
   let nextId = 1;
@@ -21,7 +21,7 @@ function setup(start: { visible?: boolean; focus?: boolean } = {}) {
     win: win as any,
     onChange: (a) => changes.push(a),
     idleMs: 60_000,
-    settleMs: 1_000,
+    ...(start.defaultSettle ? {} : { settleMs: 1_000 }),
     now: () => t,
     setTimeout: (fn, ms) => {
       const id = nextId++;
@@ -99,4 +99,29 @@ test("no input for idleMs makes the tab inactive, input makes it active again", 
 test("starts inactive when opened in the background", () => {
   const { tracker } = setup({ visible: false });
   assert.equal(tracker.reported, false);
+});
+
+test("by default, a change reaches the others within a quarter of a second", () => {
+  const { doc, changes, advance } = setup({ defaultSettle: true });
+  doc.visibilityState = "hidden";
+  doc.dispatchEvent(new Event("visibilitychange"));
+  advance(150);
+  assert.deepEqual(changes, [], "not before the change is stable");
+  advance(100);
+  assert.deepEqual(changes, [false], "reported within 250 ms");
+  doc.visibilityState = "visible";
+  doc.dispatchEvent(new Event("visibilitychange"));
+  advance(250);
+  assert.deepEqual(changes, [false, true]);
+});
+
+test("by default, focus moving into the editor's iframe does not flicker", () => {
+  const { doc, win, changes, advance } = setup({ defaultSettle: true });
+  doc.focus = false; // blur: focus leaves the page's own elements...
+  win.dispatchEvent(new Event("blur"));
+  advance(5);
+  doc.focus = true; // ...into the editor's iframe, a few ms later
+  win.dispatchEvent(new Event("focus"));
+  advance(1_000);
+  assert.deepEqual(changes, [], "still active, nothing sent");
 });

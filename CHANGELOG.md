@@ -9,6 +9,9 @@ Server and plugin share one version number. Upgrades never change your configura
   (with the "Configuration" notes of the versions in between, to edit yourself), or
   reinstalled; then what is left to do (the configuration file or the systemd unit it did
   not find, the checks' errors and warnings), or that nothing is.
+- Presence: whether someone is active on the item (their tab focused and used) shows
+  about a second sooner for the others: the tab reports a change after 200 ms of
+  stability instead of 1 s.
 - The presence bar of an item is always shown, with a dot saying whether the tab is live
   (green, "Live" when nobody else is there), connecting (amber), offline (red: lost and
   trying again, or reload the page) or not live for this item (grey); its tooltip says
