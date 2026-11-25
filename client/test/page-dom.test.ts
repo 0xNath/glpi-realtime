@@ -94,6 +94,8 @@ test("tabs, status and period narrow the table; an empty view says so", async ()
   [...document.querySelectorAll<HTMLElement>(".glpi-rt-tab")].find((b) => b.textContent?.startsWith(en.tabs.all))!.click();
 
   const status = document.querySelectorAll<HTMLSelectElement>("select")[0];
+  // Named for screen readers (no visible label): axe's select-name.
+  assert.deepEqual(Array.from(document.querySelectorAll("select")).map((e) => e.getAttribute("aria-label")), [en.statusFilter, en.periodFilter]);
   assert.deepEqual(Array.from(status.querySelectorAll("option")).map((o) => o.textContent), [en.allStatuses, "Processing", "Pending"]);
   choose(status, "4");
   assert.deepEqual(rows(), ["Ticket:2"], "status: pending");

@@ -51,10 +51,11 @@ export class InboxPage {
     const now = new Date();
     const rows = all.filter((g) => (!this.status || String(g.object.status) === this.status) && inPeriod(g.ts, this.period, now));
 
-    const select = (value: string, options: Array<[string, string]>, onchange: (v: string) => void) =>
+    // Named for screen readers: the filters have no visible label (WCAG 4.1.2).
+    const select = (label: string, value: string, options: Array<[string, string]>, onchange: (v: string) => void) =>
       h(
         "select",
-        { class: "form-select form-select-sm w-auto", onchange: (e) => onchange((e.target as HTMLSelectElement).value) },
+        { class: "form-select form-select-sm w-auto", "aria-label": label, onchange: (e) => onchange((e.target as HTMLSelectElement).value) },
         ...options.map(([v, l]) => h("option", { value: v, selected: v === value, text: l })),
       );
 
@@ -72,11 +73,11 @@ export class InboxPage {
               void this.ctl.load();
             } }),
             t.showRead),
-          select(this.status, [["", t.allStatuses], ...[...statuses].sort((a, b) => a[0] - b[0]).map(([v, l]) => [String(v), l] as [string, string])], (v) => {
+          select(t.statusFilter, this.status, [["", t.allStatuses], ...[...statuses].sort((a, b) => a[0] - b[0]).map(([v, l]) => [String(v), l] as [string, string])], (v) => {
             this.status = v;
             this.render(list);
           }),
-          select(this.period, Object.entries(t.periods), (v) => {
+          select(t.periodFilter, this.period, Object.entries(t.periods), (v) => {
             this.period = v;
             this.render(list);
           }),
@@ -123,8 +124,10 @@ export class InboxPage {
         : latest.id > 0
           ? h("button", { type: "button", class: "btn btn-outline-secondary", title: t.unread, "aria-label": t.unread, onclick: () => void this.ctl.act({ action: "unread", id: latest.id }) }, icon("eye-off"))
           : null,
+      // Assume, the row's main action: primary (white on blue); Tabler's outline green on a
+      // light row has a contrast of 2.55:1, under WCAG's 4.5:1 (axe).
       g.queue === "new" && o.can_assign
-        ? h("button", { type: "button", class: "btn btn-outline-success", title: t.assume, "aria-label": t.assume, onclick: async () => {
+        ? h("button", { type: "button", class: "btn btn-primary", title: t.assume, "aria-label": t.assume, onclick: async () => {
             await this.api.assign(g.key);
             await this.ctl.load();
           } }, icon("user-plus"), " ", t.assume)

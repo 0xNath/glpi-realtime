@@ -128,6 +128,8 @@ export const LABELS = register("inbox", {
     } as Record<string, string>,
     columns: ["Élément", "N°", "Date", "Statut", "Priorité", "Entité", "Demandeur", "Type", "Utilisateur", "Événement", "Détail", "Actions"],
     allStatuses: "Tous les statuts",
+    statusFilter: "Filtrer par statut",
+    periodFilter: "Filtrer par période",
     periods: { "": "Toutes les périodes", today: "Aujourd'hui", week: "7 derniers jours", month: "30 derniers jours" } as Record<string, string>,
     p: {
       receive: "Recevoir",
@@ -207,6 +209,8 @@ export const LABELS = register("inbox", {
     } as Record<string, string>,
     columns: ["Item", "No.", "Date", "Status", "Priority", "Entity", "Requester", "Type", "User", "Event", "Detail", "Actions"],
     allStatuses: "All statuses",
+    statusFilter: "Filter by status",
+    periodFilter: "Filter by period",
     periods: { "": "All periods", today: "Today", week: "Last 7 days", month: "Last 30 days" } as Record<string, string>,
     p: {
       receive: "Receive",
