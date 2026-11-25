@@ -49,7 +49,7 @@ rm -rf dist && mkdir -p dist/stage
 S="dist/stage/glpi-realtime-$VERSION"
 mkdir -p "$S/bin" "$S/plugin" "$S/deploy"
 install -m 755 "$BIN" "$S/bin/glpi-realtime"
-cp -r deploy/examples "$S/deploy/" && cp deploy/install.sh deploy/update.sh "$S/deploy/"
+cp -r deploy/examples "$S/deploy/" && cp deploy/install.sh deploy/update.sh deploy/notes.sh "$S/deploy/"
 cp README.md CHANGELOG.md "$S/" && cp -r docs "$S/"
 # install.sh expects the repository layout: plugin files and the bundle next to it.
 cp -r plugin/setup.php plugin/hook.php plugin/src plugin/ajax plugin/front plugin/locales plugin/public "$S/plugin/"

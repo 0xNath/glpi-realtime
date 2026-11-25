@@ -77,7 +77,11 @@ seed() {
 # deploy/install.sh as users run it (no systemd here: the server is supervisord's).
 install_plugin() {
     as_root env GLPI_DIR=/var/www/glpi GLPI_USER=www-data SERVICE= OPCACHE_WAIT=3 CHECK=0 \
-        CONFIG=/etc/glpi-realtime/config.toml /opt/release/deploy/install.sh
+        CONFIG=/etc/glpi-realtime/config.toml /opt/release/deploy/install.sh | tee "$HERE/.install.log"
+}
+# Its summary says what happened: "Installed ..." or "Upgraded ... from <old> to <new>".
+expect_summary() {
+    grep -qE "$1" "$HERE/.install.log" || die "deploy/install.sh's summary: expected /$1/, got: $(sed -n '/^Installed\|^Upgraded\|^Reinstalled/,$p' "$HERE/.install.log")"
 }
 
 if [[ -n "${UPGRADE_FROM:-}" ]]; then
@@ -89,6 +93,13 @@ if [[ -n "${UPGRADE_FROM:-}" ]]; then
     echo "   before: $before"
     echo "==> Upgrade with deploy/install.sh"
     install_plugin
+    old_version=$(sed -n "s/.*define('PLUGIN_REALTIME_VERSION', '\([^']*\)').*/\1/p" "$HERE/.old/plugin/setup.php")
+    expect_summary "^Upgraded glpi-realtime from ${old_version//./\\.} to "
+    # The configuration notes of the versions in between (0.7.0 has one, for upgrades from
+    # 0.6.0 and older).
+    if [[ "$(printf '%s\n0.7.0\n' "$old_version" | sort -V | head -1)" == "$old_version" && "$old_version" != 0.7.0 ]]; then
+        expect_summary "^Configuration to edit yourself since $old_version"
+    fi
     after=$(console plugins:rtseed:count)
     echo "   after:  $after"
     python3 - "$before" "$after" "$(sed -n "s/define('PLUGIN_REALTIME_VERSION', '\(.*\)');/\1/p" "$ROOT/plugin/setup.php")" <<'PY' || die "upgrade"
@@ -106,6 +117,7 @@ PY
 else
     echo "==> Install with deploy/install.sh"
     install_plugin
+    expect_summary "^Installed glpi-realtime "
     seed
 fi
 

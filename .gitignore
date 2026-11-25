@@ -8,3 +8,4 @@ dist/
 .e2e.*.env
 e2e/env/bin/
 .claude/settings.local.json
+e2e/env/.install.log
