@@ -106,6 +106,8 @@ export const LABELS = register("inbox", {
       validation_refused: "Validation refusée",
       transferred: "Transféré dans votre entité",
       mentioned: "Vous avez été mentionné",
+      ttr_soon: "Échéance de résolution proche",
+      ttr_late: "Échéance de résolution dépassée",
     } as Record<string, string>,
     mentionIn: {
       description: "dans la description",
@@ -143,6 +145,8 @@ export const LABELS = register("inbox", {
       showClosed: "Afficher les clos",
       ended: "Résolus et clos",
       endedStyles: { separate: "Onglets séparés", ended: "Un onglet « Terminés »" } as Record<string, string>,
+      sla: "Échéance de résolution de mes tickets",
+      slaChoices: { "0": "Ne pas prévenir", "30": "Prévenir 30 min avant", "60": "Prévenir 1 h avant", "240": "Prévenir 4 h avant" } as Record<string, string>,
       save: "Enregistrer",
       cancel: "Annuler",
     },
@@ -181,6 +185,8 @@ export const LABELS = register("inbox", {
       validation_refused: "Approval refused",
       transferred: "Transferred to your entity",
       mentioned: "You were mentioned",
+      ttr_soon: "Time to resolve soon",
+      ttr_late: "Time to resolve passed",
     } as Record<string, string>,
     mentionIn: {
       description: "in the description",
@@ -218,6 +224,8 @@ export const LABELS = register("inbox", {
       showClosed: "Show closed",
       ended: "Resolved and closed",
       endedStyles: { separate: "Separate tabs", ended: "One \"Ended\" tab" } as Record<string, string>,
+      sla: "Time to resolve of my tickets",
+      slaChoices: { "0": "Do not warn", "30": "Warn 30 min before", "60": "Warn 1 h before", "240": "Warn 4 h before" } as Record<string, string>,
       save: "Save",
       cancel: "Cancel",
     },
@@ -252,7 +260,7 @@ export function inTab(queue: Queue, tab: Tab): boolean {
 
 /** Most important first: what the bell says when an item has several events. */
 const IMPORTANCE = [
-  "solution_refused", "validation_asked", "mentioned", "assigned", "transferred", "created", "solution",
+  "ttr_late", "solution_refused", "validation_asked", "ttr_soon", "mentioned", "assigned", "transferred", "created", "solution",
   "validation_done", "commented", "task_added", "status_changed", "updated",
 ];
 

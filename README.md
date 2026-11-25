@@ -15,6 +15,7 @@ shown live, one editor at a time, and instant notifications.
 | Shared answer drafts: follow them live, take them over | ✓ | |
 | One solution at a time (enforced by GLPI) | ✓ | |
 | Bell: queues, read/unread, assume, preferences, sound, desktop notifications | ✓ | project tasks |
+| Bell: a ticket's time to resolve near or passed (assigned technicians) | ✓ | |
 | Mentions ("@name") notified at once | ✓ | |
 
 GLPI works unchanged when the server, Valkey or the plugin is absent. Documentation:

@@ -191,3 +191,19 @@ test("preferences: shown as saved, sent as edited, then the list is reloaded", a
   assert.equal(fake.calls.at(-1)!.method, "list");
   assert.ok($(".glpi-rt-overlay") === null, "closed after saving");
 });
+
+test("preferences: when to be warned of a ticket's time to resolve", async () => {
+  const l = list([item({})]);
+  l.preferences = { ...l.preferences, sla_alert: "240" };
+  const { ctl, fake, $ } = bell(l);
+  await ctl.load();
+  ($(".glpi-rt-bell-head button[aria-label='" + en.prefs + "']") as HTMLElement).click();
+  await tick();
+  const select = $<HTMLSelectElement>(".glpi-rt-prefs select[name='sla_alert']");
+  assert.ok(select !== null, "the setting is there");
+  assert.deepEqual([...select!.querySelectorAll("option")].map((o) => o.getAttribute("value")), ["0", "30", "60", "240"]);
+  assert.equal(select!.value, "240", "shown as saved");
+  $<HTMLFormElement>(".glpi-rt-prefs")!.dispatchEvent(event("submit", {}, { cancelable: true }));
+  await tick();
+  assert.equal((fake.calls.find((c) => c.method === "savePreferences")!.body as Record<string, unknown>).sla_alert, "240");
+});

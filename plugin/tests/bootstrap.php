@@ -377,6 +377,27 @@ final class FakeDirectory implements Directory
     {
         return $this->entities["$itemtype:$id"] ?? 0;
     }
+
+    /** @var array<int, int> ticket id => time to resolve (Unix) */
+    public array $due = [];
+    /** @var list<array{0: string, 1: int, 2: string, 3: string, 4: int}> type, id, event, detail, uid */
+    public array $notifiedRows = [];
+
+    public function dueTickets(int $from, int $to): array
+    {
+        return array_filter($this->due, static fn(int $t) => $t >= $from && $t <= $to);
+    }
+
+    public function notified(string $itemtype, int $id, string $event, string $detail): array
+    {
+        $out = [];
+        foreach ($this->notifiedRows as [$t, $i, $e, $d, $u]) {
+            if ($t === $itemtype && $i === $id && $e === $event && $d === $detail) {
+                $out[] = $u;
+            }
+        }
+        return $out;
+    }
 }
 
 /** $target: TCP port on 127.0.0.1, or path of a unix socket. */

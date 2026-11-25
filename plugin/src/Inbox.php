@@ -43,6 +43,10 @@ final class Inbox
     public const TRANSFERRED = 'transferred';
     /** Someone wrote "@user" (GLPI's mentions) in a description, followup, task, solution or approval. */
     public const MENTIONED = 'mentioned';
+    /** A ticket assigned to the user nears its time to resolve (`sla_alert` minutes before). */
+    public const TTR_SOON = 'ttr_soon';
+    /** ...or passed it. */
+    public const TTR_LATE = 'ttr_late';
 
     /** Updated fields worth a notification ("updated" event). */
     public const WATCHED_FIELDS = ['name', 'content', 'priority', 'urgency', 'impact', 'itilcategories_id', 'type', 'time_to_resolve'];
@@ -87,16 +91,21 @@ final class Inbox
         'show_closed'               => true,
         // separate: Resolved and Closed tabs; ended: one "Ended" tab.
         'resolved_closed_style'     => 'separate',
+        // Minutes before an assigned ticket's time to resolve to be warned; '0': never.
+        'sla_alert'                 => '60',
     ];
 
     private const CHOICES = [
         'update_message_style'  => ['priority', 'combined', 'multiple'],
         'resolved_closed_style' => ['separate', 'ended'],
+        'sla_alert'             => ['0', '30', '60', '240'],
     ];
 
     public static ?Directory $directory = null;
     /** @internal tests: receives (rows, cleanups) instead of the database. */
     public static ?\Closure $writer = null;
+    /** @internal tests: users_id => stored preferences, instead of the database. */
+    public static ?\Closure $preferencesReader = null;
 
     /** @var array<string, array{users_id: int, itemtype: string, items_id: int, event: string, channel: string, detail: string}> */
     private static array $rows = [];
@@ -123,6 +132,9 @@ final class Inbox
             return self::$prefsCache[$users_id];
         }
         $stored = [];
+        if (self::$preferencesReader !== null) {
+            return self::$prefsCache[$users_id] = self::cleanPreferences((self::$preferencesReader)($users_id));
+        }
         try {
             global $DB;
             $row = $DB->request(['SELECT' => ['preferences'], 'FROM' => self::PREFS_TABLE, 'WHERE' => ['users_id' => $users_id]])->current();
@@ -477,10 +489,10 @@ final class Inbox
         }
     }
 
-    private static function add(int $uid, string $type, int $id, string $event, string $channel, array $detail, array $f): void
+    private static function add(int $uid, string $type, int $id, string $event, string $channel, array $detail, array $f, bool $system = false): void
     {
-        if ($uid <= 0 || $id <= 0 || $uid === self::author($f)) {
-            return; // nobody is told about what they did themselves
+        if ($uid <= 0 || $id <= 0 || (!$system && $uid === self::author($f))) {
+            return; // nobody is told about what they did themselves (GLPI's own alerts have no author)
         }
         $key = "$uid|$type|$id|$event";
         // A user reached in several ways keeps the most personal channel.
@@ -590,10 +602,53 @@ final class Inbox
     /** @return array{description: string, parameter?: string} */
     public static function cronInfo(string $name): array
     {
+        if ($name === 'slaalert') {
+            return ['description' => 'Warn assigned technicians of tickets nearing or past their time to resolve'];
+        }
         return [
             'description' => 'Purge read notifications and those of inactive users',
             'parameter'   => 'Days a read notification is kept',
         ];
+    }
+
+    /** The longest `sla_alert` choice, in seconds: how far ahead tickets are looked at. */
+    private const SLA_HORIZON = 240 * 60;
+
+    /**
+     * Assigned technicians (direct, or through an assigned group) of tickets nearing their
+     * time to resolve (within their `sla_alert` preference) or past it (within a day: an
+     * old backlog is not announced at once), once per ticket, event and time to resolve
+     * (a new one after a change of SLA warns again). Returns the notifications added.
+     */
+    public static function slaAlerts(int $now): int
+    {
+        $added = 0;
+        foreach (self::dir()->dueTickets($now - DAY_TIMESTAMP, $now + self::SLA_HORIZON) as $id => $ttr) {
+            $event = $ttr <= $now ? self::TTR_LATE : self::TTR_SOON;
+            $detail = ['ttr' => $ttr];
+            $done = array_flip(self::dir()->notified('Ticket', $id, $event, (string) json_encode($detail)));
+            foreach (self::dir()->actors('Ticket', $id) as $uid => $a) {
+                if (!in_array(CommonITILActor::ASSIGN, $a['types'], true) || isset($done[$uid])) {
+                    continue;
+                }
+                $minutes = (int) self::preferences($uid)['sla_alert'];
+                if ($minutes <= 0 || ($event === self::TTR_SOON && $ttr - $now > $minutes * 60)) {
+                    continue;
+                }
+                self::add($uid, 'Ticket', $id, $event, $a['channel'], $detail, [], system: true);
+                $added++;
+            }
+        }
+        return $added;
+    }
+
+    public static function cronSlaalert(\CronTask $task): int
+    {
+        $task->addVolume(self::slaAlerts(time()));
+        // Written and published now: GLPI's command line does not always run shutdown
+        // functions after an automatic action (the alerts were counted, never stored).
+        Events::flush();
+        return 1;
     }
 
     public static function cronInboxpurge(\CronTask $task): int

@@ -33,6 +33,7 @@ export const room = `Ticket:${ticketId}`;
 export const items = {
   assignTicket: Number(process.env.RT_ASSIGN_TICKET_ID ?? 0),
   solutionTicket: Number(process.env.RT_SOLUTION_TICKET_ID ?? 0),
+  slaTicket: Number(process.env.RT_SLA_TICKET_ID ?? 0),
   change: Number(process.env.RT_CHANGE_ID ?? 0),
   problem: Number(process.env.RT_PROBLEM_ID ?? 0),
   computer: Number(process.env.RT_COMPUTER_ID ?? 0),

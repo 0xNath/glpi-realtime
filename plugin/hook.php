@@ -64,6 +64,10 @@ function plugin_realtime_install(): bool
         'mode'    => CronTask::MODE_EXTERNAL,
         'param'   => 30, // days a read notification is kept
     ]);
+    CronTask::register(Inbox::class, 'slaalert', 5 * MINUTE_TIMESTAMP, [
+        'comment' => 'Realtime: warn assigned technicians of tickets nearing or past their time to resolve',
+        'mode'    => CronTask::MODE_EXTERNAL,
+    ]);
     return true;
 }
 

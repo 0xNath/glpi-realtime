@@ -132,3 +132,14 @@ test("mentions say where, and come before most other events", () => {
   assert.equal(eventText(item({ event: "mentioned", detail: { in: "solution" } }), "priority", LABELS.fr), "Vous avez été mentionné dans une solution");
   assert.equal(eventText(item({ event: "mentioned", detail: null }), "priority", en), "You were mentioned");
 });
+
+test("time-to-resolve alerts: their texts, and they outrank most events", () => {
+  assert.equal(eventText(item({ event: "ttr_soon", detail: null }), "priority", en), "Time to resolve soon");
+  assert.equal(eventText(item({ event: "ttr_late", detail: null }), "priority", LABELS.fr), "Échéance de résolution dépassée");
+  const l = list([
+    item({ id: 1, event: "commented", ts: 3 }),
+    item({ id: 2, event: "ttr_late", ts: 1 }),
+    item({ id: 3, event: "assigned", ts: 2 }),
+  ]);
+  assert.equal(groupText(groups(l, "all")[0], "priority", en), "Time to resolve passed", "the most important of the item's events");
+});

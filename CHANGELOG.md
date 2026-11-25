@@ -3,6 +3,15 @@
 Server and plugin share one version number. Upgrades never change your configuration:
 "Configuration" lists what to edit yourself.
 
+## Unreleased
+
+- Bell: a ticket assigned to me (or to one of my groups) whose time to resolve is near
+  or passed is announced, once per time to resolve, with the bell's sound and desktop
+  settings. When: a new preference, *Time to resolve of my tickets* (30 min, 1 h by
+  default, 4 h before, or never). A new automatic action, `slaalert` (every 5 minutes),
+  is registered by the upgrade (`deploy/install.sh`); like the purge task it needs GLPI's
+  cron (`php front/cron.php`). Tickets already late by more than a day are not announced.
+
 ## 0.7.0
 
 - Plugin settings in GLPI: Setup > Plugins > Realtime has a "Settings" form (item types,

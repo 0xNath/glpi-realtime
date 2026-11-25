@@ -96,6 +96,8 @@ final class SeedCommand extends AbstractCommand
             'assign_ticket'   => [Ticket::class, 'glpi-realtime e2e: assign to me'],
             // Assigned to rt-alice, so that she may solve it.
             'solution_ticket' => [Ticket::class, 'glpi-realtime e2e: one solution', ['_users_id_assign' => $alice]],
+            // Assigned to rt-alice, due in 30 minutes: her bell warns her (slaalert task).
+            'sla_ticket'      => [Ticket::class, 'glpi-realtime e2e: due soon', ['_users_id_assign' => $alice]],
             'change'          => [Change::class, 'glpi-realtime e2e change'],
             'problem'         => [Problem::class, 'glpi-realtime e2e problem'],
         ];
@@ -110,6 +112,11 @@ final class SeedCommand extends AbstractCommand
             ]);
             if ($id <= 0) {
                 throw new \RuntimeException("Cannot create the $key");
+            }
+            if ($key === 'sla_ticket') {
+                // GLPI ignores a time to resolve given at creation without an SLA: set after.
+                global $DB;
+                $DB->update(Ticket::getTable(), ['time_to_resolve' => date('Y-m-d H:i:s', time() + 1800)], ['id' => $id]);
             }
             $output->writeln("$key=$id");
         }
