@@ -130,4 +130,73 @@ $res = $cli();
 check($res['ws_upgrade'][0] === Health::ERROR && str_contains($res['ws_upgrade'][2], 'allowed_origins'), 'origin refused: error');
 Health::$http = null;
 
+// --- Database checks (plugin tables, purge task), with doubles of GLPI's $DB and CronTask.
+if (!defined('DAY_TIMESTAMP')) {
+    define('DAY_TIMESTAMP', 86400);
+}
+final class CronTask
+{
+    public const STATE_DISABLE = 0;
+    public const STATE_WAITING = 1;
+    /** The task GLPI has, or null when it is not registered. */
+    public static ?array $task = null;
+    public array $fields = [];
+
+    public function getFromDBbyName(string $itemtype, string $name): bool
+    {
+        if (self::$task === null || $itemtype !== \GlpiPlugin\Realtime\Inbox::class || $name !== 'inboxpurge') {
+            return false;
+        }
+        $this->fields = self::$task;
+        return true;
+    }
+}
+$GLOBALS['DB'] = new class () {
+    /** @var list<string> */
+    public array $tables = [];
+
+    public function tableExists(string $t): bool
+    {
+        return in_array($t, $this->tables, true);
+    }
+};
+Health::$skipDatabase = false;
+$db = static function (): array {
+    $out = [];
+    foreach (Health::run(cli: true) as $c) {
+        if (in_array($c['id'], ['tables', 'cron'], true)) {
+            $out[$c['id']] = [$c['status'], $c['detail'], $c['fix']];
+        }
+    }
+    return $out;
+};
+$answers = [[400, ''], [401, 'unauthorized']];
+Health::$http = static function (string $url, array $headers) use (&$answers): array {
+    return array_shift($answers) ?? [0, 'no answer'];
+};
+
+$DB->tables = [\GlpiPlugin\Realtime\Inbox::TABLE];
+$res = $db();
+check($res['tables'][0] === Health::ERROR && str_contains($res['tables'][1], \GlpiPlugin\Realtime\Inbox::PREFS_TABLE) && !str_contains($res['tables'][1], \GlpiPlugin\Realtime\Inbox::TABLE . ','), 'a missing table: error, named');
+check(str_contains($res['tables'][2], 'plugin:install --force realtime'), 'a missing table: how to create it');
+$DB->tables = [\GlpiPlugin\Realtime\Inbox::TABLE, \GlpiPlugin\Realtime\Inbox::PREFS_TABLE];
+check($db()['tables'][0] === Health::OK, 'both tables: ok');
+
+CronTask::$task = null;
+$res = $db();
+check($res['cron'][0] === Health::WARNING && str_contains($res['cron'][2], 'deploy/install.sh'), 'purge task not registered: warning, upgrade');
+CronTask::$task = ['state' => CronTask::STATE_DISABLE, 'lastrun' => date('Y-m-d H:i:s')];
+$res = $db();
+check($res['cron'][0] === Health::WARNING && str_contains($res['cron'][1], 'disabled') && str_contains($res['cron'][2], 'inboxpurge'), 'purge task disabled: warning, where to enable it');
+CronTask::$task = ['state' => CronTask::STATE_WAITING, 'lastrun' => null];
+$res = $db();
+check($res['cron'][0] === Health::WARNING && $res['cron'][1] === 'Never run.' && str_contains($res['cron'][2], 'front/cron.php'), 'purge task never run: warning, the system cron job');
+CronTask::$task = ['state' => CronTask::STATE_WAITING, 'lastrun' => date('Y-m-d H:i:s', time() - 4 * DAY_TIMESTAMP)];
+check($db()['cron'][0] === Health::WARNING, 'purge task last run 4 days ago: warning (GLPI\'s cron does not run)');
+CronTask::$task = ['state' => CronTask::STATE_WAITING, 'lastrun' => date('Y-m-d H:i:s', time() - 3600)];
+$res = $db();
+check($res['cron'][0] === Health::OK && str_starts_with($res['cron'][1], 'Last run: '), 'purge task run an hour ago: ok');
+Health::$http = null;
+Health::$skipDatabase = true;
+
 exit($GLOBALS['failures'] === 0 ? 0 : 1);
