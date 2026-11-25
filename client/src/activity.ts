@@ -28,7 +28,9 @@ export class ActivityTracker {
   constructor(opts: ActivityOptions) {
     this.o = {
       idleMs: 5 * 60_000,
-      settleMs: 1_000,
+      // Long enough for focus moving into the editor's iframe (blur, then focus inside,
+      // within a few ms) not to flicker; short enough to feel immediate to others.
+      settleMs: 200,
       now: () => Date.now(),
       setTimeout: (fn, ms) => globalThis.setTimeout(fn, ms),
       clearTimeout: (h) => globalThis.clearTimeout(h as number),
