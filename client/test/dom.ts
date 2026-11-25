@@ -28,9 +28,22 @@ export function page(html = "<!doctype html><html><head></head><body></body></ht
       this.dispatchEvent(new window.Event("change", { bubbles: true }));
     };
   }
+  // No form.elements: the form's controls (a browser also lists those outside it with
+  // form="id"; the client adds those itself).
+  if ((document.createElement("form") as any).elements === undefined) {
+    Object.defineProperty(Object.getPrototypeOf(document.createElement("form")), "elements", {
+      get(this: Element) { return Array.from(this.querySelectorAll("input, select, textarea, button")); },
+      configurable: true,
+    });
+  }
+  // No focus model: the page has the focus, on its body unless a test says otherwise.
+  const d = document as any;
+  if (d.activeElement === undefined) Object.defineProperty(d, "activeElement", { get: () => d.focused ?? d.body, configurable: true });
+  if (typeof d.hasFocus !== "function") d.hasFocus = () => d.pageFocused ?? true;
   Object.assign(globalThis, {
     window,
     document,
+    Element: window.Element,
     HTMLElement: window.HTMLElement,
     HTMLInputElement: window.HTMLInputElement,
     HTMLSelectElement: window.HTMLSelectElement,
