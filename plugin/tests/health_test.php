@@ -174,6 +174,32 @@ $res = $cli();
 check($res['ws_upgrade'][0] === Health::ERROR && str_contains($res['ws_upgrade'][2], 'allowed_origins'), 'origin refused: error');
 Health::$http = null;
 
+// The same through real HTTP requests (curl): a stand-in server (ws_router.php) that
+// tells whether the upgrade headers and GLPI's origin arrived.
+$sock = stream_socket_server('tcp://127.0.0.1:0');
+$port = (int) substr(strrchr(stream_socket_get_name($sock, false), ':'), 1);
+fclose($sock);
+$origin = "http://127.0.0.1:$port";
+$srv = proc_open(
+    [PHP_BINARY, '-S', "127.0.0.1:$port", __DIR__ . '/ws_router.php'],
+    [1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']],
+    $pipes,
+    null,
+    ['RT_ORIGIN' => $origin]
+);
+for ($i = 0; $i < 50 && !@fsockopen('127.0.0.1', $port); $i++) {
+    usleep(100_000);
+}
+Health::$urlBase = "$origin/";
+$res = $cli();
+check($res['ws_location'][0] === Health::OK && str_contains($res['ws_location'][1], '(HTTP 400)'), 'real request: /ws reaches the server');
+check($res['ws_upgrade'][0] === Health::OK, 'real request: the upgrade headers and the origin are sent');
+proc_terminate($srv);
+proc_close($srv);
+$res = $cli();
+check($res['ws_location'][0] === Health::ERROR && str_contains($res['ws_location'][1], "No answer from $origin/ws"), 'nothing listening: no answer, with curl\'s reason');
+Health::$urlBase = 'https://glpi.example.org/';
+
 // --- Database checks (plugin tables, purge task), with doubles of GLPI's $DB and CronTask.
 if (!defined('DAY_TIMESTAMP')) {
     define('DAY_TIMESTAMP', 86400);
@@ -317,6 +343,30 @@ Valkey::$override = $acl;
 $res = results();
 check($res['valkey_acl'][0] === Health::ERROR && str_starts_with($res['valkey_acl'][1], 'PUBLISH') && str_contains($res['valkey_acl'][2], 'valkey.conf.example'), 'a command refused: error naming it, where the ACL is');
 $acl->close();
+Valkey::$override = $r;
+
+// --- Valkey fails a read (connection lost meanwhile, ACL on INFO or SCAN): the check says
+// why instead of breaking the page.
+final class FailingValkey extends Redis
+{
+    public function info(string ...$sections): Redis|array|false
+    {
+        throw new RedisException('NOPERM info');
+    }
+
+    public function scan(null|int|string &$iterator, ?string $pattern = null, int $count = 0, ?string $type = null): array|false
+    {
+        throw new RedisException('NOPERM scan');
+    }
+}
+$failing = new FailingValkey();
+$failing->connect('127.0.0.1', (int) ($argv[1] ?? 6379), 1.0);
+$failing->select(6);
+Valkey::$override = $failing;
+$res = results();
+check($res['valkey_version'][0] === Health::WARNING && $res['valkey_version'][1] === 'NOPERM info', 'INFO refused: a warning with the reason');
+check($res['server'][0] === Health::ERROR && $res['server'][1] === 'NOPERM scan', 'servers unreadable: an error with the reason');
+$failing->close();
 Valkey::$override = $r;
 
 // --- The web server's answers on /ws not covered above.

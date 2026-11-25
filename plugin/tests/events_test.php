@@ -61,6 +61,8 @@ check($b['events'] === [[
     'item' => ['type' => 'ITILFollowup', 'id' => 30],
     'vis'  => ['right' => 'followup', 'private' => false, 'uids' => [7]],
 ]], 'followup event with its visibility');
+$publishes = static fn(): int => (int) preg_replace('/^calls=(\d+).*/', '$1', (string) ($r->info('commandstats')['cmdstat_publish'] ?? 'calls=0'));
+$before = $publishes();
 Events::onAdd(new ITILFollowup(['id' => 31, 'itemtype' => 'Ticket', 'items_id' => 5, 'is_private' => 1, 'users_id' => 7]));
 $b = take('Ticket:5');
 check($b['events'][0]['vis']['private'] === true, 'private followup: private event');
@@ -133,6 +135,46 @@ Events::onAdd('not an item');
 Events::onAdd(new TicketValidation(['id' => 1, 'tickets_id' => 5, 'itemtype_target' => 'Group', 'items_id_target' => 'x']));
 check(true, 'bad input ignored');
 Events::flush();
+
+// An item whose fields cannot be read: each of the three recorders fails, each failure
+// is logged, and the GLPI request goes on.
+final class Exploding extends CommonDBTM
+{
+    public function __construct()
+    {
+        unset($this->fields, $this->updates);
+    }
+
+    public function __get(string $name): mixed
+    {
+        throw new RuntimeException("no $name");
+    }
+}
+Toolbox::$logs = [];
+Events::onUpdate(new Exploding());
+$logged = array_map(static fn($l) => strtok($l[1], ':'), Toolbox::$logs);
+check(
+    $logged === ['event not recorded', 'notification not recorded', 'rights change not recorded'],
+    'each recorder failure is logged on its own: ' . json_encode($logged)
+);
+
+// Notifications that cannot be written do not stop the item's live update.
+Toolbox::$logs = [];
+$writer = Inbox::$writer;
+Inbox::$writer = static function (): void {
+    throw new RuntimeException('database gone');
+};
+$publishes = static fn(): int => (int) preg_replace('/^calls=(\d+).*/', '$1', (string) ($r->info('commandstats')['cmdstat_publish'] ?? 'calls=0'));
+$before = $publishes();
+Events::onAdd(new ITILFollowup(['id' => 31, 'itemtype' => 'Ticket', 'items_id' => 5, 'is_private' => 0, 'users_id' => 7]));
+check(Events::pending() !== [], 'the followup is recorded');
+Events::flush();
+Inbox::$writer = $writer;
+check(
+    array_map(static fn($l) => strtok($l[1], ':'), Toolbox::$logs) === ['notifications not written'],
+    'the write failure is logged'
+);
+check($publishes() > $before, 'and the followup was published anyway');
 
 // --- Grants: index, revocation, stale grants removed --------------------------------------
 SessionToken::ensure(7);

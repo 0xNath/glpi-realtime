@@ -139,6 +139,18 @@ $dir->teams[3] = [91 => 'direct', 92 => 'group', 7 => 'direct'];
 check(summary($rows) === ['91:status_changed:direct', '92:status_changed:group'], 'project task progress: its team');
 [$rows] = request(fn() => Events::onAdd(new ProjectTaskTeam(['projecttasks_id' => 3, 'itemtype' => 'Group', 'items_id' => 4])));
 check(summary($rows) === ['80:assigned:group', '81:assigned:group'], 'group added to a project task team');
+[$rows] = request(fn() => Events::onAdd(new ProjectTask(['id' => 3])));
+check(summary($rows) === ['91:created:direct', '92:created:group'], 'project task created: its team, not its author');
+[$rows] = request(fn() => Events::onUpdate(new ProjectTask(['id' => 3], ['name', 'plan_end_date', 'date_mod'])));
+check(summary($rows) === ['91:updated:direct', '92:updated:group'] && $rows[0]['detail'] !== null && str_contains((string) $rows[0]['detail'], 'plan_end_date'), 'project task edited: which fields');
+[$rows] = request(fn() => Events::onUpdate(new ProjectTask(['id' => 3], ['date_mod'])));
+check($rows === [], 'project task: other changes are not announced');
+[$rows, , $cleanups] = request(fn() => Events::onPurge(new ProjectTask(['id' => 3])));
+check($rows === [] && $cleanups === ['ProjectTask:3' => null], 'project task deleted: off every bell');
+[$rows] = request(fn() => Events::onAdd(new ProjectTaskTeam(['projecttasks_id' => 3, 'itemtype' => 'User', 'items_id' => 93])));
+check(summary($rows) === ['93:assigned:direct'], 'user added to a project task team');
+[$rows] = request(fn() => Events::onPurge(new ProjectTaskTeam(['projecttasks_id' => 3, 'itemtype' => 'User', 'items_id' => 93])));
+check($rows === [], 'removed from the team: nothing announced');
 
 // --- Read state in another tab -------------------------------------------------------------------------------
 Inbox::sync(7);
