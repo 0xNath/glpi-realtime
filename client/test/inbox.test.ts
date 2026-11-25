@@ -143,3 +143,37 @@ test("time-to-resolve alerts: their texts, and they outrank most events", () => 
   ]);
   assert.equal(groupText(groups(l, "all")[0], "priority", en), "Time to resolve passed", "the most important of the item's events");
 });
+
+test("InboxApi: the plugin's endpoints, GET to read and POST to act, failures as null", async () => {
+  const { InboxApi, labelsFor } = await import("../src/inbox.ts");
+  assert.equal(labelsFor("fr-FR"), LABELS.fr);
+  assert.equal(labelsFor("de"), LABELS.en);
+  const calls: { url: string; method: string; body?: unknown }[] = [];
+  let reply: { ok: boolean; status: number; json: () => Promise<unknown> } = { ok: true, status: 200, json: async () => ({ enabled: true, items: [] }) };
+  const fetchFn = (async (url: string, init: RequestInit) => {
+    calls.push({ url, method: String(init.method), body: init.body ? JSON.parse(String(init.body)) : undefined });
+    return reply;
+  }) as unknown as typeof fetch;
+  (globalThis as any).document = { querySelector: () => null };
+  const api = new InboxApi("/glpi", fetchFn);
+  assert.deepEqual(await api.list({ read: true, full: true }), { enabled: true, items: [] });
+  await api.act({ action: "read_item", item: "Ticket:1" });
+  await api.savePreferences({ sound_enabled: false });
+  await api.assign("Ticket:2");
+  assert.deepEqual(calls, [
+    { url: "/glpi/plugins/realtime/ajax/inbox.php?read=1&full=1", method: "GET", body: undefined },
+    { url: "/glpi/plugins/realtime/ajax/inbox.php?read=0&full=0", method: "POST", body: { action: "read_item", item: "Ticket:1" } },
+    { url: "/glpi/plugins/realtime/ajax/preferences.php", method: "POST", body: { sound_enabled: false } },
+    { url: "/glpi/plugins/realtime/ajax/assign.php", method: "POST", body: { item: "Ticket:2" } },
+  ]);
+  reply = { ok: true, status: 200, json: async () => ({ enabled: false }) };
+  assert.equal(await api.list(), null, "the bell disabled: nothing");
+  assert.equal(await api.act({}), null);
+  reply = { ok: false, status: 500, json: async () => ({}) };
+  assert.equal(await api.list(), null, "server error");
+  reply = { ok: false, status: 403, json: async () => ({ ok: false, message: "No right" }) };
+  assert.deepEqual(await api.assign("Ticket:3"), { ok: false, message: "No right" }, "a 403 says why");
+  reply = { ok: true, status: 200, json: async () => { throw new Error("not JSON"); } };
+  assert.equal(await api.list(), null, "a login page instead of JSON");
+  delete (globalThis as any).document;
+});

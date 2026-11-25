@@ -207,3 +207,92 @@ test("preferences: when to be warned of a ticket's time to resolve", async () =>
   await tick();
   assert.equal((fake.calls.find((c) => c.method === "savePreferences")!.body as Record<string, unknown>).sla_alert, "240");
 });
+
+/** The bell in GLPI's header (`body > div.page > header > div`, next to the search bar). */
+function docked() {
+  const { document } = page(`<!doctype html><html lang="en"><head></head><body><div class="page"><header><div class="hdr">
+    <div class="ms-lg-auto search-wrap"><form role="search"><input></form></div></div></header><main id="outside">x</main></div></body></html>`);
+  const fake = fakeApi(list([item({ id: 1, key: "Ticket:1", queue: "mine" }), item({ id: 2, key: "Ticket:2", queue: "team" })]));
+  const ctl = new InboxController(fake.api);
+  let rings = 0;
+  new Bell({ doc: document, ctl, api: fake.api, t: en, rootDoc: "", ring: () => rings++, go: () => {} });
+  return { document, ctl, fake, rings: () => rings };
+}
+
+test("docked in GLPI's header, left of the search; a click elsewhere closes it", async () => {
+  const { document, ctl } = docked();
+  await ctl.load();
+  const root = document.querySelector(".glpi-rt-bell")!;
+  assert.equal(root.classList.contains("is-docked"), true);
+  assert.equal(root.nextElementSibling?.classList.contains("search-wrap"), true, "just before the search bar");
+  assert.equal(root.classList.contains("ms-lg-auto") && document.querySelector(".search-wrap")!.classList.contains("ms-lg-0"), true, "takes over the push to the right");
+  (document.querySelector(".glpi-rt-bell-button") as HTMLElement).click();
+  const panel = document.querySelector<HTMLElement>(".glpi-rt-bell-panel")!;
+  assert.equal(panel.hidden, false);
+  document.getElementById("outside")!.dispatchEvent(event("click", {}, { bubbles: true }));
+  assert.equal(panel.hidden, true, "closed by a click outside");
+});
+
+test("no GLPI header with a search bar: floating; minimized, remembered", async () => {
+  const { ctl, $ } = bell(list([item({})]));
+  await ctl.load();
+  assert.equal($(".glpi-rt-bell")!.classList.contains("is-docked"), false);
+  ($(".glpi-rt-bell-button") as HTMLElement).click();
+  ($(".glpi-rt-minimize") as HTMLElement).click();
+  assert.equal($(".glpi-rt-bell")!.classList.contains("is-minimized"), true);
+  assert.equal($<HTMLElement>(".glpi-rt-bell-panel")!.hidden, true);
+  ($(".glpi-rt-bell-button") as HTMLElement).click();
+  assert.equal($(".glpi-rt-bell")!.classList.contains("is-minimized"), false, "opening restores it");
+});
+
+test("tabs: arrows, Home and End move between them (WAI-ARIA)", async () => {
+  const { ctl, $, document } = bell(list([item({ id: 1, key: "Ticket:1", queue: "mine" })]));
+  await ctl.load();
+  const tabs = () => Array.from(document.querySelectorAll<HTMLElement>(".glpi-rt-tab"));
+  const selected = () => tabs().find((t) => t.getAttribute("aria-selected") === "true")?.dataset.tab;
+  const key = (k: string) => {
+    const e = event("keydown", { key: k }, { bubbles: true, cancelable: true });
+    tabs().find((t) => t.getAttribute("aria-selected") === "true")!.dispatchEvent(e);
+    return e;
+  };
+  assert.equal(selected(), "all");
+  assert.equal(key("ArrowRight").defaultPrevented, true);
+  assert.equal(selected(), "new");
+  key("ArrowLeft");
+  assert.equal(selected(), "all");
+  key("ArrowLeft");
+  assert.equal(selected(), "closed", "wraps around");
+  key("Home");
+  assert.equal(selected(), "all");
+  key("End");
+  assert.equal(selected(), "closed");
+  assert.equal(key("a").defaultPrevented, false, "other keys: nothing");
+  void $;
+});
+
+test("show read ones; several events of an item unfold; a new notification rings", async () => {
+  const { ctl, fake, $, document } = bell(list([item({ id: 1, key: "Ticket:1", event: "commented" }), item({ id: 2, key: "Ticket:1", event: "assigned", ts: Date.now() / 1000 - 90 })]));
+  await ctl.load();
+  const sub = $<HTMLElement>(".glpi-rt-n-sub")!;
+  assert.equal(sub.hidden, true);
+  assert.equal(sub.querySelectorAll("li").length, 2);
+  ($(".glpi-rt-n-text button") as HTMLElement).click();
+  assert.equal(sub.hidden, false, "unfolded");
+  const box = $<HTMLInputElement>(".glpi-rt-bell-foot input[type=checkbox]")!;
+  box.checked = true;
+  box.dispatchEvent(event("change", {}, { bubbles: true }));
+  await tick();
+  assert.equal(ctl.withRead, true);
+  assert.equal(fake.calls.at(-1)?.method, "list", "reloaded with the read ones");
+  void document;
+});
+
+test("a new notification rings the bell", async () => {
+  const { ctl, fake, rings } = docked();
+  await ctl.load();
+  fake.set(list([item({ id: 1, key: "Ticket:1" }), item({ id: 2, key: "Ticket:2", queue: "team" }), item({ id: 3, key: "Ticket:3" })]));
+  ctl.refresh(true);
+  await new Promise((r) => setTimeout(r, 300));
+  await tick();
+  assert.equal(rings(), 1);
+});

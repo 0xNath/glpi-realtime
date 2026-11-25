@@ -152,3 +152,103 @@ test("state changes are announced (the presence bar shows the link's status)", (
   c.stop();
   assert.equal(seen.length, 5, "no more once unsubscribed");
 });
+
+test("what is sent depends on the connection and on the joined rooms", () => {
+  const { c } = setup();
+  c.subscribe("Ticket:7");
+  c.setActive(false); // before the connection: remembered, sent with hello
+  c.lock("Ticket:7");
+  c.watch(["Ticket:8"]);
+  c.start();
+  const ws = FakeWs.all[0];
+  assert.equal(ws.sent.length, 0, "nothing before hello");
+  ws.serverSays(hello);
+  assert.deepEqual(ws.sent.map((m) => m.t), ["activity", "sub", "watch"], "the state again on hello");
+  assert.equal(c.isWatched("Ticket:8"), true);
+  ws.sent.length = 0;
+  c.lock("Ticket:7");
+  c.compose("Ticket:7", "followup");
+  assert.equal(ws.sent.length, 0, "not joined yet: no lock, no compose");
+  ws.serverSays({ t: "subscribed", room: "Ticket:7" });
+  c.lock("Ticket:7");
+  c.lock("Ticket:7", true, "solution", "solution");
+  c.unlock("Ticket:7");
+  c.unlock("Ticket:7", "solution");
+  c.compose("Ticket:7", null);
+  c.setActive(false);
+  c.setActive(true);
+  c.watch([]);
+  assert.deepEqual(ws.sent.map(({ v: _v, id: _id, ...m }) => m), [
+    { t: "lock", room: "Ticket:7" },
+    { t: "lock", room: "Ticket:7", force: true, scope: "solution", reason: "solution" },
+    { t: "unlock", room: "Ticket:7" },
+    { t: "unlock", room: "Ticket:7", scope: "solution" },
+    { t: "compose", room: "Ticket:7", kind: null },
+    { t: "activity", active: true },
+    { t: "watch", rooms: [] },
+  ], "a repeated activity is not sent");
+  ws.serverSays({ t: "lock", room: "Ticket:7", scope: "fields", holder: { conn: "y", id: 3, name: "Bob", since: 1 } });
+  assert.equal(c.lockOf("Ticket:7")?.name, "Bob", "the fields' holder is remembered");
+  ws.serverSays({ t: "lock", room: "Ticket:7", scope: "solution", holder: { conn: "z", id: 4, name: "Carol", since: 1 } });
+  assert.equal(c.lockOf("Ticket:7")?.name, "Bob", "not the solution's");
+  ws.sent.length = 0;
+  c.unsubscribe("Ticket:7");
+  c.unsubscribe("Ticket:7");
+  assert.deepEqual(ws.sent.map((m) => m.t), ["unsub"], "once");
+  assert.equal(c.isJoined("Ticket:7"), false);
+  assert.equal(c.lockOf("Ticket:9"), null);
+});
+
+test("a WebSocket that cannot even be created is retried", () => {
+  FakeWs.all = [];
+  const timers: { fn: () => void; ms: number }[] = [];
+  let attempts = 0;
+  const c = new RealtimeClient({
+    url: "wss://glpi.test/ws",
+    WebSocket: function () {
+      attempts++;
+      throw new Error("blocked by CSP");
+    } as unknown as typeof WebSocket,
+    setTimeout: (fn, ms) => timers.push({ fn, ms }),
+    clearTimeout: () => {},
+    random: () => 0.5,
+  });
+  c.start();
+  assert.equal(attempts, 1);
+  assert.equal(c.state, "waiting");
+  timers[0].fn();
+  assert.equal(attempts, 2, "tried again after the delay");
+});
+
+test("refused twice and GLPI's session cannot be renewed: keeps trying (not revoked)", async () => {
+  FakeWs.all = [];
+  const timers: { fn: () => void; ms: number }[] = [];
+  const c = new RealtimeClient({
+    url: "wss://glpi.test/ws",
+    WebSocket: FakeWs as unknown as typeof WebSocket,
+    setTimeout: (fn, ms) => timers.push({ fn, ms }),
+    clearTimeout: () => {},
+    random: () => 0.5,
+    refreshSession: async () => {
+      throw new Error("network");
+    },
+  });
+  c.start();
+  FakeWs.all[0].serverCloses(1006); // refused before hello
+  timers.shift()!.fn();
+  FakeWs.all[1].serverCloses(1006);
+  for (let i = 0; i < 5; i++) await Promise.resolve();
+  assert.equal(c.state, "waiting", "a failed renewal is not a revocation");
+  assert.equal(timers.length > 0, true, "another attempt scheduled");
+});
+
+test("a state listener that throws does not stop the others", () => {
+  const { c } = setup();
+  const seen: string[] = [];
+  c.onState(() => {
+    throw new Error("bad listener");
+  });
+  c.onState((s) => seen.push(s));
+  c.start();
+  assert.deepEqual(seen, ["connecting"]);
+});
