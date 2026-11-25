@@ -5,6 +5,10 @@ Server and plugin share one version number. Upgrades never change your configura
 
 ## Unreleased
 
+- The presence bar of an item is always shown, with a dot saying whether the tab is live
+  (green, "Live" when nobody else is there), connecting (amber), offline (red: lost and
+  trying again, or reload the page) or not live for this item (grey); its tooltip says
+  what to do. Who else is there is shown only while live.
 - Lists of tickets, changes, problems and assets: a row someone else changed since the
   list was displayed (fields, status, assignment, solution, approval, document) is
   marked, and a banner above the list counts them with a "Refresh" button. No content

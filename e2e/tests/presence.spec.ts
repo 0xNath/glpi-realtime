@@ -173,3 +173,18 @@ test("avatars are GLPI's, and hovering one shows GLPI's user card", async ({ bro
   await alice.context.close();
   await bob.context.close();
 });
+
+test("the bar shows the link's status, alone on the ticket too", async ({ browser }) => {
+  const alice = await login(browser, "alice");
+  await openTicketAsAllowed(alice);
+  await waitForFrame(alice, (f) => f.t === "subscribed" && f.room === room, "subscribed");
+  const status = alice.page.locator(`${bar} .glpi-rt-status`);
+  // Whether others are there or not (real users may be), the dot says live.
+  await expect(status).toHaveClass(/is-live/);
+  await expect(status).toHaveAttribute("aria-label", /^(Connected|Connecté)/);
+  // The link goes away: the bar says so, and shows nobody.
+  await alice.page.evaluate(() => (window as any).glpiRealtime.stop());
+  await expect(status).toHaveClass(/is-offline/);
+  await expect(alice.page.locator(`${bar} .glpi-rt-label`)).toHaveText(/^(Offline|Hors ligne)$/);
+  await expect(alice.page.locator(`${bar} .glpi-rt-avatar`)).toHaveCount(0);
+});

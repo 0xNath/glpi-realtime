@@ -135,3 +135,20 @@ test("stop() prevents reconnection and handlers survive errors", () => {
   assert.equal(timers.length, 0);
   assert.equal(c.state, "stopped");
 });
+
+test("state changes are announced (the presence bar shows the link's status)", () => {
+  const { c, timers } = setup();
+  const seen: string[] = [];
+  const off = c.onState((s) => seen.push(`${s}${c.retrying ? "+" : ""}`));
+  c.subscribe("Ticket:7");
+  c.start();
+  FakeWs.all[0].serverSays(hello);
+  assert.equal(c.followed().join(), "Ticket:7");
+  FakeWs.all[0].serverCloses(1006);
+  timers[0].fn();
+  FakeWs.all[1].serverSays(hello);
+  assert.deepEqual(seen, ["connecting", "open", "waiting+", "connecting+", "open"], "each change once; retrying while lost");
+  off();
+  c.stop();
+  assert.equal(seen.length, 5, "no more once unsubscribed");
+});

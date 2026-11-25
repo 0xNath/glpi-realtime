@@ -10,7 +10,7 @@ import { LiveTimeline, TIMELINE_EVENTS } from "./timeline.ts";
 import { Toasts } from "./notifications.ts";
 import { InboxPage } from "./page.ts";
 import { Chime } from "./sound.ts";
-import { render } from "./presence.ts";
+import { liveStatus, render, setStatus } from "./presence.ts";
 import { UpdatesBanner } from "./updates.ts";
 
 declare global {
@@ -112,6 +112,20 @@ function boot(): void {
   client.setActive(activity.reported);
   for (const room of roomsIn(document)) client.subscribe(room);
 
+  // The link's status in each item's presence bar, even when nobody else is there.
+  const forbidden = new Set<string>();
+  const showStatus = () => {
+    for (const room of client.followed()) {
+      setStatus(document, room, liveStatus(client.state, client.retrying, client.isJoined(room), forbidden.has(room)), client.user?.id);
+    }
+  };
+  client.onState(showStatus);
+  client.on("subscribed", (msg) => {
+    if (msg.t === "subscribed") forbidden.delete(msg.room);
+    showStatus();
+  });
+  showStatus();
+
   client.on("presence", (msg) => {
     // Rows of a list are drawn by ListPresence; the bar is for the item being displayed.
     if (msg.t === "presence" && (client.isJoined(msg.room) || !client.isWatched(msg.room))) {
@@ -152,6 +166,8 @@ function boot(): void {
   });
   client.on("unsubscribed", (msg) => {
     if (msg.t !== "unsubscribed" || msg.reason !== "forbidden") return;
+    forbidden.add(msg.room);
+    showStatus();
     banner.lost(msg.room);
     render(document, msg.room, [], client.user?.id);
   });
@@ -180,10 +196,8 @@ function boot(): void {
   };
   followForm();
 
-  // Connection lost: the list is unknown until the server sends it again.
-  client.on("bye", () => {
-    document.querySelectorAll<HTMLElement>(".glpi-rt-presence").forEach((el) => (el.hidden = true));
-  });
+  // Connection lost: the bars say so (the state changes) and show nobody until the server
+  // sends the lists again.
 
   // GLPI loads tabs and forms dynamically: follow the DOM.
   new MutationObserver((mutations) => {
@@ -197,6 +211,7 @@ function boot(): void {
     }
     followForm();
     followList();
+    showStatus(); // the title bar may have just appeared
   }).observe(document.body, { childList: true, subtree: true });
 
   client.start();
