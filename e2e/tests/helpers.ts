@@ -41,9 +41,24 @@ export const items = {
   projectTask: Number(process.env.RT_PROJECT_TASK_ID ?? 0),
 };
 
+/**
+ * page.goto, once more if the host's network changed meanwhile: restarting a container
+ * (resilience.spec.ts restarts Valkey) recreates its interface on the host, and Chromium
+ * aborts navigations in flight with ERR_NETWORK_CHANGED. Any other failure is not retried.
+ */
+export async function goto(page: Page, url: string) {
+  try {
+    return await page.goto(url);
+  } catch (e) {
+    if (!String(e).includes("ERR_NETWORK_CHANGED")) throw e;
+    await page.waitForTimeout(500);
+    return page.goto(url);
+  }
+}
+
 /** Opens an item's form; returns the HTTP status. */
 export async function openItem(s: Session, itemtype: string, id: number): Promise<number> {
-  const resp = await s.page.goto(`/front/${itemtype.toLowerCase()}.form.php?id=${id}`);
+  const resp = await goto(s.page, `/front/${itemtype.toLowerCase()}.form.php?id=${id}`);
   return resp?.status() ?? 0;
 }
 
@@ -83,7 +98,7 @@ export async function login(browser: Browser, who: Who, options: BrowserContextO
   // The web server may rate-limit logins (HTTP 429, e.g. nginx limit_req on login.php):
   // several tests log in quickly one after the other, so wait and try again.
   for (let attempt = 1; ; attempt++) {
-    await page.goto("/");
+    await goto(page, "/");
     await page.fill("#login_name", `rt-${who}`);
     await page.fill("#login_password", password(who));
     const [resp] = await Promise.all([
@@ -133,7 +148,7 @@ export async function useProfile(s: Session, name: string): Promise<void> {
 
 /** Opens the test ticket; returns the HTTP status of the page. */
 export async function openTicket(s: Session): Promise<number> {
-  const resp = await s.page.goto(`/front/ticket.form.php?id=${ticketId}`);
+  const resp = await goto(s.page, `/front/ticket.form.php?id=${ticketId}`);
   return resp?.status() ?? 0;
 }
 
