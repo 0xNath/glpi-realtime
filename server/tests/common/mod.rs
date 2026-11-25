@@ -304,3 +304,11 @@ pub async fn recv_lock_scope(ws: &mut Ws, room: &str, scope: &str) -> serde_json
     .await
     .expect("timed out waiting for lock")
 }
+
+impl Valkey {
+    /// Valkey is gone (until [`Valkey::restart`]): every command of the server fails.
+    pub fn stop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}

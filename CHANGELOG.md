@@ -3,6 +3,13 @@
 Server and plugin share one version number. Upgrades never change your configuration:
 "Configuration" lists what to edit yourself.
 
+## Unreleased
+
+- Server: while Valkey is unreachable, requests that need it (locks, drafts, joining an
+  item) are answered "temporarily unavailable" at once. They used to wait for Valkey's
+  return, and the browser's connection handled nothing else meanwhile. A command now
+  waits at most 3 seconds for Valkey.
+
 ## 0.8.0
 
 - Lists of tickets, changes, problems and assets: a row someone else changed since the

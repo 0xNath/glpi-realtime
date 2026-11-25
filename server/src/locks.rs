@@ -157,8 +157,7 @@ impl Locks {
     pub async fn holder(&self, room: &Room, scope: Scope) -> Result<Option<Holder>, LockError> {
         let raw: Option<String> = self
             .store
-            .pool()
-            .get(self.key(room, scope))
+            .with(|c| async move { c.get(self.key(room, scope)).await })
             .await
             .map_err(|_| LockError::Unavailable)?;
         Ok(raw.and_then(|r| serde_json::from_str(&r).ok()))
@@ -178,18 +177,19 @@ impl Locks {
         let json = serde_json::to_string(&me).expect("holder serializes");
         let cur: String = self
             .store
-            .pool()
-            .next()
-            .eval(
-                ACQUIRE,
-                self.key(room, scope),
-                vec![
-                    me.conn.clone(),
-                    json.clone(),
-                    if force { "1" } else { "0" }.to_string(),
-                    self.ttl_ms.to_string(),
-                ],
-            )
+            .with(|c| async move {
+                c.eval(
+                    ACQUIRE,
+                    self.key(room, scope),
+                    vec![
+                        me.conn.clone(),
+                        json.clone(),
+                        if force { "1" } else { "0" }.to_string(),
+                        self.ttl_ms.to_string(),
+                    ],
+                )
+                .await
+            })
             .await
             .map_err(|e| {
                 warn!(error = %e, %room, "locks: acquire failed");
@@ -219,9 +219,10 @@ impl Locks {
     pub async fn release(&self, room: &Room, scope: Scope, conn: &str) {
         let res: Result<i64, _> = self
             .store
-            .pool()
-            .next()
-            .eval(RELEASE, self.key(room, scope), vec![conn.to_string()])
+            .with(|c| async move {
+                c.eval(RELEASE, self.key(room, scope), vec![conn.to_string()])
+                    .await
+            })
             .await;
         match res {
             Ok(1) => self.changed(room, scope).await,
