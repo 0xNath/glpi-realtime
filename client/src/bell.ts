@@ -214,7 +214,7 @@ export class Bell {
         "div",
         { class: "glpi-rt-bell-head" },
         h("h2", { text: t.title }),
-        h("button", { type: "button", class: "glpi-rt-icon-btn", title: t.prefs, "aria-label": t.prefs, onclick: () => this.preferences() }, icon("settings")),
+        h("button", { type: "button", class: "glpi-rt-icon-btn", title: t.prefs, "aria-label": t.prefs, onclick: () => void this.preferences() }, icon("settings")),
         h("button", { type: "button", class: "glpi-rt-icon-btn glpi-rt-minimize", title: t.minimize, "aria-label": t.minimize, onclick: () => this.minimize() }, icon("minus")),
         h("button", { type: "button", class: "glpi-rt-icon-btn", title: t.close, "aria-label": t.close, onclick: () => this.toggle(false) }, icon("x")),
       ),
@@ -390,7 +390,9 @@ export class Bell {
     await this.o.ctl.load();
   }
 
-  preferences(): void {
+  /** Opens the preferences; right after the page loaded, once the list (they are in it) arrived. */
+  async preferences(): Promise<void> {
+    if (!this.o.ctl.list) await this.o.ctl.load();
     const list = this.o.ctl.list;
     if (!list) return;
     openPreferences(this.o.doc, list, this.o.t, async (prefs) => {
