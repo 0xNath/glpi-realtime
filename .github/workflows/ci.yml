@@ -10,6 +10,10 @@ on:
   schedule:
     - cron: "0 2 * * 1"
   workflow_dispatch:
+    inputs:
+      e2e_repeat:
+        description: "Runs of each e2e test on GLPI 12.0 (flaky tests show up)"
+        default: "1"
 
 permissions:
   contents: read
@@ -176,8 +180,13 @@ jobs:
           cache-dependency-path: e2e/package-lock.json
       - run: npm ci && npx playwright install --with-deps chromium
         working-directory: e2e
-      - run: npx playwright test
+      # The Monday run repeats each test 3 times on GLPI 12.0: intermittent failures show
+      # up there, weekly, rather than by chance on someone's pull request.
+      - name: npx playwright test
         working-directory: e2e
+        env:
+          REPEAT: ${{ matrix.glpi == '12.0' && !matrix.upgrade && (github.event_name == 'schedule' && '3' || inputs.e2e_repeat) || '1' }}
+        run: npx playwright test --repeat-each="${REPEAT:-1}"
       - name: Logs
         if: failure()
         run: mkdir -p e2e/test-results && docker compose -f e2e/env/compose.yaml logs --no-color glpi > e2e/test-results/glpi.log 2>&1 || true
