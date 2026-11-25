@@ -104,8 +104,11 @@ impl Running {
     }
 }
 
-pub async fn start(cfg: Config, metrics: Option<PrometheusHandle>) -> anyhow::Result<Running> {
+pub async fn start(mut cfg: Config, metrics: Option<PrometheusHandle>) -> anyhow::Result<Running> {
     cfg.validate().map_err(anyhow::Error::msg)?;
+    for note in cfg.raise_minimums() {
+        tracing::warn!("{note}");
+    }
     let cfg = Arc::new(cfg);
     let store = Store::connect(&cfg.valkey)
         .await

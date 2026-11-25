@@ -79,6 +79,16 @@ fn check_says_whether_the_configuration_is_valid() {
     assert!(ok, "valid: exit 0");
     assert_eq!(out.trim(), "configuration OK");
 
+    // A setting raised to its minimum: still valid, with a warning.
+    std::fs::write(
+        &good,
+        format!("[limits]\noutbound_queue = 16\n[security]\nallowed_origins = [\"{ORIGIN}\"]\n"),
+    )
+    .unwrap();
+    let (ok, out, err) = run(&["--config", good.to_str().unwrap(), "--check"]);
+    assert!(ok && out.trim() == "configuration OK", "{err}");
+    assert!(err.contains("outbound_queue = 16 raised to 128"), "{err}");
+
     std::fs::write(&good, "[limits]\nmax_connections = \"many\"\n").unwrap();
     let (ok, _, err) = run(&["--config", good.to_str().unwrap(), "--check"]);
     assert!(!ok, "invalid: an error exit");

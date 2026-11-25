@@ -5,6 +5,10 @@ Server and plugin share one version number. Upgrades never change your configura
 
 ## Unreleased
 
+- Server: `[limits] outbound_queue` below 128 is raised to 128, with a warning in the log
+  and in `--check`. A batch of item events from GLPI holds up to 64 frames: with a smaller
+  queue, one batch dropped every member of the item, including those reading. Nothing to
+  edit: configurations that started still start.
 - Fix: when GLPI removed someone's access to the item they are on, the presence bar's
   dot stayed green ("Live") next to the "You no longer have access" banner; it now says
   the item is not live.

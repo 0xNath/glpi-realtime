@@ -40,7 +40,7 @@ burst = 40
 user_messages_per_second = 50       # all connections of a user
 user_burst = 100
 max_violations = 20                 # rate-limit hits before closing
-outbound_queue = 256                # slower clients are dropped (close 1013)
+outbound_queue = 256                # slower clients are dropped (close 1013); at least 128
 ping_interval_secs = 30
 idle_timeout_secs = 90
 
