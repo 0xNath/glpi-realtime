@@ -23,6 +23,8 @@ export type ServerMsg =
   | ({ v: 1; id?: number; t: "event"; room: string; by: Actor } & ItemEvent)
   | { v: 1; id?: number; t: "regrant"; room: string }
   | { v: 1; id?: number; t: "watching"; rooms: string[] }
+  /** A followed list row changed (fields, status, actors, solution...): no content. */
+  | { v: 1; id?: number; t: "changed"; room: string }
   /** Who edits the item's fields; null: nobody. */
   | { v: 1; id?: number; t: "lock"; room: string; scope: LockScope; holder: Holder | null }
   /** The user's notifications changed: refresh the bell. `alert`: ring in this tab. */

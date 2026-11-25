@@ -8,6 +8,7 @@ shown live, one editor at a time, and instant notifications.
 | | Tickets, changes, problems | Projects, project tasks, assets (and any GLPI item) |
 |---|---|---|
 | Presence on the item and on the lists (GLPI's avatars and user card) | ✓ | ✓ |
+| Lists: rows changed by someone else are marked, with a "Refresh" banner | ✓ | ✓ |
 | Single editor of the fields, take over from an inactive tab | ✓ | ✓ |
 | GLPI refuses to save a form older than the item | ✓ | ✓ |
 | "Refresh" when someone else changed the item | ✓ | ✓ |

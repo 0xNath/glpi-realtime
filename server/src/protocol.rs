@@ -225,6 +225,11 @@ pub enum ServerMsg {
     Watching {
         rooms: Vec<String>,
     },
+    /// To list pages following the item: it changed (fields, status, actors, solution,
+    /// approval, document; anything GLPI shows with `read`). No content.
+    Changed {
+        room: String,
+    },
     /// A shared draft, to those who follow it (and to its new writer after a takeover).
     /// `null`: sent or discarded.
     Draft {

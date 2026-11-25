@@ -53,6 +53,7 @@ grant is gone, removes the connection from the room and answers `forbidden`.
 | `presence` | `room`, `users[{id,name,since,active,avatar?,composing?}]` | after `subscribed`, then whenever the list changes |
 | `event` | `room`, `kind`, `by{id,name}`, `item{type,id}?`, `fields[]?` | something changed on the item |
 | `regrant` | `room` | rights on the item may have changed |
+| `changed` | `room` | to list pages following the item (`watch`): it changed; no content |
 | `lock` | `room`, `scope`, `holder{conn,id,name,since,avatar?}` or `null` | after `subscribed`, on change, reply to `lock`/`unlock` |
 | `draft` | `room`, `kind`, `draft{writer,html,private,updated}` or `null` | to followers, on each change |
 | `draft_info` | `room`, `kind`, `writer` or `null`, `private`, `updated`, `away` | to members allowed to follow it, after `subscribed` and on change |
@@ -69,7 +70,10 @@ Error codes: `bad_request`, `unsupported_version`, `forbidden`, `rate_limited`,
 **List pages** (search results of tickets, changes, problems) show who is on each row: the
 client asks GLPI for grants on the displayed rows (`ajax/grants.php`, `READ` checked per
 item), then sends `watch`. It receives `presence` for those items without being listed in
-them, and without events, locks or drafts.
+them, and without events, locks or drafts; instead, `changed{room}` when one of them changed
+in a way anyone who may read it sees (an event without `vis.right`: fields, status, actors,
+solution, approval, document; not followups or tasks, whose visibility needs more than
+`read`; never on a regrant). The client marks the row and offers to refresh the list.
 
 `presence` lists everyone currently subscribed to the room, **one entry per user**
 (several tabs count once), ordered by arrival (`since`, Unix seconds). It includes the

@@ -5,6 +5,12 @@ Server and plugin share one version number. Upgrades never change your configura
 
 ## Unreleased
 
+- Lists of tickets, changes, problems and assets: a row someone else changed since the
+  list was displayed (fields, status, assignment, solution, approval, document) is
+  marked, and a banner above the list counts them with a "Refresh" button. No content
+  reaches the list: only that the item changed, for items it may read; followups and
+  tasks do not count (their visibility needs more than reading the item). Protocol: a
+  new server message, `changed{room}`, to list pages (older clients ignore it).
 - Bell: a ticket assigned to me (or to one of my groups) whose time to resolve is near
   or passed is announced, once per time to resolve, with the bell's sound and desktop
   settings. When: a new preference, *Time to resolve of my tickets* (30 min, 1 h by

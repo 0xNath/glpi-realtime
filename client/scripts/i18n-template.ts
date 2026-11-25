@@ -10,6 +10,7 @@ import "../src/timeline.ts";
 import "../src/drafts.ts";
 import "../src/notifications.ts";
 import "../src/inbox.ts";
+import "../src/list.ts";
 import { template } from "../src/i18n.ts";
 
 const out = new URL("../../plugin/locales/client-template.json", import.meta.url);

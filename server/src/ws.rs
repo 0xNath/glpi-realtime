@@ -261,6 +261,7 @@ impl Connection {
         self.app.hub.remove_user(self.session.uid, self.reg.id);
         for r in std::mem::take(&mut self.watched) {
             self.app.presence.unwatch(&r, self.reg.id);
+            self.app.hub.unwatch(&r, self.reg.id);
         }
         for room in std::mem::take(&mut self.rooms).into_keys() {
             self.app.hub.leave(&room, self.reg.id);
@@ -518,6 +519,7 @@ impl Connection {
             .collect();
         for r in self.watched.difference(&next).cloned().collect::<Vec<_>>() {
             self.app.presence.unwatch(&r, self.reg.id);
+            self.app.hub.unwatch(&r, self.reg.id);
         }
         let added: Vec<Room> = next.difference(&self.watched).cloned().collect();
         self.watched = next;
@@ -527,6 +529,7 @@ impl Connection {
             return Some(end);
         }
         for r in added {
+            self.app.hub.watch(&r, self.reg.id, self.ev_tx.clone());
             self.app.presence.watch(&r, self.reg.id, tx.clone()).await;
         }
         None
