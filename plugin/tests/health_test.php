@@ -276,4 +276,69 @@ check($res['cron_sla'][0] === Health::OK, 'run 2 min ago from the command line: 
 Health::$http = null;
 Health::$skipDatabase = true;
 
+// --- What browsers use behind a reverse proxy: the forwarded scheme and host.
+$server = $_SERVER;
+Health::$requestOrigin = null;
+$origin = static function (array $headers): string {
+    $_SERVER = $headers;
+    return Health::requestOrigin();
+};
+check($origin(['HTTP_X_FORWARDED_PROTO' => 'https', 'HTTP_X_FORWARDED_HOST' => 'glpi.example.org, proxy.local', 'HTTP_HOST' => 'backend:8080']) === 'https://glpi.example.org', 'behind a proxy: its forwarded scheme and first forwarded host');
+check($origin(['HTTP_HOST' => 'GLPI.Example.org', 'SERVER_PORT' => '443']) === 'https://glpi.example.org', 'port 443: https, host lowercased');
+check($origin(['HTTP_HOST' => 'glpi.example.org:8080']) === 'http://glpi.example.org:8080', 'plain HTTP keeps the port');
+check($origin(['HTTPS' => 'off', 'HTTP_HOST' => 'glpi.example.org']) === 'http://glpi.example.org', 'HTTPS=off is plain HTTP');
+check($origin([]) === '', 'no host (command line): none');
+Health::$urlBase = 'https://glpi.example.org/';
+check(Health::browserOrigin() === 'https://glpi.example.org', 'then GLPI\'s URL setting');
+$_SERVER = $server;
+Health::$requestOrigin = 'https://glpi.example.org';
+
+// --- Instant logout off, or not verifiable (Valkey refuses CONFIG GET to the server).
+$status = json_decode((string) $r->get(Valkey::key('srv:a')), true);
+$r->set(Valkey::key('srv:a'), json_encode(['keyspace_events' => false] + $status));
+$res = results();
+check($res['keyspace'][0] === Health::INFO && str_contains($res['keyspace'][1], 'keyspace_events = false'), 'keyspace events off: info');
+$r->set(Valkey::key('srv:a'), json_encode(['keyspace_events' => true, 'keyspace_config' => 'unknown (NOPERM)'] + $status));
+check(results()['keyspace'][0] === Health::INFO, 'keyspace configuration unknown: info');
+$r->set(Valkey::key('srv:a'), json_encode($status));
+
+// --- Valkey refuses one of the plugin's commands (ACL).
+final class NoPublishValkey extends Redis
+{
+    public function publish(string $channel, string $message): Redis|int|false
+    {
+        return false;
+    }
+}
+$acl = new NoPublishValkey();
+$acl->connect('127.0.0.1', (int) ($argv[1] ?? 6379), 1.0);
+$acl->select(6);
+Valkey::$override = $acl;
+$res = results();
+check($res['valkey_acl'][0] === Health::ERROR && str_starts_with($res['valkey_acl'][1], 'PUBLISH') && str_contains($res['valkey_acl'][2], 'valkey.conf.example'), 'a command refused: error naming it, where the ACL is');
+$acl->close();
+Valkey::$override = $r;
+
+// --- The web server's answers on /ws not covered above.
+$answers = [];
+Health::$http = static function (string $url, array $headers) use (&$answers): array {
+    return array_shift($answers) ?? [0, 'no answer'];
+};
+$answers = [[200, 'hello']];
+$res = $cli();
+check($res['ws_location'][0] === Health::WARNING && str_contains($res['ws_location'][1], 'HTTP 200') && !isset($res['ws_upgrade']), '/ws answers 200: unexpected, warning');
+$answers = [[400, ''], [429, 'slow down']];
+$res = $cli();
+check($res['ws_upgrade'][0] === Health::WARNING && str_starts_with($res['ws_upgrade'][1], 'Rate-limited by the web server'), 'rate-limited upgrade: warning, says so');
+$answers = [[400, ''], [418, '']];
+$res = $cli();
+check($res['ws_upgrade'][0] === Health::WARNING && str_contains($res['ws_upgrade'][1], 'HTTP 418'), 'unexpected upgrade answer: warning, the status');
+Health::$requestOrigin = '';
+Health::$urlBase = '';
+$res = $cli();
+check($res['ws_location'][0] === Health::ERROR && str_contains($res['ws_location'][2], 'URL of the application'), 'no GLPI URL at all: error, where to set it');
+Health::$urlBase = 'https://glpi.example.org/';
+Health::$requestOrigin = 'https://glpi.example.org';
+Health::$http = null;
+
 exit($GLOBALS['failures'] === 0 ? 0 : 1);
