@@ -116,6 +116,19 @@ test("list", async ({ browser }) => {
   await shoot(alice.page, "list", [alice.page.locator("table.search-results")], 16);
 });
 
+test("list: a row changed by someone else", async ({ browser }) => {
+  const alice = await login(browser, "alice");
+  const bob = await login(browser, "bob");
+  await alice.page.goto("/front/computer.php");
+  await waitForFrame(alice, (f) => f.t === "watching", "watching");
+  await bob.page.goto(`/front/computer.form.php?id=${items.computer}`);
+  const form = bob.page.locator("form").filter({ has: bob.page.locator(`input[name='id'][value='${items.computer}']`) }).filter({ has: bob.page.locator("[name='update']") });
+  await form.locator("input[name='comment'], textarea[name='comment']").first().fill("Moved to the 2nd floor");
+  await Promise.all([bob.page.waitForEvent("load"), form.locator("[name='update']").first().click()]);
+  await expect(alice.page.locator(".glpi-rt-list-changed")).toBeVisible();
+  await shoot(alice.page, "list-changed", [alice.page.locator(".glpi-rt-list-changed"), alice.page.locator("table.search-results")], 16);
+});
+
 test("configuration page", async ({ browser }) => {
   const bob = await login(browser, "bob");
   await bob.page.setViewportSize({ width: 1360, height: 1400 });
