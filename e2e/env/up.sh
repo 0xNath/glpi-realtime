@@ -124,6 +124,16 @@ fi
 echo "==> Time-to-resolve alerts (the slaalert task, run now)"
 console plugins:rtseed:cron slaalert
 
+# An automatic action run from the command line changes a ticket, as the mail collector
+# does: its notifications must be stored (GLPI's cron ends such runs with exit()).
+echo "==> A change made by an automatic action (command line)"
+notifications() { console plugins:rtseed:count | python3 -c 'import json,sys; print(json.load(sys.stdin)["tables"].get("glpi_plugin_realtime_notifications", 0))'; }
+n_before=$(notifications)
+console plugins:rtseed:cron rttouch --itemtype='GlpiPlugin\Rtseed\Touch'
+n_after=$(notifications)
+echo "   notifications: $n_before before, $n_after after"
+[[ $n_after -gt $n_before ]] || die "a change made by an automatic action was not notified (notifications: $n_before before, $n_after after)"
+
 id() { sed -n "s/^$1=\([0-9]*\).*/\1/p" <<<"$out"; }
 umask 077
 cat >"$ENV_FILE" <<ENV
