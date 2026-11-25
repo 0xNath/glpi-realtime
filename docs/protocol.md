@@ -238,7 +238,7 @@ The self-service interface has no bell: it shows a toast for each `alert`.
 | `shutdown` | 1012 | Reconnect with backoff (server restart). |
 | `policy` | 1008 | Too many rate-limit violations. Reconnect with backoff. |
 | `idle` | 1001 | No traffic (including pongs) for `idle_timeout_secs`. Reconnect. |
-| (none) | 1013 | Client too slow to read: dropped without `bye`. Reconnect. |
+| `slow` | 1013 | Client too slow to read (its outgoing queue is full): dropped; the `bye` usually cannot reach it. Reconnect. |
 | (none) | 1009 | Message larger than `max_message_bytes`. |
 
 Reconnection delay: exponential from 0.5 s to 30 s with jitter (`client/src/backoff.ts`).
