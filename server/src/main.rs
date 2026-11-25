@@ -28,6 +28,9 @@ async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     let cfg = Config::load(Some(&args.config))?;
     if args.check {
+        for note in cfg.clone().raise_minimums() {
+            eprintln!("warning: {note}");
+        }
         println!("configuration OK");
         return Ok(());
     }

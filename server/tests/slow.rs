@@ -132,3 +132,27 @@ async fn srv_conns(addr: std::net::SocketAddr) -> i64 {
         .as_i64()
         .unwrap()
 }
+
+/// A full batch from GLPI (64 events, one frame each) reaches a member who reads, even
+/// with a small outbound queue: the queue is never smaller than what one batch sends.
+#[tokio::test]
+async fn one_full_batch_does_not_drop_a_reading_client() {
+    let vk = valkey_or_skip!();
+    let mut cfg = config(&vk);
+    cfg.limits.outbound_queue = 32;
+    let (srv, addr) = start(cfg).await;
+    let mut ws = member(&vk, addr, 12).await;
+    let _: i64 = vk
+        .client
+        .publish("rt:ev", batch(64).to_string())
+        .await
+        .unwrap();
+    let mut events = 0;
+    while let Some(m) = recv_within(&mut ws, Duration::from_secs(2)).await {
+        if m["t"] == "event" {
+            events += 1;
+        }
+    }
+    assert_eq!(events, 64, "every event of the batch arrived");
+    srv.stop().await.unwrap();
+}

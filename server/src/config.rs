@@ -23,6 +23,9 @@ pub struct Config {
     pub log: LogConfig,
 }
 
+/// Smallest outbound queue: two full batches of item events (one frame per event).
+pub const MIN_OUTBOUND_QUEUE: usize = 2 * crate::events::MAX_EVENTS_PER_BATCH;
+
 /// Where the HTTP/WebSocket server listens. nginx proxies `/ws` to it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase", deny_unknown_fields)]
@@ -286,6 +289,22 @@ impl Config {
         Ok(cfg)
     }
 
+    /// Raises settings below what the server needs to work at all, and says which. A
+    /// configuration that worked keeps starting after an upgrade.
+    pub fn raise_minimums(&mut self) -> Vec<String> {
+        let mut notes = vec![];
+        let min = MIN_OUTBOUND_QUEUE;
+        if self.limits.outbound_queue < min {
+            notes.push(format!(
+                "limits.outbound_queue = {} raised to {min}: one batch of item events from GLPI can hold {} frames, a smaller queue drops every member of the item",
+                self.limits.outbound_queue,
+                crate::events::MAX_EVENTS_PER_BATCH
+            ));
+            self.limits.outbound_queue = min;
+        }
+        notes
+    }
+
     pub fn validate(&self) -> Result<(), String> {
         if self.security.allowed_origins.is_empty() {
             return Err("security.allowed_origins must list at least one origin".into());
@@ -325,6 +344,22 @@ impl Config {
 
 #[cfg(test)]
 mod tests {
+
+    /// A queue too small for one batch of events is raised, and said; others are kept.
+    #[test]
+    fn a_too_small_outbound_queue_is_raised() {
+        let mut c = super::Config::default();
+        c.limits.outbound_queue = 32;
+        let notes = c.raise_minimums();
+        assert_eq!(c.limits.outbound_queue, super::MIN_OUTBOUND_QUEUE);
+        assert!(
+            notes.len() == 1 && notes[0].contains("outbound_queue = 32 raised to 128"),
+            "{notes:?}"
+        );
+        c.limits.outbound_queue = 300;
+        assert!(c.raise_minimums().is_empty());
+        assert_eq!(c.limits.outbound_queue, 300);
+    }
 
     /// Each rule of `validate` refuses its own mistake, with a message naming the setting.
     #[test]
