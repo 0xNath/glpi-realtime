@@ -325,6 +325,45 @@ impl Config {
 
 #[cfg(test)]
 mod tests {
+
+    /// Every section and setting of the server is in deploy/examples/config.toml.example
+    /// (set, or commented out): users discover them there.
+    #[test]
+    fn the_example_lists_every_setting() {
+        let example = include_str!("../../deploy/examples/config.toml.example");
+        let mut keys: std::collections::HashMap<String, std::collections::HashSet<String>> =
+            Default::default();
+        let mut section = String::new();
+        for line in example.lines() {
+            let l = line.trim_start_matches('#').trim();
+            if let Some(name) = l.strip_prefix('[').and_then(|r| r.strip_suffix(']')) {
+                section = name.to_string();
+            } else if let Some((key, _)) = l.split_once('=') {
+                keys.entry(section.clone())
+                    .or_default()
+                    .insert(key.trim().to_string());
+            }
+        }
+        let defaults = serde_json::to_value(Config::default()).unwrap();
+        for (name, value) in defaults.as_object().unwrap() {
+            let Some(fields) = value.as_object() else {
+                continue;
+            };
+            if name == "listen" {
+                continue; // a choice of forms (unix or tcp), each shown in the example
+            }
+            let found = keys
+                .get(name)
+                .unwrap_or_else(|| panic!("[{name}] is not in config.toml.example"));
+            for field in fields.keys() {
+                assert!(
+                    found.contains(field),
+                    "[{name}] {field} is not in config.toml.example"
+                );
+            }
+        }
+    }
+
     use super::*;
 
     #[test]

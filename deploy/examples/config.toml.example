@@ -49,6 +49,12 @@ sweep_interval_secs = 15
 # Instant logout: needs `notify-keyspace-events Kgx` in valkey.conf.
 keyspace_events = true
 
+[presence]
+# Who is on each item: entries refreshed this often by each server instance, and dropped
+# when not refreshed for ttl_secs (an instance that crashed).
+heartbeat_secs = 15
+ttl_secs = 45
+
 [events]
 # After `regrant` (actor removed, entity moved), time given to a browser to get a new
 # grant from GLPI before it is removed from the item.
