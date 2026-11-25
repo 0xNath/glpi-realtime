@@ -645,8 +645,8 @@ final class Inbox
     public static function cronSlaalert(\CronTask $task): int
     {
         $task->addVolume(self::slaAlerts(time()));
-        // Written and published now: GLPI's command line does not always run shutdown
-        // functions after an automatic action (the alerts were counted, never stored).
+        // Written and published now, not only at the end of the process (setup.php registers
+        // that flush early, as GLPI's command line exits in its own shutdown handler).
         Events::flush();
         return 1;
     }

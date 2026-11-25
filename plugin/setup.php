@@ -78,6 +78,12 @@ function plugin_init_realtime(): void
     // opcache may still serve some old files next to new ones (opcache.revalidate_freq):
     // never let that disable the plugin; the next requests, once files are revalidated, work.
     try {
+        // The end-of-request flush (notifications, live events) is registered now, before
+        // anything else: GLPI's automatic actions register a shutdown handler that exits on
+        // the command line (CronTask::handleAbnormalTermination), and the handlers registered
+        // after it never run: what the mail collector or any task changed went unnoticed.
+        Events::ensureFlush();
+
         // Session token: issued, slid and revoked on regular GLPI requests (no extra request).
         $PLUGIN_HOOKS[Hooks::POST_INIT]['realtime'] = [SessionToken::class, 'onPostInit'];
 

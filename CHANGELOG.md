@@ -5,6 +5,10 @@ Server and plugin share one version number. Upgrades never change your configura
 
 ## Unreleased
 
+- Fix: what GLPI's automatic actions change (tickets created or updated by the mail
+  collector, any task) was neither notified nor shown live when GLPI's cron runs on the
+  command line (`php front/cron.php`): GLPI ends such runs with `exit()` in a shutdown
+  handler, before the plugin's own. The plugin now registers its handler first.
 - Checks: the time-to-resolve alerts task (registered, enabled, run in the last 30
   minutes, from the command line) tells whether GLPI's cron runs often enough, on which
   the alerts and the notifications of the mail collector's changes depend.
