@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { parseHTML } from "linkedom";
-
 import { Bell, InboxController } from "../src/bell.ts";
 import { type InboxApi, type InboxItem, type InboxList, LABELS, type Preferences } from "../src/inbox.ts";
+import { event, page, tick } from "./dom.ts";
 
 // The bell's DOM code, in a DOM without a browser (linkedom). End-to-end tests check it in
 // GLPI; these check its logic in milliseconds.
@@ -32,27 +31,6 @@ function list(items: InboxItem[], extra: Partial<InboxList> = {}): InboxList {
   for (const i of items) objects[i.key] = { type: "Ticket", id: Number(i.key.split(":")[1]), title: `T${i.key}`, url: `/front/ticket.form.php?id=${i.key.split(":")[1]}`, status: 2 };
   const unread = items.filter((i) => !i.is_read).length;
   return { enabled: true, items, objects, users: { "7": "Alice" }, counts: { all: unread } as InboxList["counts"], preferences: { ...prefs }, can_see_others: false, ...extra };
-}
-
-/** A fresh document as the page, and the globals the client's code uses. */
-function page() {
-  const { window, document } = parseHTML("<!doctype html><html><head></head><body></body></html>");
-  // linkedom has no `checked` property: reflected on the attribute here (a browser keeps
-  // them apart, which nothing in the client relies on).
-  if (!Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "checked")) {
-    Object.defineProperty(window.HTMLInputElement.prototype, "checked", {
-      get(this: Element) { return this.hasAttribute("checked"); },
-      set(this: Element, v: boolean) { this.toggleAttribute("checked", !!v); },
-    });
-  }
-  Object.assign(globalThis, {
-    window,
-    document,
-    HTMLElement: window.HTMLElement,
-    HTMLInputElement: window.HTMLInputElement,
-    HTMLSelectElement: window.HTMLSelectElement,
-  });
-  return { window, document: document as unknown as Document };
 }
 
 /** A fake API: what the bell asked for, and the list it answers with (optionally late). */
@@ -93,8 +71,6 @@ function bell(l: InboxList) {
   return { b, ctl, fake, document, gone, $ };
 }
 
-const tick = () => new Promise((r) => setTimeout(r, 0));
-
 test("badge: hidden at zero, the count, 99+ beyond; the name says what is shown", async () => {
   const { ctl, $ } = bell(list([]));
   await ctl.load();
@@ -107,7 +83,7 @@ test("badge: hidden at zero, the count, 99+ beyond; the name says what is shown"
   await c.ctl.load();
   assert.equal(c.$(".glpi-rt-bell-badge")!.hidden, false);
   assert.equal(c.$(".glpi-rt-bell-badge")!.textContent, "3");
-  assert.equal(c.$(".glpi-rt-bell-button")!.getAttribute("aria-label"), null, "named by its content, no aria-label");
+  assert.ok(c.$(".glpi-rt-bell-button")!.getAttribute("aria-label") === null, "named by its content, no aria-label");
 
   const many = bell(list([item({})], { counts: { all: 150 } as InboxList["counts"] }));
   await many.ctl.load();
@@ -122,8 +98,7 @@ test("open, close, Escape; aria-expanded follows", async () => {
   ($(".glpi-rt-bell-button") as HTMLElement).click();
   assert.equal(panel.hidden, false);
   assert.equal($(".glpi-rt-bell-button")!.getAttribute("aria-expanded"), "true");
-  // linkedom has no KeyboardEvent: an Event with the key the handler reads.
-  document.dispatchEvent(Object.assign(new (globalThis as any).window.Event("keydown"), { key: "Escape" }));
+  document.dispatchEvent(event("keydown", { key: "Escape" }));
   assert.equal(panel.hidden, true);
   assert.equal($(".glpi-rt-bell-button")!.getAttribute("aria-expanded"), "false");
   b.toggle(true);
@@ -176,7 +151,7 @@ test("assume: only on new items GLPI lets the user take, then the list is reload
   l.objects["Ticket:1"].can_assign = true;
   const { ctl, fake, $ } = bell(l);
   await ctl.load();
-  assert.equal($(`.glpi-rt-n[data-key='Ticket:2'] button[aria-label='${en.assume}']`), null);
+  assert.ok($(`.glpi-rt-n[data-key='Ticket:2'] button[aria-label='${en.assume}']`) === null);
   ($(`.glpi-rt-n[data-key='Ticket:1'] button[aria-label='${en.assume}']`) as HTMLElement).click();
   await tick();
   await tick();
@@ -189,7 +164,7 @@ test("preferences asked for before the list arrived open once it has (#14)", asy
   const first = ctl.load();
   ($(".glpi-rt-bell-head button[aria-label='" + en.prefs + "']") as HTMLElement).click();
   await tick();
-  assert.equal($(".glpi-rt-prefs"), null, "not before the list");
+  assert.ok($(".glpi-rt-prefs") === null, "not before the list");
   release();
   await first;
   await tick();
@@ -206,7 +181,7 @@ test("preferences: shown as saved, sent as edited, then the list is reloaded", a
   assert.equal(box.checked, false);
   box.checked = true;
   const form = $<HTMLFormElement>(".glpi-rt-prefs")!;
-  form.dispatchEvent(new (globalThis as any).window.Event("submit", { cancelable: true }));
+  form.dispatchEvent(event("submit", {}, { cancelable: true }));
   await tick();
   await tick();
   const saved = fake.calls.find((c) => c.method === "savePreferences")!.body as Record<string, unknown>;
@@ -214,5 +189,5 @@ test("preferences: shown as saved, sent as edited, then the list is reloaded", a
   assert.equal(saved.sound_enabled, true);
   assert.equal(saved.update_message_style, "priority");
   assert.equal(fake.calls.at(-1)!.method, "list");
-  assert.equal($(".glpi-rt-overlay"), null, "closed after saving");
+  assert.ok($(".glpi-rt-overlay") === null, "closed after saving");
 });
