@@ -92,6 +92,8 @@ export class RealtimeClient {
   private readonly accepted = new Set<string>();
   /** `sub` requests waiting for their reply: id → room. */
   private readonly pendingSubs = new Map<number, string>();
+  /** Subscriptions refused as temporarily unavailable (Valkey down) in a row, per room. */
+  private readonly subFailures = new Map<string, number>();
   /** Rooms refused once since their grant was asked again (a second refusal: lost). */
   private readonly regranted = new Set<string>();
   /** Sockets closed in a row before their `hello` (refused handshakes). */
@@ -201,6 +203,19 @@ export class RealtimeClient {
     this.pendingSubs.set(this.send({ t: "sub", room }), room);
   }
 
+  /**
+   * The server could not read the grant (Valkey unavailable): asked again with the
+   * reconnection's backoff, on this socket, while the room is still wanted.
+   */
+  private retrySub(room: string): void {
+    const n = this.subFailures.get(room) ?? 0;
+    this.subFailures.set(room, n + 1);
+    const ws = this.ws;
+    this.o.setTimeout(() => {
+      if (ws === this.ws && this.state === "open" && this.rooms.has(room) && !this.joined.has(room)) this.sub(room);
+    }, backoff(n, this.o.random));
+  }
+
   /** The server withholds events until GLPI rewrote our grant and we subscribe again. */
   private async regrant(room: string, ws: WebSocket): Promise<void> {
     this.regranted.add(room); // refused once more after this: the rights are gone
@@ -250,6 +265,7 @@ export class RealtimeClient {
         if (msg.lock_ttl) this.lockTtl = msg.lock_ttl;
         this.joined.clear();
         this.pendingSubs.clear();
+        this.subFailures.clear();
         // Before subscribing, so that our presence entries carry the right state.
         if (!this.active) this.send({ t: "activity", active: false });
         for (const room of this.rooms) this.sub(room);
@@ -258,6 +274,7 @@ export class RealtimeClient {
       case "subscribed":
         if (msg.id !== undefined) this.pendingSubs.delete(msg.id);
         this.regranted.delete(msg.room);
+        this.subFailures.delete(msg.room);
         if (this.rooms.has(msg.room)) {
           this.joined.add(msg.room);
           this.accepted.add(msg.room);
@@ -288,6 +305,8 @@ export class RealtimeClient {
             } else {
               this.lost(room);
             }
+          } else if (msg.code === "internal") {
+            this.retrySub(room);
           }
         }
         break;

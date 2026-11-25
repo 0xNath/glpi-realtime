@@ -252,3 +252,33 @@ test("a state listener that throws does not stop the others", () => {
   c.start();
   assert.deepEqual(seen, ["connecting"]);
 });
+
+test("a subscription refused while Valkey is unavailable is sent again", () => {
+  const { c, timers } = setup();
+  c.subscribe("Ticket:1");
+  c.subscribe("Ticket:2");
+  c.start();
+  const ws = FakeWs.all[0];
+  ws.serverSays(hello);
+  const subs = () => ws.sent.filter((m) => m.t === "sub").map((m) => m.room);
+  assert.deepEqual(subs(), ["Ticket:1", "Ticket:2"]);
+  const before = timers.length;
+  ws.serverSays({ t: "error", id: ws.sent[0].id, code: "internal", message: "temporarily unavailable" });
+  ws.serverSays({ t: "error", id: ws.sent[1].id, code: "internal", message: "temporarily unavailable" });
+  const retries = timers.slice(before);
+  assert.equal(retries.length, 2, "a retry is scheduled for each");
+  assert.ok(retries[0].ms >= 250 && retries[0].ms <= 30_000, "with the usual backoff");
+  c.unsubscribe("Ticket:2"); // left meanwhile: not retried
+  for (const t of retries) t.fn();
+  assert.deepEqual(subs().slice(2), ["Ticket:1"], "sent again, only for the room still wanted");
+  // Refused again: the backoff grows; accepted: no more retries.
+  ws.serverSays({ t: "error", id: ws.sent.at(-1)!.id, code: "internal", message: "temporarily unavailable" });
+  const next = timers.at(-1)!;
+  assert.ok(next.ms > retries[0].ms, "the delay grows");
+  next.fn();
+  ws.serverSays({ t: "subscribed", room: "Ticket:1" });
+  assert.ok(c.isJoined("Ticket:1"));
+  const count = timers.length;
+  ws.serverSays({ t: "error", code: "internal", message: "temporarily unavailable" }); // no id: not ours
+  assert.equal(timers.length, count, "an error without id schedules nothing");
+});
