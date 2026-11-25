@@ -89,7 +89,7 @@ from `deploy/examples/`, and upgrades never touch them.
 From [Releases](https://github.com/0xNath/glpi-realtime/releases):
 
 ```bash
-VERSION=0.7.0 ARCH=$(uname -m)                  # x86_64 or aarch64
+VERSION=0.8.0 ARCH=$(uname -m)                  # x86_64 or aarch64
 BASE=https://github.com/0xNath/glpi-realtime/releases/download/v$VERSION
 curl -LO "$BASE/glpi-realtime-$VERSION-linux-$ARCH.tar.gz" -LO "$BASE/SHA256SUMS"
 sha256sum --check --ignore-missing SHA256SUMS
@@ -234,7 +234,7 @@ runs GLPI's official image with it, Valkey, MariaDB and Caddy (HTTPS, `/ws` to t
 Download the new release (step 1) and run step 2 again. Configuration is never changed
 by an upgrade; [CHANGELOG.md](CHANGELOG.md) says when you have to edit it, e.g.:
 
-- **0.7.0**: the server follows the item types enabled in GLPI: remove
+- **0.8.0**: the server follows the item types enabled in GLPI: remove
   `allowed_itemtypes` from `[security]` in `config.toml` (it now only restricts them),
   then restart the server. Item types and the other plugin settings are changed in
   Setup > Plugins > Realtime, "Settings".
