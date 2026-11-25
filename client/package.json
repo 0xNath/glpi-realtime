@@ -6,6 +6,7 @@
     "typecheck": "tsc --noEmit",
     "build": "esbuild src/index.ts --bundle --format=iife --target=es2020 --minify --sourcemap --outfile=../plugin/public/realtime.js",
     "test": "node --experimental-strip-types --no-warnings --test test/*.test.ts",
+    "coverage": "node --experimental-strip-types --no-warnings --test --experimental-test-coverage --test-coverage-exclude='test/**' test/*.test.ts",
     "i18n-template": "node --experimental-strip-types --no-warnings scripts/i18n-template.ts"
   },
   "devDependencies": {
