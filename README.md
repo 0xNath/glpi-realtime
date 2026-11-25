@@ -27,14 +27,14 @@ GLPI works unchanged when the server, Valkey or the plugin is absent. Documentat
 
 | | |
 |---|---|
-| ![Who else is on the ticket, with GLPI's user card](docs/img/presence.png) | ![The bell: queues, read and unread, assume](docs/img/bell.png) |
-| Who else is on the item, with GLPI's user card on hover | Notifications, mentions included: queues, read/unread, assume |
+| ![Who else is on the ticket, with GLPI's user card](docs/img/presence.png) | ![The bell: queues, read and unread, assume, a ticket due soon](docs/img/bell.png) |
+| Who else is on the item, with GLPI's user card on hover | Notifications, mentions and time to resolve included: queues, read/unread, assume |
 | ![One editor of the fields at a time](docs/img/fields-lock.png) | ![Following a colleague's draft live](docs/img/draft.png) |
 | One editor of the fields at a time | Who is writing, and their draft followed live |
 | ![Presence on the ticket list](docs/img/list.png) | ![A computer edited by a colleague](docs/img/asset.png) |
 | Who is on each row of the lists | Assets and projects: presence and one editor |
-| ![The plugin's checks](docs/img/checks.png) | |
-| Checks of the whole setup, with how to fix | |
+| ![A list where a colleague changed a row](docs/img/list-changed.png) | ![The plugin's checks](docs/img/checks.png) |
+| Lists: rows someone else changed, and a Refresh banner | Checks of the whole setup, with how to fix |
 
 ## Architecture
 
