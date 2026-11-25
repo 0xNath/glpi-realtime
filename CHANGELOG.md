@@ -3,6 +3,11 @@
 Server and plugin share one version number. Upgrades never change your configuration:
 "Configuration" lists what to edit yourself.
 
+## Unreleased
+
+- Fix: when GLPI removed someone's access to the item they are on, the presence bar's
+  dot stayed green ("Live") next to the "You no longer have access" banner; it now says
+  the item is not live.
 ## 0.8.0
 
 - Lists of tickets, changes, problems and assets: a row someone else changed since the

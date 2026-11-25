@@ -217,3 +217,47 @@ test("messages of other rooms are ignored", () => {
   assert.equal(drafts.info("followup"), undefined);
   assert.equal(changes(), 0);
 });
+
+test("a followed draft with GLPI's images: shown at once, then with the images inlined", async () => {
+  const { document, drafts, emit } = setup();
+  (globalThis as any).fetch = async () => ({ ok: true, blob: async () => new Blob([new Uint8Array([1, 2, 3])], { type: "image/png" }) });
+  emit("draft_info", { room: ROOM, kind: "followup", writer: BOB, private: false, away: false });
+  const ph = document.createElement("div");
+  drafts.decorate(ph, "followup", BOB.id);
+  ph.querySelector("button")!.click(); // join
+  drafts.decorate(ph, "followup", BOB.id);
+  const frame = ph.querySelector("iframe") as HTMLIFrameElement;
+  emit("draft", { room: ROOM, kind: "followup", draft: { html: `<p><img src="/front/document.send.php?docid=9"></p>`, writer: BOB } });
+  assert.match(frame.srcdoc, /document\.send\.php\?docid=9/, "first as is");
+  for (let i = 0; i < 10; i++) await tick();
+  assert.match(frame.srcdoc, /data:image\/png;base64,AQID/, "then inlined (the frame loads nothing itself)");
+});
+
+test("an image that cannot be read stays as it is", async () => {
+  const { inlineImages } = await import("../src/drafts.ts");
+  const html = `<img src="/front/document.send.php?docid=1">`;
+  const broken = (async () => ({ ok: true, blob: async () => ({ type: "image/png", arrayBuffer: async () => { throw new Error("aborted"); } }) })) as unknown as typeof fetch;
+  assert.equal(await inlineImages(html, new Map(), broken), html);
+});
+
+test("a draft ended by its writer is forgotten; too large to share: said", async () => {
+  const { document, drafts, emit, sent, changes } = setup();
+  emit("draft_info", { room: ROOM, kind: "task", writer: BOB, private: false, away: true });
+  emit("draft_info", { room: ROOM, kind: "task", writer: null, private: false, away: false });
+  assert.equal(drafts.info("task"), undefined);
+  assert.equal(changes(), 2);
+  const { block, editor } = answerBlock(document);
+  block.dispatchEvent(event("shown.bs.collapse", {}, { bubbles: true }));
+  await tick();
+  editor.type("<p>huge</p>");
+  await debounce();
+  emit("error", { id: sent.length, code: "too_large" });
+  assert.equal(block.querySelector(".glpi-rt-draft-note")?.textContent, "Draft too large to be shared.");
+});
+
+test("taking over a draft whose answer form is not on this page: nothing breaks", async () => {
+  const { emit, sent } = setup();
+  emit("draft", { room: ROOM, kind: "solution", draft: { html: "<p>x</p>", private: false, writer: ME } });
+  await tick();
+  assert.equal(sent.some((m) => m.t === "lock"), false, "no form, no locks taken");
+});
