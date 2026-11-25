@@ -326,6 +326,82 @@ impl Config {
 #[cfg(test)]
 mod tests {
 
+    /// Each rule of `validate` refuses its own mistake, with a message naming the setting.
+    #[test]
+    fn validate_refuses_each_inconsistent_setting() {
+        use super::Config;
+        let base = || {
+            let mut c = Config::default();
+            c.security.allowed_origins = vec!["https://glpi.example.org".into()];
+            c
+        };
+        assert_eq!(base().validate(), Ok(()));
+        type Spoil = Box<dyn Fn(&mut Config)>;
+        let cases: Vec<(&str, Spoil)> = vec![
+            (
+                "allowed_origins",
+                Box::new(|c| c.security.allowed_origins.clear()),
+            ),
+            ("cookie_name", Box::new(|c| c.security.cookie_name.clear())),
+            (
+                "rate limits",
+                Box::new(|c| c.limits.messages_per_second = 0),
+            ),
+            (
+                "rate limits",
+                Box::new(|c| c.limits.user_messages_per_second = 0),
+            ),
+            ("rate limits", Box::new(|c| c.limits.burst = 0)),
+            ("rate limits", Box::new(|c| c.limits.user_burst = 0)),
+            (
+                "idle_timeout_secs",
+                Box::new(|c| c.limits.ping_interval_secs = 0),
+            ),
+            (
+                "idle_timeout_secs",
+                Box::new(|c| c.limits.idle_timeout_secs = c.limits.ping_interval_secs),
+            ),
+            (
+                "presence.ttl_secs",
+                Box::new(|c| c.presence.heartbeat_secs = 0),
+            ),
+            (
+                "presence.ttl_secs",
+                Box::new(|c| c.presence.ttl_secs = 2 * c.presence.heartbeat_secs - 1),
+            ),
+            ("locks.ttl_secs", Box::new(|c| c.locks.ttl_secs = 2)),
+            ("locks.ttl_secs", Box::new(|c| c.locks.sweep_secs = 0)),
+            (
+                "regrant_timeout_secs",
+                Box::new(|c| c.events.regrant_timeout_secs = 0),
+            ),
+            (
+                "connection limits",
+                Box::new(|c| c.limits.outbound_queue = 0),
+            ),
+            (
+                "connection limits",
+                Box::new(|c| c.limits.max_connections = 0),
+            ),
+            (
+                "connection limits",
+                Box::new(|c| c.limits.max_connections_per_user = 0),
+            ),
+        ];
+        for (i, (words, spoil)) in cases.iter().enumerate() {
+            let mut c = base();
+            spoil(&mut c);
+            let err = c.validate().expect_err(&format!("case {i} refused"));
+            assert!(err.contains(words), "case {i}: {err}");
+        }
+        // The limits themselves are accepted.
+        let mut c = base();
+        c.presence.ttl_secs = 2 * c.presence.heartbeat_secs;
+        c.locks.ttl_secs = 3;
+        c.limits.idle_timeout_secs = c.limits.ping_interval_secs + 1;
+        assert_eq!(c.validate(), Ok(()));
+    }
+
     /// Every section and setting of the server is in deploy/examples/config.toml.example
     /// (set, or commented out): users discover them there.
     #[test]
