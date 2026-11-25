@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { type TestContext, test } from "node:test";
 
-import { type EditorClient, FieldsEditor, IDLE_MS } from "../src/editor.ts";
+import { type EditorClient, FieldsEditor, IDLE_MS, itemTarget } from "../src/editor.ts";
 import type { Holder } from "../src/protocol.ts";
 import { event, page } from "./dom.ts";
 
@@ -145,4 +145,43 @@ test("without the right to edit: never asks for the lock", (t) => {
   emit("error", { code: "forbidden", message: "cannot edit this item" });
   fire("input[name=name]", "input");
   assert.deepEqual(sent, []);
+});
+
+test("other items: the form that saves this very item, and its Save button outside it", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { document } = page(`<!doctype html><html lang="en"><head></head><body>
+    <form id="search"><input name="id" value="7"></form>
+    <form id="other"><input name="id" value="8"><button name="update">Save</button></form>
+    <form id="computer_form"><input name="id" value="7"><input name="name" value="PC"></form>
+    <button form="computer_form" name="update" type="submit" id="save">Save</button></body></html>`);
+  const sent: string[] = [];
+  const handlers = new Map<string, ((m: any) => void)[]>();
+  const client: EditorClient = {
+    conn: ME.conn, user: { id: ME.id }, lockTtl: 30,
+    lock: () => void sent.push("lock"), unlock: () => void sent.push("unlock"), lockOf: () => null,
+    on: (type, h) => (handlers.set(type, [...(handlers.get(type) ?? []), h]), () => {}),
+  };
+  const target = itemTarget(document, "Computer:7");
+  assert.equal(target.form(), null, "no Save button inside the form: not found that way");
+  document.getElementById("computer_form")!.insertAdjacentHTML("beforeend", `<input type="submit" name="update">`);
+  assert.equal(target.form()?.getAttribute("id"), "computer_form", "not the search form, not another item's");
+  assert.deepEqual(target.outside().map((b) => b.getAttribute("id")), ["save"]);
+  assert.equal(target.contains(document.querySelector("#computer_form input[name=name]")!), true);
+  assert.equal(target.contains(document.getElementById("save")!), true, "its Save button outside the form");
+  assert.equal(target.contains(document.querySelector("#other input")!), false);
+  new FieldsEditor(document, client, "Computer:7", "en", target);
+  // We asked for the lock and someone else got it at the same instant: the bar flashes.
+  (handlers.get("lock") ?? []).forEach((h) => h({ id: 3, room: "Computer:7", holder: holder(BOB) }));
+  assert.equal(document.querySelector(".glpi-rt-editor")?.classList.contains("is-flash"), true);
+  assert.equal(document.querySelector<HTMLInputElement>("#computer_form input[name=name]")!.disabled, true);
+});
+
+test("a form whose id has quotes is still found", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { document } = page(`<!doctype html><html><head></head><body>
+    <form id='we"ird'><input name="id" value="3"><button name="update">Save</button></form>
+    <button form='we"ird' id="out">Save</button></body></html>`);
+  const target = itemTarget(document, "Printer:3");
+  assert.deepEqual(target.outside().map((b) => b.getAttribute("id")), ["out"]);
+  assert.equal(itemTarget(document, "Printer:4").contains(document.getElementById("out")!), false, "another item: nothing");
 });

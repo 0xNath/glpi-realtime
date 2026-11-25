@@ -45,7 +45,7 @@ function setup(l: InboxList) {
   const api = {
     list: async () => (calls.push({ method: "list" }), current),
     act: async (body: Record<string, unknown>) => (calls.push({ method: "act", body }), current),
-    savePreferences: async () => ({ preferences: prefs }),
+    savePreferences: async (p: unknown) => (calls.push({ method: "savePreferences", body: p }), { preferences: prefs }),
     assign: async (key: string) => (calls.push({ method: "assign", body: key }), { ok: true }),
   } as unknown as InboxApi;
   const ctl = new InboxController(api, true);
@@ -141,4 +141,18 @@ test("a link that is not GLPI's own is not made a link", async () => {
   await ctl.load();
   assert.equal($("tr[data-key='Ticket:1'] a") === null, true);
   assert.match($("tr[data-key='Ticket:1']")?.textContent ?? "", /Ticket 1/);
+});
+
+test("the page's preferences: saved, then the list reloaded", async () => {
+  const { ctl, calls, $, document } = setup(list([item({})]));
+  await ctl.load();
+  $<HTMLElement>(`button[aria-label='${en.prefs}']`)!.click();
+  const form = document.querySelector<HTMLFormElement>(".glpi-rt-prefs")!;
+  assert.equal(form !== null, true, "the dialog opens");
+  form.dispatchEvent(event("submit", {}, { cancelable: true }));
+  await tick();
+  await tick();
+  const saved = calls.find((c) => c.method === "savePreferences")?.body as Record<string, unknown>;
+  assert.equal(saved.update_message_style, "priority");
+  assert.equal(calls.at(-1)?.method, "list", "reloaded after saving");
 });
