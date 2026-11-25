@@ -31,12 +31,35 @@ foreach ($it as $f) {
 }
 ksort($lines);
 $total = $covered = 0;
-printf("%-40s %8s %8s\n", 'file (plugin/src)', 'lines', 'cover');
+/** "12-14 20 31-33": the given line numbers as ranges. */
+function ranges(array $nums): string
+{
+    sort($nums);
+    $out = [];
+    $start = $prev = null;
+    foreach ($nums as $n) {
+        if ($prev !== null && $n === $prev + 1) {
+            $prev = $n;
+            continue;
+        }
+        if ($start !== null) {
+            $out[] = $start === $prev ? "$start" : "$start-$prev";
+        }
+        $start = $prev = $n;
+    }
+    if ($start !== null) {
+        $out[] = $start === $prev ? "$start" : "$start-$prev";
+    }
+    return implode(' ', $out);
+}
+
+printf("%-40s %8s %8s  %s\n", 'file (plugin/src)', 'lines', 'cover', 'uncovered lines');
 foreach ($lines as $file => $l) {
     $n = count($l);
     $c = count($run[$file] ?? []);
     $total += $n;
     $covered += $c;
-    printf("%-40s %8d %7s\n", $file, $n, $n ? sprintf('%.1f%%', 100 * $c / $n) : 'not run');
+    $missed = array_map('intval', array_keys(array_diff_key($l, $run[$file] ?? [])));
+    printf("%-40s %8d %7s  %s\n", $file, $n, $n ? sprintf('%.1f%%', 100 * $c / $n) : 'not run', ranges($missed));
 }
 printf("%-40s %8d %7.1f%%\n", 'TOTAL', $total, $total ? 100 * $covered / $total : 0);
