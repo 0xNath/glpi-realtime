@@ -8,7 +8,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 echo "== Rust (unit + integration)"
 if cargo llvm-cov --version >/dev/null 2>&1; then
-    (cd "$ROOT/server" && cargo llvm-cov -q --summary-only)
+    (cd "$ROOT/server" && cargo llvm-cov -q --summary-only --show-missing-lines)
 else
     echo "skip: cargo-llvm-cov is not installed (cargo install cargo-llvm-cov; rustup component add llvm-tools-preview)"
 fi
