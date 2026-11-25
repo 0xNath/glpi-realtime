@@ -9,6 +9,9 @@ echo "== Rust (unit + integration + interop)"
 echo "== PHP plugin"
 "$ROOT/scripts/test-php.sh"
 
+echo "== Deployment scripts"
+"$ROOT/scripts/test-deploy.sh"
+
 echo "== Client"
 (cd "$ROOT/client" && npm run -s typecheck && npm test --silent)
 

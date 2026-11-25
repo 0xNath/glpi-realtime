@@ -28,6 +28,8 @@ FROM scratch AS release-repo
 COPY --from=server /glpi-realtime /opt/release/bin/glpi-realtime
 COPY plugin/ /opt/release/plugin/
 COPY deploy/ /opt/release/deploy/
+# As in a release archive: deploy/install.sh reads the upgrade notes from it.
+COPY CHANGELOG.md /opt/release/CHANGELOG.md
 
 # ...or from a published one.
 FROM scratch AS release-archive
