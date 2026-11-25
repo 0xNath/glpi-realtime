@@ -241,10 +241,10 @@ async fn main() -> anyhow::Result<()> {
         }
         // Everything they left must go: connections, then presence entries.
         let deadline = Instant::now() + Duration::from_secs(20);
-        while srv.registry.len() > 0 && Instant::now() < deadline {
+        while !srv.registry.is_empty() && Instant::now() < deadline {
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
-        if srv.registry.len() > 0 {
+        if !srv.registry.is_empty() {
             problems.push(format!(
                 "wave {wave}: {} connections left on the server",
                 srv.registry.len()
