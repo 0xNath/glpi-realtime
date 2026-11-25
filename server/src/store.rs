@@ -65,6 +65,10 @@ pub fn fred_config(cfg: &ValkeyConfig) -> Result<Config, Error> {
     Ok(c)
 }
 
+/// How long a command may wait for Valkey (a reconnection included) before failing.
+/// Every command is a single key operation: Valkey answers them in microseconds.
+pub const COMMAND_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
+
 /// Reconnection after a loss of Valkey: at once, then backing off up to 5 s, forever.
 fn reconnect_policy() -> ReconnectPolicy {
     ReconnectPolicy::new_exponential(0, 100, 5_000, 2)
@@ -117,6 +121,9 @@ impl Store {
             .with_connection_config(|c| {
                 c.connection_timeout = std::time::Duration::from_secs(2);
             })
+            // Without it a command waits for Valkey's return (fred's default): the
+            // browser's request goes unanswered and its connection handles nothing else.
+            .with_performance_config(|p| p.default_command_timeout = COMMAND_TIMEOUT)
             .set_policy(reconnect_policy())
             .build_pool(cfg.pool_size.max(1))?;
         pool.init().await?;
@@ -138,18 +145,34 @@ impl Store {
         &self.prefix
     }
 
-    /// Raw access for modules with their own keys (locks).
-    pub fn pool(&self) -> &Pool {
-        &self.pool
+    /// A connected client of the pool, or an error at once when Valkey is gone: a
+    /// command would otherwise wait for its return (fred queues it until it reconnects),
+    /// and the browser's connection would handle nothing else meanwhile.
+    pub fn client(&self) -> Result<&Client, Error> {
+        let c = self.pool.next_connected();
+        if c.is_connected() {
+            Ok(c)
+        } else {
+            Err(Error::new(ErrorKind::IO, "Valkey is unavailable"))
+        }
+    }
+
+    /// Runs `f` on a connected client (see [`Store::client`]), for modules with their
+    /// own keys (locks, drafts, status).
+    pub async fn with<T, Fut>(&self, f: impl FnOnce(Client) -> Fut) -> Result<T, Error>
+    where
+        Fut: std::future::Future<Output = Result<T, Error>>,
+    {
+        f(self.client()?.clone()).await
     }
 
     pub async fn ping(&self) -> Result<(), Error> {
-        let _: String = self.pool.ping(None).await?;
+        let _: String = self.client()?.ping(None).await?;
         Ok(())
     }
 
     pub async fn session(&self, hash: &str) -> Result<Option<Session>, Error> {
-        let h: HashMap<String, String> = self.pool.hgetall(self.session_key(hash)).await?;
+        let h: HashMap<String, String> = self.client()?.hgetall(self.session_key(hash)).await?;
         let uid = h
             .get("uid")
             .and_then(|v| v.parse::<u64>().ok())
@@ -168,7 +191,7 @@ impl Store {
     }
 
     pub async fn grant(&self, hash: &str, room: &Room) -> Result<Option<Grant>, Error> {
-        let h: HashMap<String, String> = self.pool.hgetall(self.grant_key(hash, room)).await?;
+        let h: HashMap<String, String> = self.client()?.hgetall(self.grant_key(hash, room)).await?;
         if h.is_empty() {
             return Ok(None);
         }
@@ -182,7 +205,7 @@ impl Store {
         if rooms.is_empty() {
             return Ok(vec![]);
         }
-        let client = self.pool.next();
+        let client = self.client()?;
         let pipe = client.pipeline();
         for r in rooms {
             let _: () = pipe.hget(self.grant_key(hash, r), "read").await?;
@@ -195,7 +218,7 @@ impl Store {
     pub async fn sessions_alive(&self, hashes: &[String]) -> Result<Vec<bool>, Error> {
         let mut out = Vec::with_capacity(hashes.len());
         for chunk in hashes.chunks(1000) {
-            let client = self.pool.next();
+            let client = self.client()?;
             let pipe = client.pipeline();
             for h in chunk {
                 let _: () = pipe.exists(self.session_key(h)).await?;
@@ -230,7 +253,7 @@ impl Store {
         ttl_secs: i64,
     ) -> Result<(), Error> {
         let key = self.presence_key(room);
-        let client = self.pool.next();
+        let client = self.client()?;
         let pipe = client.pipeline();
         let _: () = pipe.hset(&key, (conn, entry)).await?;
         let _: () = pipe.hexpire(&key, ttl_secs, None, conn).await?;
@@ -239,13 +262,13 @@ impl Store {
     }
 
     pub async fn presence_del(&self, room: &Room, conn: &str) -> Result<(), Error> {
-        let _: i64 = self.pool.hdel(self.presence_key(room), conn).await?;
+        let _: i64 = self.client()?.hdel(self.presence_key(room), conn).await?;
         Ok(())
     }
 
     /// Raw entries (connection id → JSON); expired fields are already gone.
     pub async fn presence_list(&self, room: &Room) -> Result<HashMap<String, String>, Error> {
-        self.pool.hgetall(self.presence_key(room)).await
+        self.client()?.hgetall(self.presence_key(room)).await
     }
 
     /// Refreshes the TTL of this instance's fields, one pipeline for all rooms.
@@ -255,7 +278,7 @@ impl Store {
         ttl_secs: i64,
     ) -> Result<(), Error> {
         for chunk in rooms.chunks(500) {
-            let client = self.pool.next();
+            let client = self.client()?;
             let pipe = client.pipeline();
             for (room, conns) in chunk {
                 if !conns.is_empty() {
@@ -270,7 +293,7 @@ impl Store {
     }
 
     pub async fn publish(&self, channel: &str, message: String) -> Result<(), Error> {
-        let _: i64 = self.pool.next().publish(channel, message).await?;
+        let _: i64 = self.client()?.publish(channel, message).await?;
         Ok(())
     }
 }

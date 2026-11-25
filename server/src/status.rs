@@ -48,9 +48,10 @@ pub fn keyspace_ok(flags: &str) -> bool {
 
 async fn keyspace_config(store: &Store) -> String {
     let res: Result<Vec<String>, _> = store
-        .pool()
-        .next()
-        .custom(fred::cmd!("CONFIG"), vec!["GET", "notify-keyspace-events"])
+        .with(|c| async move {
+            c.custom(fred::cmd!("CONFIG"), vec!["GET", "notify-keyspace-events"])
+                .await
+        })
         .await;
     match res {
         Ok(v) => match v.get(1) {
@@ -103,15 +104,18 @@ pub async fn announce(
             keyspace_config: keyspace.clone(),
         };
         let json = serde_json::to_string(&status).expect("status serializes");
+        let key = &key;
         let res: Result<(), _> = store
-            .pool()
-            .set(&key, json, Some(Expiration::EX(TTL_SECS)), None, false)
+            .with(|c| async move {
+                c.set(key, json, Some(Expiration::EX(TTL_SECS)), None, false)
+                    .await
+            })
             .await;
         if let Err(e) = res {
             warn!(error = %e, "status: cannot publish");
         }
     }
-    let _: Result<i64, _> = store.pool().del(&key).await;
+    let _: Result<i64, _> = store.with(|c| async move { c.del(key).await }).await;
 }
 
 #[cfg(test)]

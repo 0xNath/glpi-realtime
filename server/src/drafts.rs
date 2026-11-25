@@ -152,8 +152,7 @@ impl Drafts {
     pub async fn get(&self, room: &Room, kind: Kind) -> Result<Option<Draft>, DraftError> {
         let raw: Option<String> = self
             .store
-            .pool()
-            .get(self.key(room, kind))
+            .with(|c| async move { c.get(self.key(room, kind)).await })
             .await
             .map_err(|_| DraftError::Unavailable)?;
         Ok(raw.and_then(|r| serde_json::from_str(&r).ok()))
@@ -197,18 +196,19 @@ impl Drafts {
         let json = serde_json::to_string(draft).expect("draft serializes");
         let cur: String = self
             .store
-            .pool()
-            .next()
-            .eval(
-                WRITE,
-                self.key(room, kind),
-                vec![
-                    draft.writer.conn.clone(),
-                    json,
-                    if force { "1" } else { "0" }.to_string(),
-                    self.ttl_secs.to_string(),
-                ],
-            )
+            .with(|c| async move {
+                c.eval(
+                    WRITE,
+                    self.key(room, kind),
+                    vec![
+                        draft.writer.conn.clone(),
+                        json,
+                        if force { "1" } else { "0" }.to_string(),
+                        self.ttl_secs.to_string(),
+                    ],
+                )
+                .await
+            })
             .await
             .map_err(|e| {
                 warn!(error = %e, %room, "drafts: write failed");
@@ -221,9 +221,10 @@ impl Drafts {
     pub async fn end(&self, room: &Room, kind: Kind, conn: &str) {
         let res: Result<i64, _> = self
             .store
-            .pool()
-            .next()
-            .eval(END, self.key(room, kind), vec![conn.to_string()])
+            .with(|c| async move {
+                c.eval(END, self.key(room, kind), vec![conn.to_string()])
+                    .await
+            })
             .await;
         match res {
             Ok(1) => self.changed(room, kind).await,
