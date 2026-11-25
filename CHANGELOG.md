@@ -3,21 +3,6 @@
 Server and plugin share one version number. Upgrades never change your configuration:
 "Configuration" lists what to edit yourself.
 
-## Unreleased
-
-- Notification ages are right whatever the timezones: a browser in another timezone than
-  GLPI's said "1 h ago" (or more) for a notification just created. The plugin now sends
-  the instant with each notification (#6).
-- Accessibility: the bell's button is named by what it shows ("Notifications 3", or
-  "99+"), as WCAG 2.5.3 asks; its label used to say the exact count while the badge
-  showed "99+" (found by axe-core 4.14).
-- Monitoring: the README lists every metric with its labels;
-  `deploy/examples/prometheus-rules.yml` has alerts (server down, Valkey unreachable,
-  handshakes refused, connection limits, events rejected). The CI checks that the README,
-  the Grafana dashboard and the alerts match the server's metrics.
-- The bell's preferences open when asked for right after the page loaded: the click did
-  nothing until the notifications had arrived (on a slow GLPI, for seconds).
-
 ## 0.7.0
 
 - Plugin settings in GLPI: Setup > Plugins > Realtime has a "Settings" form (item types,
@@ -35,6 +20,18 @@ Server and plugin share one version number. Upgrades never change your configura
 - Container image `ghcr.io/0xnath/glpi-realtime` (amd64, arm64; static binary, no shell,
   unprivileged, attested) and an example with GLPI's image, Valkey, MariaDB and Caddy
   (`deploy/examples/compose.yaml`); `glpi-realtime --healthcheck`.
+- Notification ages are right whatever the timezones: a browser in another timezone than
+  GLPI's said "1 h ago" (or more) for a notification just created. The plugin now sends
+  the instant with each notification (#6).
+- Accessibility: the bell's button is named by what it shows ("Notifications 3", or
+  "99+"), as WCAG 2.5.3 asks; its label used to say the exact count while the badge
+  showed "99+" (found by axe-core 4.14).
+- Monitoring: the README lists every metric with its labels;
+  `deploy/examples/prometheus-rules.yml` has alerts (server down, Valkey unreachable,
+  handshakes refused, connection limits, events rejected). The CI checks that the README,
+  the Grafana dashboard and the alerts match the server's metrics.
+- The bell's preferences open when asked for right after the page loaded: the click did
+  nothing until the notifications had arrived (on a slow GLPI, for seconds).
 - Room names are canonical (`Ticket:09` is refused; found by fuzzing).
 - `SECURITY.md` (private reporting), issue and pull request templates.
 - CI: load test with thresholds (2 000 connections, p99 under 1 s), fuzzing of what
