@@ -3,30 +3,8 @@
 Server and plugin share one version number. Upgrades never change your configuration:
 "Configuration" lists what to edit yourself.
 
-## Unreleased
+## 0.8.0
 
-- Accessibility: the status and period filters of the notifications page are named for
-  screen readers ("Filter by status", "Filter by period"); they were announced as bare
-  drop-down lists; its "Assume" button gets enough contrast (2.55:1 before, WCAG asks
-  4.5:1). Both found by axe.
-- Fix: what GLPI's automatic actions change (tickets created or updated by the mail
-  collector, any task) was neither notified nor shown live when GLPI's cron runs on the
-  command line (`php front/cron.php`): GLPI ends such runs with `exit()` in a shutdown
-  handler, before the plugin's own. The plugin now registers its handler first.
-- Checks: the time-to-resolve alerts task (registered, enabled, run in the last 30
-  minutes, from the command line) tells whether GLPI's cron runs often enough, on which
-  the alerts and the notifications of the mail collector's changes depend.
-- `deploy/install.sh` ends with what it knows: installed, upgraded from which version
-  (with the "Configuration" notes of the versions in between, to edit yourself), or
-  reinstalled; then what is left to do (the configuration file or the systemd unit it did
-  not find, the checks' errors and warnings), or that nothing is.
-- Presence: whether someone is active on the item (their tab focused and used) shows
-  about a second sooner for the others: the tab reports a change after 200 ms of
-  stability instead of 1 s.
-- The presence bar of an item is always shown, with a dot saying whether the tab is live
-  (green, "Live" when nobody else is there), connecting (amber), offline (red: lost and
-  trying again, or reload the page) or not live for this item (grey); its tooltip says
-  what to do. Who else is there is shown only while live.
 - Lists of tickets, changes, problems and assets: a row someone else changed since the
   list was displayed (fields, status, assignment, solution, approval, document) is
   marked, and a banner above the list counts them with a "Refresh" button. No content
@@ -39,9 +17,13 @@ Server and plugin share one version number. Upgrades never change your configura
   default, 4 h before, or never). A new automatic action, `slaalert` (every 5 minutes),
   is registered by the upgrade (`deploy/install.sh`); like the purge task it needs GLPI's
   cron (`php front/cron.php`). Tickets already late by more than a day are not announced.
-
-## 0.7.0
-
+- The presence bar of an item is always shown, with a dot saying whether the tab is live
+  (green, "Live" when nobody else is there), connecting (amber), offline (red: lost and
+  trying again, or reload the page) or not live for this item (grey); its tooltip says
+  what to do. Who else is there is shown only while live.
+- Presence: whether someone is active on the item (their tab focused and used) shows
+  about a second sooner for the others: the tab reports a change after 200 ms of
+  stability instead of 1 s.
 - Plugin settings in GLPI: Setup > Plugins > Realtime has a "Settings" form (item types,
   among the default ones, other GLPI items and the custom assets of GLPI 11+; Valkey
   socket or host, database, user, password; key prefix, cookie name, WebSocket path),
@@ -57,19 +39,34 @@ Server and plugin share one version number. Upgrades never change your configura
 - Container image `ghcr.io/0xnath/glpi-realtime` (amd64, arm64; static binary, no shell,
   unprivileged, attested) and an example with GLPI's image, Valkey, MariaDB and Caddy
   (`deploy/examples/compose.yaml`); `glpi-realtime --healthcheck`.
+- `deploy/install.sh` ends with what it knows: installed, upgraded from which version
+  (with the "Configuration" notes of the versions in between, to edit yourself), or
+  reinstalled; then what is left to do (the configuration file or the systemd unit it did
+  not find, the checks' errors and warnings), or that nothing is.
+- Fix: what GLPI's automatic actions change (tickets created or updated by the mail
+  collector, any task) was neither notified nor shown live when GLPI's cron runs on the
+  command line (`php front/cron.php`): GLPI ends such runs with `exit()` in a shutdown
+  handler, before the plugin's own. The plugin now registers its handler first.
 - Notification ages are right whatever the timezones: a browser in another timezone than
   GLPI's said "1 h ago" (or more) for a notification just created. The plugin now sends
   the instant with each notification (#6).
+- The bell's preferences open when asked for right after the page loaded: the click did
+  nothing until the notifications had arrived (on a slow GLPI, for seconds).
+- Room names are canonical (`Ticket:09` is refused; found by fuzzing).
+- Accessibility: the status and period filters of the notifications page are named for
+  screen readers ("Filter by status", "Filter by period"); they were announced as bare
+  drop-down lists; its "Assume" button gets enough contrast (2.55:1 before, WCAG asks
+  4.5:1). Both found by axe.
 - Accessibility: the bell's button is named by what it shows ("Notifications 3", or
   "99+"), as WCAG 2.5.3 asks; its label used to say the exact count while the badge
   showed "99+" (found by axe-core 4.14).
+- Checks: the time-to-resolve alerts task (registered, enabled, run in the last 30
+  minutes, from the command line) tells whether GLPI's cron runs often enough, on which
+  the alerts and the notifications of the mail collector's changes depend.
 - Monitoring: the README lists every metric with its labels;
   `deploy/examples/prometheus-rules.yml` has alerts (server down, Valkey unreachable,
   handshakes refused, connection limits, events rejected). The CI checks that the README,
   the Grafana dashboard and the alerts match the server's metrics.
-- The bell's preferences open when asked for right after the page loaded: the click did
-  nothing until the notifications had arrived (on a slow GLPI, for seconds).
-- Room names are canonical (`Ticket:09` is refused; found by fuzzing).
 - `SECURITY.md` (private reporting), issue and pull request templates.
 - CI: load test with thresholds (2 000 connections, p99 under 1 s), fuzzing of what
   browsers and Valkey send the server, end-to-end tests of a Valkey restart and of the

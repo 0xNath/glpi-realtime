@@ -95,9 +95,9 @@ if [[ -n "${UPGRADE_FROM:-}" ]]; then
     install_plugin
     old_version=$(sed -n "s/.*define('PLUGIN_REALTIME_VERSION', '\([^']*\)').*/\1/p" "$HERE/.old/plugin/setup.php")
     expect_summary "^Upgraded glpi-realtime from ${old_version//./\\.} to "
-    # The configuration notes of the versions in between (0.7.0 has one, for upgrades from
+    # The configuration notes of the versions in between (0.8.0 has one, for upgrades from
     # 0.6.0 and older).
-    if [[ "$(printf '%s\n0.7.0\n' "$old_version" | sort -V | head -1)" == "$old_version" && "$old_version" != 0.7.0 ]]; then
+    if [[ "$(printf '%s\n0.8.0\n' "$old_version" | sort -V | head -1)" == "$old_version" && "$old_version" != 0.8.0 ]]; then
         expect_summary "^Configuration to edit yourself since $old_version"
     fi
     after=$(console plugins:rtseed:count)
