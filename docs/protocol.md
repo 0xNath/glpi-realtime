@@ -224,6 +224,7 @@ in another tab, preferences saved) never alerts and reaches the author's own tab
 | `validation_asked` / `validation_done` | approver (user or group members) / actors |
 | `transferred` | entity changed: actors, or technicians of the new entity when unassigned |
 | `mentioned` (`detail.in`: `description`, `followup`, `task`, `solution`, `validation`) | users newly mentioned ("@name", GLPI's rich text mentions), whatever their role; the user's *When I am mentioned* preference |
+| `ttr_soon` / `ttr_late` (`detail.ttr`: Unix seconds) | tickets, not solved or closed: assigned users and members of assigned groups, within their *Time to resolve* preference before it (30 min, 1 h by default, 4 h, or never) / once passed (up to a day late); once per time to resolve; checked every 5 minutes by the `slaalert` task; published with author 0 (GLPI's own alert, never withheld) |
 
 "Others": technicians with the STEAL right on the item's entity who enabled *Notify others*.
 Queues are computed per reader: **New** (nobody assigned), **Mine**, **Team** (one of my

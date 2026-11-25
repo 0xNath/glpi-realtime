@@ -92,3 +92,11 @@ test("assume: a technician assigns themselves an unassigned ticket from the bell
   await alice.page.goto(`/front/ticket.form.php?id=${items.assignTicket}`);
   await expect(alice.page.locator("#itil-form")).toContainText(/alice/i); // her login or her name
 });
+
+test("the bell warns of an assigned ticket's time to resolve", async ({ browser }) => {
+  test.skip(!items.slaTicket, "RT_SLA_TICKET_ID is not set (a ticket assigned to rt-alice, due soon, after the slaalert task ran)");
+  const alice = await login(browser, "alice");
+  const panel = await openBell(alice.page);
+  const row = panel.locator(`.glpi-rt-n[data-key="Ticket:${items.slaTicket}"]`);
+  await expect(row).toContainText(/Time to resolve soon|Échéance de résolution proche/);
+});

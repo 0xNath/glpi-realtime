@@ -331,16 +331,24 @@ final class Events
      */
     public static function notices(array $by, array $pushes): array
     {
-        $notify = [];
+        // GLPI's own alerts (time to resolve) have no author: never withheld from the user
+        // whose request happened to run the cron task.
+        $system = [Inbox::TTR_SOON => true, Inbox::TTR_LATE => true];
+        $groups = [];
         foreach ($pushes as [$item, $kind, $uids, $sync]) {
+            $g = isset($system[$kind]) ? 'system' : 'by';
             foreach (array_chunk(array_values(array_unique($uids)), self::MAX_RECIPIENTS) as $to) {
-                $notify[] = array_filter(['to' => $to, 'kind' => $kind, 'item' => $item, 'sync' => $sync]);
+                $groups[$g][] = array_filter(['to' => $to, 'kind' => $kind, 'item' => $item, 'sync' => $sync]);
             }
         }
-        return array_map(
-            static fn(array $chunk) => json_encode(['by' => $by, 'notify' => $chunk], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
-            array_chunk($notify, self::MAX_PER_MESSAGE)
-        );
+        $out = [];
+        foreach ($groups as $g => $notify) {
+            $author = $g === 'system' ? ['id' => 0, 'name' => ''] : $by;
+            foreach (array_chunk($notify, self::MAX_PER_MESSAGE) as $chunk) {
+                $out[] = json_encode(['by' => $author, 'notify' => $chunk], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+            }
+        }
+        return $out;
     }
 
     /**

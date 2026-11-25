@@ -48,4 +48,15 @@ interface Directory
 
     /** Entity of an item, -1 when it does not exist. */
     public function entityOf(string $itemtype, int $id): int;
+
+    /**
+     * Open tickets (not solved, closed or deleted) whose time to resolve is between $from
+     * and $to (Unix seconds).
+     *
+     * @return array<int, int> id => time to resolve (Unix seconds)
+     */
+    public function dueTickets(int $from, int $to): array;
+
+    /** Users who already have this notification (same item, event and detail). @return list<int> */
+    public function notified(string $itemtype, int $id, string $event, string $detail): array;
 }

@@ -71,7 +71,9 @@
       "validation_accepted": "Approval accepted",
       "validation_refused": "Approval refused",
       "transferred": "Transferred to your entity",
-      "mentioned": "You were mentioned"
+      "mentioned": "You were mentioned",
+      "ttr_soon": "Time to resolve soon",
+      "ttr_late": "Time to resolve passed"
     },
     "mentionIn": {
       "description": "in the description",
@@ -144,6 +146,13 @@
       "endedStyles": {
         "separate": "Separate tabs",
         "ended": "One \"Ended\" tab"
+      },
+      "sla": "Time to resolve of my tickets",
+      "slaChoices": {
+        "0": "Do not warn",
+        "30": "Warn 30 min before",
+        "60": "Warn 1 h before",
+        "240": "Warn 4 h before"
       },
       "save": "Save",
       "cancel": "Cancel"

@@ -109,6 +109,9 @@ else
     seed
 fi
 
+echo "==> Time-to-resolve alerts (the slaalert task, run now)"
+console plugins:rtseed:cron slaalert
+
 id() { sed -n "s/^$1=\([0-9]*\).*/\1/p" <<<"$out"; }
 umask 077
 cat >"$ENV_FILE" <<ENV
@@ -119,6 +122,7 @@ RT_CAROL_PASSWORD=$carol
 RT_TICKET_ID=$(id ticket)
 RT_ASSIGN_TICKET_ID=$(id assign_ticket)
 RT_SOLUTION_TICKET_ID=$(id solution_ticket)
+RT_SLA_TICKET_ID=$(id sla_ticket)
 RT_CHANGE_ID=$(id change)
 RT_PROBLEM_ID=$(id problem)
 RT_COMPUTER_ID=$(id computer)

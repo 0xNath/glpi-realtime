@@ -197,4 +197,44 @@ final class GlpiDirectory implements Directory
         $item = new $itemtype();
         return $item->getFromDB($id) ? (int) ($item->fields['entities_id'] ?? 0) : -1;
     }
+
+    public function dueTickets(int $from, int $to): array
+    {
+        global $DB;
+        $out = [];
+        $rows = $DB->request([
+            'SELECT' => ['id', 'time_to_resolve'],
+            'FROM'   => \Ticket::getTable(),
+            'WHERE'  => [
+                'is_deleted' => 0,
+                'NOT'        => ['status' => [\CommonITILObject::SOLVED, \CommonITILObject::CLOSED]],
+                'AND'        => [
+                    ['time_to_resolve' => ['>=', date('Y-m-d H:i:s', $from)]],
+                    ['time_to_resolve' => ['<=', date('Y-m-d H:i:s', $to)]],
+                ],
+            ],
+        ]);
+        foreach ($rows as $row) {
+            $ttr = strtotime((string) $row['time_to_resolve']);
+            if ($ttr !== false) {
+                $out[(int) $row['id']] = $ttr;
+            }
+        }
+        return $out;
+    }
+
+    public function notified(string $itemtype, int $id, string $event, string $detail): array
+    {
+        global $DB;
+        $out = [];
+        $rows = $DB->request([
+            'SELECT' => ['users_id'],
+            'FROM'   => Inbox::TABLE,
+            'WHERE'  => ['itemtype' => $itemtype, 'items_id' => $id, 'event' => $event, 'detail' => $detail],
+        ]);
+        foreach ($rows as $row) {
+            $out[] = (int) $row['users_id'];
+        }
+        return $out;
+    }
 }

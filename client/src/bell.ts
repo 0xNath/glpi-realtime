@@ -85,6 +85,8 @@ const EVENT_ICONS: Record<string, string> = {
   validation_done: "clipboard-check",
   transferred: "arrows-exchange",
   mentioned: "at",
+  ttr_soon: "clock",
+  ttr_late: "alarm",
 };
 
 export function eventIcon(event: string): HTMLElement {
@@ -462,6 +464,8 @@ export function openPreferences(doc: Document, list: InboxList, t: Labels, save:
     h("h3", { text: t.p.style }),
     select("update_message_style", t.p.styles, t.p.style),
     ...(helpdesk ? [] : [
+      h("h3", { text: t.p.sla }),
+      select("sla_alert", t.p.slaChoices, t.p.sla),
       h("h3", { text: t.p.ended }),
       box("show_resolved", t.p.showResolved),
       box("show_closed", t.p.showClosed),
