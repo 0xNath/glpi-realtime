@@ -61,6 +61,7 @@ scripts/test-all.sh                       # Rust (clippy -D warnings, unit, inte
 python3 scripts/i18n.py                   # after plugin message changes; French catalog must stay complete
 (cd client && npm run i18n-template)      # after client text changes
 scripts/check-examples.sh                 # after deploy/ changes: examples run through nginx, httpd, Caddy, Valkey, compose
+scripts/coverage.sh                       # what no unit/integration test exercises (also in the CI's summary)
 ```
 
 End-to-end, in a disposable GLPI (Podman here, Docker in the CI): build, install with

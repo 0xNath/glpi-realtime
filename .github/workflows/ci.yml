@@ -67,6 +67,45 @@ jobs:
           (cd client && npm run -s build)
           git diff --exit-code -- plugin/public/realtime.js || { echo "run 'npm run build' in client/ and commit"; exit 1; }
 
+  # What the unit and integration tests exercise, in the run's summary. Informational: no
+  # threshold, and not a required check (the browser code is mostly covered by e2e).
+  coverage:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Valkey
+        run: |
+          id=$(docker create valkey/valkey:9.0)
+          sudo docker cp "$id":/usr/local/bin/valkey-server /usr/local/bin/valkey-server
+          docker rm "$id"
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # stable branch, 2026-10-15
+        with:
+          toolchain: stable
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: server
+          key: coverage
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: cargo-llvm-cov@0.9.1
+      # The interoperability tests run the plugin's PHP against the server.
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: "8.4"
+          extensions: redis, igbinary
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - run: npm ci
+        working-directory: client
+      - name: Coverage
+        run: |
+          scripts/coverage.sh | tee coverage.txt
+          { echo '## Coverage (unit and integration tests)'; echo '```'; cat coverage.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
   # The server, static (musl), for the end-to-end environments below.
   server-bin:
     runs-on: ubuntu-24.04
