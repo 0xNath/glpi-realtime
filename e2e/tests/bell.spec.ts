@@ -60,6 +60,20 @@ test("notification preferences are saved", async ({ browser }) => {
   await toggle(saved); // and back to how it was
 });
 
+test("the preferences open even when asked for before the list arrived", async ({ browser }) => {
+  const alice = await login(browser, "alice");
+  // A slow GLPI: the list the bell loads after the page takes 3 s (a click on the
+  // preferences then did nothing, and the nightly e2e timed out on it).
+  await alice.page.route("**/plugins/realtime/ajax/inbox.php**", async (route) => {
+    if (route.request().method() === "GET") await new Promise((r) => setTimeout(r, 3000));
+    await route.fallback();
+  });
+  await alice.page.reload();
+  await alice.page.locator(".glpi-rt-bell-button").click();
+  await alice.page.locator(".glpi-rt-bell-panel").getByRole("button", { name: /^(preferences|préférences)$/i }).click();
+  await expect(alice.page.locator(".glpi-rt-prefs")).toBeVisible({ timeout: 10_000 });
+});
+
 test("assume: a technician assigns themselves an unassigned ticket from the bell", async ({ browser }) => {
   test.skip(!items.assignTicket, "RT_ASSIGN_TICKET_ID is not set (an unassigned ticket rt-alice may take)");
   const alice = await login(browser, "alice");

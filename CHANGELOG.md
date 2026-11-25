@@ -15,6 +15,8 @@ Server and plugin share one version number. Upgrades never change your configura
   `deploy/examples/prometheus-rules.yml` has alerts (server down, Valkey unreachable,
   handshakes refused, connection limits, events rejected). The CI checks that the README,
   the Grafana dashboard and the alerts match the server's metrics.
+- The bell's preferences open when asked for right after the page loaded: the click did
+  nothing until the notifications had arrived (on a slow GLPI, for seconds).
 
 ## 0.7.0
 
