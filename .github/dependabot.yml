@@ -31,3 +31,11 @@ updates:
     cooldown: { default-days: 14 }
     groups:
       actions: { patterns: ["*"] }
+  # The images scripts/check-examples.sh validates the examples with (nginx, httpd,
+  # Caddy, Valkey, Prometheus): a Dockerfile listing them, never built.
+  - package-ecosystem: docker
+    directory: /scripts/examples-images
+    schedule: { interval: weekly }
+    cooldown: { default-days: 14 }
+    groups:
+      examples-images: { patterns: ["*"] }

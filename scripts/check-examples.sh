@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Runs the examples of deploy/ through the software they are written for, so that the
 # documentation stays true: the server's configurations, Valkey's, nginx's and Apache's
-# vhosts, the Caddyfile, the compose file, the Prometheus rules; and the metrics the
+# vhosts, the Caddyfile, the compose file, the Prometheus rules (and their tests), the
+# systemd unit and sysusers file; and the metrics the
 # README, the dashboard and the rules name are the server's. Needs Docker or Podman (CONTAINER=...) and
 # cargo (server). Exit code 1 on the first broken example.
 set -euo pipefail
@@ -13,11 +14,10 @@ fi
 if [[ -z "${COMPOSE:-}" ]]; then
     if docker compose version >/dev/null 2>&1; then COMPOSE="docker compose"; else COMPOSE=podman-compose; fi
 fi
-NGINX=docker.io/library/nginx:1.31.8
-HTTPD=docker.io/library/httpd:2.4.70
-CADDY=docker.io/library/caddy:2.11.8
-VALKEY=docker.io/valkey/valkey:9.0
-PROMETHEUS=docker.io/prom/prometheus:v3.5.0
+# The images, from scripts/examples-images/Dockerfile (which Dependabot keeps current).
+image() { awk -v n="$1" '$1 == "FROM" && $3 == "AS" && $4 == n { print $2 }' "$ROOT/scripts/examples-images/Dockerfile"; }
+NGINX=$(image nginx) HTTPD=$(image httpd) CADDY=$(image caddy) VALKEY=$(image valkey) PROMETHEUS=$(image prometheus)
+for i in "$NGINX" "$HTTPD" "$CADDY" "$VALKEY" "$PROMETHEUS"; do [[ -n "$i" ]] || { echo "an image is missing from scripts/examples-images/Dockerfile" >&2; exit 1; }; done
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 # check <label> <command...>: the command must succeed (its output shown only if not).
@@ -46,6 +46,18 @@ BIN="$ROOT/server/target/debug/glpi-realtime"
 check "config.toml.example" "$BIN" --config "$EX/config.toml.example" --check
 check "deploy/container/config.toml (with the variable the image needs)" \
     env GLPI_RT_SECURITY__ALLOWED_ORIGINS='["https://glpi.example.org"]' "$BIN" --config "$ROOT/deploy/container/config.toml" --check
+
+echo "== systemd"
+if command -v systemd-analyze >/dev/null; then
+    # The unit as written, its binary the one just built: any warning (an unknown key, a
+    # wrong value) fails, though systemd-analyze itself only exits 1 on errors.
+    sed "s#/usr/local/bin/glpi-realtime#$BIN#g" "$EX/glpi-realtime.service" > "$TMP/glpi-realtime.service"
+    check "glpi-realtime.service" sh -c 'out=$(systemd-analyze verify "$1" 2>&1); [ -z "$out" ] || { echo "$out"; exit 1; }' _ "$TMP/glpi-realtime.service"
+    mkdir -p "$TMP/root/etc"
+    check "sysusers.conf" sh -c 'systemd-sysusers --root="$1" "$2" && grep -q "^glpi-realtime:" "$1/etc/passwd"' _ "$TMP/root" "$EX/sysusers.conf"
+else
+    echo "skip glpi-realtime.service, sysusers.conf (no systemd here)"
+fi
 
 echo "== Valkey"
 # The example as is, but its socket and data in a scratch directory; it must start.
@@ -88,8 +100,11 @@ echo "== Compose"
 check "compose.yaml" env GLPI_HOST=glpi.example.org GLPI_DB_PASSWORD=example $COMPOSE -f "$EX/compose.yaml" config
 
 echo "== Prometheus"
-check "prometheus-rules.yml" run --entrypoint promtool -v "$EX/prometheus-rules.yml:/conf/rules.yml:ro" "$PROMETHEUS" \
-    check rules /conf/rules.yml
+check "prometheus-rules.yml" run --entrypoint promtool -v "$EX/prometheus-rules.yml:/conf/prometheus-rules.yml:ro" "$PROMETHEUS" \
+    check rules /conf/prometheus-rules.yml
+# Each alert fires when it should, and only then (scripts/prometheus-rules.test.yml).
+check "prometheus-rules.yml: alert tests" run --entrypoint promtool -v "$EX/prometheus-rules.yml:/conf/prometheus-rules.yml:ro" \
+    -v "$ROOT/scripts/prometheus-rules.test.yml:/conf/test.yml:ro" "$PROMETHEUS" test rules /conf/test.yml
 
 echo "== Metrics"
 # The server's metrics (from its sources) against those the README lists (all of them)
