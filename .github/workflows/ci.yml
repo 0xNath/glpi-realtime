@@ -237,6 +237,30 @@ jobs:
       - run: ulimit -n 65536 && cargo run --release --locked --example loadtest -- --valkey unix:///tmp/valkey.sock --connections 2000 --rooms 200 --check --max-p99-ms 1000 --max-rss-mib 768
         working-directory: server
 
+  # Soak test, weekly (Monday's run) or on demand: waves of clients for 10 minutes; the
+  # server must keep no connection nor presence entry between waves, and its memory must
+  # level off (a leak shows as growth between the second and the last quarter).
+  soak:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Valkey
+        run: |
+          id=$(docker create valkey/valkey:9.0)
+          sudo docker cp "$id":/usr/local/bin/valkey-server /usr/local/bin/valkey-server
+          docker rm "$id"
+          valkey-server --port 0 --unixsocket /tmp/valkey.sock --save "" --appendonly no --daemonize yes
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # stable branch, 2026-10-15
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: server
+      - run: ulimit -n 65536 && cargo run --release --locked --example soak -- --valkey unix:///tmp/valkey.sock --duration-secs 600 --connections 500 --rooms 50 --check
+        working-directory: server
+
   # What browsers and Valkey send the server (frames, rooms, event batches, handshake
   # headers), fuzzed for a minute each.
   fuzz:
