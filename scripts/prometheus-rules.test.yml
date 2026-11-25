@@ -1,0 +1,82 @@
+# Tests of deploy/examples/prometheus-rules.yml (promtool test rules, run by
+# scripts/check-examples.sh): each alert fires when it should, and only then.
+rule_files: [prometheus-rules.yml]
+evaluation_interval: 1m
+
+tests:
+  - name: server down for 5 minutes
+    interval: 1m
+    input_series:
+      - { series: 'up{job="glpi-realtime",instance="rt1"}', values: "1 1 0x10" }
+    alert_rule_test:
+      - { eval_time: 4m, alertname: GlpiRealtimeDown, exp_alerts: [] }
+      - eval_time: 9m
+        alertname: GlpiRealtimeDown
+        exp_alerts:
+          - exp_labels: { severity: warning, job: glpi-realtime, instance: rt1 }
+            exp_annotations:
+              summary: "glpi-realtime on rt1 is not answering"
+              description: "GLPI works without it, but nothing is real-time: no presence, no live updates, no instant notifications."
+
+  - name: Valkey unreachable
+    interval: 1m
+    input_series:
+      - { series: 'rt_handshakes_total{instance="rt1",result="ok"}', values: "0+5x30" }
+      - { series: 'rt_handshakes_total{instance="rt1",result="unavailable"}', values: "0x10 0+3x20" }
+    alert_rule_test:
+      - { eval_time: 10m, alertname: GlpiRealtimeValkeyUnavailable, exp_alerts: [] }
+      - eval_time: 20m
+        alertname: GlpiRealtimeValkeyUnavailable
+        exp_alerts:
+          - exp_labels: { severity: warning, instance: rt1 }
+            exp_annotations:
+              summary: "glpi-realtime on rt1 cannot reach Valkey"
+              description: "Browsers are refused (HTTP 503 on /ws). See docs/troubleshooting.md."
+
+  - name: most handshakes refused, and not when few are or traffic is negligible
+    interval: 1m
+    input_series:
+      # rt1: 2 refused for 1 accepted. rt2: 1 refused for 2 accepted. rt3: a refusal every
+      # 10 minutes, nothing else (below 0.01/s).
+      - { series: 'rt_handshakes_total{instance="rt1",result="ok"}', values: "0+1x60" }
+      - { series: 'rt_handshakes_total{instance="rt1",result="unauthorized"}', values: "0+2x60" }
+      - { series: 'rt_handshakes_total{instance="rt2",result="ok"}', values: "0+2x60" }
+      - { series: 'rt_handshakes_total{instance="rt2",result="origin"}', values: "0+1x60" }
+      - { series: 'rt_handshakes_total{instance="rt3",result="unauthorized"}', values: "0+0.1x60" }
+    alert_rule_test:
+      - { eval_time: 10m, alertname: GlpiRealtimeHandshakesRefused, exp_alerts: [] }  # pending: for 15m
+      - eval_time: 40m
+        alertname: GlpiRealtimeHandshakesRefused
+        exp_alerts:
+          - exp_labels: { severity: warning, instance: rt1 }
+            exp_annotations:
+              summary: "glpi-realtime on rt1 refuses most connections"
+              description: "More than half of the handshakes are refused (unauthorized or origin). Run the plugin's checks: php bin/console plugins:realtime:check."
+
+  - name: connection limits reached
+    interval: 1m
+    input_series:
+      - { series: 'rt_handshakes_total{instance="rt1",result="user_full"}', values: "0+0x15 0+2x15" }
+    alert_rule_test:
+      - { eval_time: 15m, alertname: GlpiRealtimeConnectionLimit, exp_alerts: [] }
+      - eval_time: 30m
+        alertname: GlpiRealtimeConnectionLimit
+        exp_alerts:
+          - exp_labels: { severity: info, instance: rt1 }
+            exp_annotations:
+              summary: "glpi-realtime on rt1 refuses connections at its limits"
+              description: "Raise limits.max_connections or limits.max_connections_per_user in config.toml if this is regular use."
+
+  - name: events rejected
+    interval: 1m
+    input_series:
+      - { series: 'rt_events_rejected_total{instance="rt1"}', values: "0x20 1 1 1" }
+    alert_rule_test:
+      - { eval_time: 15m, alertname: GlpiRealtimeEventsRejected, exp_alerts: [] }
+      - eval_time: 22m
+        alertname: GlpiRealtimeEventsRejected
+        exp_alerts:
+          - exp_labels: { severity: warning, instance: rt1 }
+            exp_annotations:
+              summary: "glpi-realtime on rt1 rejects events from Valkey"
+              description: "Check that the plugin and the server are the same version (deploy/install.sh installs both)."

@@ -110,7 +110,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
-      - uses: anthropics/claude-code-action@4fa93a88de49bbef68b10eb15aabedf28ca0e1ed # v1.0.271
+      # Advisory: a review that cannot run (usage limit reached, service down) must not
+      # mark the pull request red next to its real checks; it leaves a warning instead.
+      - id: review
+        continue-on-error: true
+        uses: anthropics/claude-code-action@4fa93a88de49bbef68b10eb15aabedf28ca0e1ed # v1.0.271
         with:
           # One of the two: an API key, or a Claude subscription's token (claude setup-token).
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -137,3 +141,5 @@ jobs:
             5. Dependencies and actions: exact versions, actions pinned to a SHA.
           claude_args: |
             --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Read,Grep,Glob"
+      - if: steps.review.outcome == 'failure'
+        run: echo "::warning title=No Claude review::The review did not run (usage limit or service error); see the step's log."
