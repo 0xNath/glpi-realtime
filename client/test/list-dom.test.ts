@@ -100,3 +100,39 @@ test("in French", async () => {
   emit("changed", { room: "Ticket:2" });
   assert.equal(bannerText(), "Éléments modifiés dans cette liste : 2");
 });
+
+test("who is on each row: GLPI's pictures or initials, inactive ones dimmed, +N beyond three, updated in place", async () => {
+  const { emit, list, rowOf, document } = setup([1, 2]);
+  await scanned(list);
+  const u = (id: number, active = true, picture = "") => ({ id, name: `User ${id}`, since: id, active, avatar: picture ? { picture } : undefined });
+  emit("presence", { room: "Ticket:1", users: [{ id: 1, name: "Me", since: 0, active: true }, u(2, true, "/front/document.send.php?file=_pictures/2.jpg"), u(3, false), u(4), u(5), u(6)] });
+  const box = rowOf(1).querySelector(".glpi-rt-row-presence")!;
+  const minis = Array.from(box.querySelectorAll(".glpi-rt-mini"));
+  assert.equal(minis.length, 4, "three avatars, then +2");
+  assert.equal(minis[0].getAttribute("style")?.includes("_pictures/2.jpg"), true, "GLPI's picture");
+  assert.equal(minis[1].classList.contains("is-inactive"), true);
+  assert.equal(minis[3].textContent, "+2");
+  assert.equal(minis[3].getAttribute("title"), "User 5, User 6");
+  assert.match(box.getAttribute("aria-label") ?? "", /^Also on this ticket: User 2, User 3, User 4, User 5, User 6$/);
+  const before = rowOf(1).querySelector(".glpi-rt-row-presence");
+  emit("presence", { room: "Ticket:1", users: [{ id: 1, name: "Me", since: 0, active: true }, u(2, true, "/front/document.send.php?file=_pictures/2.jpg"), u(3, false), u(4), u(5), u(6)] });
+  assert.equal(rowOf(1).querySelector(".glpi-rt-row-presence") === before, true, "unchanged: left alone");
+  emit("presence", { room: "Ticket:1", users: [{ id: 1, name: "Me", since: 0, active: true }] });
+  assert.equal(rowOf(1).querySelector(".glpi-rt-row-presence") === null, true, "only ourselves: none");
+  void document;
+});
+
+test("rows without a title column: the avatars go next to the item's link, else in the second cell", async () => {
+  const { document } = page(`<!doctype html><html lang="en"><head></head><body><table class="search-results"><tbody>
+    <tr><td><input type="checkbox" class="massive_action_checkbox" name="item[Ticket][7]"></td><td class="x"><a href="/front/ticket.form.php?id=7">T7</a></td></tr>
+    <tr><td><input type="checkbox" class="massive_action_checkbox" name="item[Computer][8]"></td><td class="second">C8</td></tr>
+  </tbody></table></body></html>`);
+  const handlers = new Map<string, (m: any) => void>();
+  const list = new ListPresence(document, { user: { id: 1 }, watch: () => {}, on: (t: string, h: (m: any) => void) => (handlers.set(t, h), () => {}) }, async (i) => i, "en", () => {});
+  await scanned(list);
+  const users = [{ id: 2, name: "Bob", since: 1, active: true }];
+  handlers.get("presence")!({ room: "Ticket:7", users });
+  handlers.get("presence")!({ room: "Computer:8", users });
+  assert.equal(document.querySelector("td.x .glpi-rt-row-presence") !== null, true, "the link's cell");
+  assert.equal(document.querySelector("td.second .glpi-rt-row-presence") !== null, true, "the second cell");
+});

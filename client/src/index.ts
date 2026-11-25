@@ -167,7 +167,8 @@ function boot(): void {
   client.on("unsubscribed", (msg) => {
     if (msg.t !== "unsubscribed" || msg.reason !== "forbidden") return;
     forbidden.add(msg.room);
-    showStatus();
+    // The client no longer follows the room (showStatus would not see it): said here.
+    setStatus(document, msg.room, "unavailable", client.user?.id);
     banner.lost(msg.room);
     render(document, msg.room, [], client.user?.id);
   });
@@ -217,8 +218,11 @@ function boot(): void {
   client.start();
 }
 
-/** Other languages than French and English: their texts, before anything is drawn. */
-async function start(): Promise<void> {
+/**
+ * Other languages than French and English: their texts, before anything is drawn. Run once
+ * per page when the bundle loads (below); exported for the tests, which load several pages.
+ */
+export async function start(): Promise<void> {
   const lang = document.documentElement.lang || navigator.language || "en";
   if (needsCatalog(lang)) {
     const root: string = (window as any).CFG_GLPI?.root_doc ?? "";
@@ -232,8 +236,13 @@ async function start(): Promise<void> {
   boot();
 }
 
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", () => void start(), { once: true });
-} else {
-  void start();
+/** Starts once GLPI's page is loaded: at once if it already is. */
+export function autostart(): void {
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => void start(), { once: true });
+  } else {
+    void start();
+  }
 }
+
+autostart();
