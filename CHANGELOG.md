@@ -5,6 +5,10 @@ Server and plugin share one version number. Upgrades never change your configura
 
 ## Unreleased
 
+- Fix: what GLPI's automatic actions change (tickets created or updated by the mail
+  collector, any task) was neither notified nor shown live when GLPI's cron runs on the
+  command line (`php front/cron.php`): GLPI ends such runs with `exit()` in a shutdown
+  handler, before the plugin's own. The plugin now registers its handler first.
 - `deploy/install.sh` ends with what it knows: installed, upgraded from which version
   (with the "Configuration" notes of the versions in between, to edit yourself), or
   reinstalled; then what is left to do (the configuration file or the systemd unit it did

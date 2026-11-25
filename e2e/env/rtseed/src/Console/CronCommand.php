@@ -10,6 +10,7 @@ use CronTask;
 use Glpi\Console\AbstractCommand;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 
 /**
@@ -24,13 +25,14 @@ final class CronCommand extends AbstractCommand
         $this->setName('plugins:rtseed:cron');
         $this->setDescription('Run an automatic action of the realtime plugin now (tests only)');
         $this->addArgument('task', InputArgument::REQUIRED, 'Its name, e.g. slaalert');
+        $this->addOption('itemtype', null, InputOption::VALUE_REQUIRED, 'Class of the task', \GlpiPlugin\Realtime\Inbox::class);
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $name = (string) $input->getArgument('task');
         $task = new CronTask();
-        if (!$task->getFromDBbyName(\GlpiPlugin\Realtime\Inbox::class, $name)) {
+        if (!$task->getFromDBbyName((string) $input->getOption('itemtype'), $name)) {
             $output->writeln("<error>$name is not registered</error>");
             return 1;
         }
