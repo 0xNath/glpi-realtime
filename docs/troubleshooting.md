@@ -52,6 +52,7 @@ php bin/console plugin:activate realtime
 | Symptom | Cause | Fix |
 |---|---|---|
 | "Notification purge task: never run" | GLPI's automatic actions do not run | A system cron job running `php front/cron.php` every minute, as the user running GLPI. |
+| "Time-to-resolve alerts task: never run", or last run more than 30 min ago | GLPI's automatic actions do not run, or not every few minutes: no time-to-resolve alerts, and changes made by the mail collector are notified late | The same system cron job, every minute; the task's mode CLI (Setup > Automatic actions). |
 | A technician gets nothing | Their preferences (bell > settings) or GLPI rights: notifications follow what the user may see | Check the bell's preferences and the user's profile. |
 | Marking read, "Assume" or preferences do nothing on GLPI 11 | Plugin older than 0.5.0 (GLPI 11's CSRF check) | Upgrade the plugin. |
 

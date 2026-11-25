@@ -182,16 +182,25 @@ final class CronTask
 {
     public const STATE_DISABLE = 0;
     public const STATE_WAITING = 1;
-    /** The task GLPI has, or null when it is not registered. */
+    public const MODE_INTERNAL = 1;
+    public const MODE_EXTERNAL = 2;
+    /** The purge task GLPI has, or null when it is not registered. */
     public static ?array $task = null;
+    /** The alerts task (slaalert), or null. */
+    public static ?array $sla = null;
     public array $fields = [];
 
     public function getFromDBbyName(string $itemtype, string $name): bool
     {
-        if (self::$task === null || $itemtype !== \GlpiPlugin\Realtime\Inbox::class || $name !== 'inboxpurge') {
+        $task = $itemtype !== \GlpiPlugin\Realtime\Inbox::class ? null : match ($name) {
+            'inboxpurge' => self::$task,
+            'slaalert'   => self::$sla,
+            default      => null,
+        };
+        if ($task === null) {
             return false;
         }
-        $this->fields = self::$task;
+        $this->fields = $task;
         return true;
     }
 }
@@ -208,7 +217,7 @@ Health::$skipDatabase = false;
 $db = static function (): array {
     $out = [];
     foreach (Health::run(cli: true) as $c) {
-        if (in_array($c['id'], ['tables', 'cron'], true)) {
+        if (in_array($c['id'], ['tables', 'cron', 'cron_sla'], true)) {
             $out[$c['id']] = [$c['status'], $c['detail'], $c['fix']];
         }
     }
@@ -240,6 +249,30 @@ check($db()['cron'][0] === Health::WARNING, 'purge task last run 4 days ago: war
 CronTask::$task = ['state' => CronTask::STATE_WAITING, 'lastrun' => date('Y-m-d H:i:s', time() - 3600)];
 $res = $db();
 check($res['cron'][0] === Health::OK && str_starts_with($res['cron'][1], 'Last run: '), 'purge task run an hour ago: ok');
+
+// The alerts task, every 5 minutes: whether GLPI's cron runs often enough.
+if (!defined('MINUTE_TIMESTAMP')) {
+    define('MINUTE_TIMESTAMP', 60);
+}
+CronTask::$sla = null;
+$res = $db();
+check($res['cron_sla'][0] === Health::WARNING && str_contains($res['cron_sla'][2], 'deploy/install.sh'), 'alerts task not registered: warning, upgrade');
+CronTask::$sla = ['state' => CronTask::STATE_DISABLE, 'lastrun' => null, 'mode' => CronTask::MODE_EXTERNAL];
+$res = $db();
+check($res['cron_sla'][0] === Health::INFO && str_contains($res['cron_sla'][2], 'slaalert'), 'alerts task disabled: info (a choice), how to enable it');
+CronTask::$sla = ['state' => CronTask::STATE_WAITING, 'lastrun' => null, 'mode' => CronTask::MODE_EXTERNAL];
+$res = $db();
+check($res['cron_sla'][0] === Health::WARNING && str_contains($res['cron_sla'][1], 'mail collector') && str_contains($res['cron_sla'][2], 'front/cron.php'), 'never run: warning, what is missing, the system cron job');
+CronTask::$sla = ['state' => CronTask::STATE_WAITING, 'lastrun' => date('Y-m-d H:i:s', time() - 40 * 60), 'mode' => CronTask::MODE_EXTERNAL];
+$res = $db();
+check($res['cron_sla'][0] === Health::WARNING && str_contains($res['cron_sla'][1], 'not often enough'), 'last run 40 min ago: warning, the cron does not run often enough');
+CronTask::$sla = ['state' => CronTask::STATE_WAITING, 'lastrun' => date('Y-m-d H:i:s', time() - 120), 'mode' => CronTask::MODE_INTERNAL];
+$res = $db();
+check($res['cron_sla'][0] === Health::INFO && str_contains($res['cron_sla'][1], 'while someone browses'), 'run by GLPI\'s pages: info, set it to CLI');
+CronTask::$sla = ['state' => CronTask::STATE_WAITING, 'lastrun' => date('Y-m-d H:i:s', time() - 120), 'mode' => CronTask::MODE_EXTERNAL];
+$res = $db();
+check($res['cron_sla'][0] === Health::OK, 'run 2 min ago from the command line: ok');
+
 Health::$http = null;
 Health::$skipDatabase = true;
 
