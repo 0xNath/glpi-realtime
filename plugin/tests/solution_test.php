@@ -58,4 +58,30 @@ SolutionGuard::onPreAdd($other);
 SolutionGuard::onPreAdd(new ITILSolution()); // no input
 check(count($log) === $before, 'other items and incomplete input untouched');
 
+// The database lock itself fails (connection lost, no GET_LOCK): the solution goes through,
+// the failure is logged; a lock that cannot be released is left to MariaDB.
+SolutionGuard::$mutex = static function (string $name, bool $take): bool {
+    throw new RuntimeException('lock unavailable');
+};
+Toolbox::$logs = [];
+$s5 = new ITILSolution();
+$s5->input = ['itemtype' => 'Ticket', 'items_id' => 8];
+SolutionGuard::onPreAdd($s5);
+check(is_array($s5->input), 'guard broken: the solution is not blocked');
+check(str_contains(Toolbox::$logs[0][1] ?? '', 'solution guard: lock unavailable'), 'and the failure is logged');
+// Taken, then the release fails: no error reaches GLPI.
+$taken = false;
+SolutionGuard::$mutex = static function (string $name, bool $take) use (&$taken): bool {
+    if ($take) {
+        return $taken = true;
+    }
+    throw new RuntimeException('connection gone');
+};
+$s6 = new ITILSolution();
+$s6->input = ['itemtype' => 'Ticket', 'items_id' => 9];
+SolutionGuard::onPreAdd($s6);
+$s6->fields = ['itemtype' => 'Ticket', 'items_id' => 9];
+SolutionGuard::onAdd($s6);
+check($taken && is_array($s6->input), 'release failure swallowed');
+
 exit($GLOBALS['failures'] === 0 ? 0 : 1);

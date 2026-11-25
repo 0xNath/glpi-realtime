@@ -56,4 +56,24 @@ check($r->exists(SessionToken::sessionKey($h)) === 0 && $r->exists(Valkey::key('
 Events::onUpdate(new User(['id' => 7, 'is_active' => 1, 'realname' => 'x'], ['realname']));
 check(RightsWatch::pending()['revoke'] === [], 'other user updates: nothing');
 
+// The profile itself edited or deleted: its users get new grants; a new profile has none.
+$regrant = static function (): array {
+    $p = RightsWatch::pending()['regrant'];
+    Events::flush();
+    return $p;
+};
+Events::onUpdate(new Profile(['id' => 4], ['interface']));
+check($regrant() === [7], 'profile edited: its users regranted');
+Events::onPurge(new Profile(['id' => 4]));
+check($regrant() === [7], 'profile deleted: its users regranted');
+Events::onAdd(new Profile(['id' => 4]));
+check($regrant() === [], 'new profile: nobody has it yet');
+Events::onUpdate(new ProfileRight(['id' => 9, 'profiles_id' => 0], ['rights']));
+check($regrant() === [], 'right without a profile: nobody');
+Events::onAdd(new Group_User(['id' => 2, 'users_id' => 7, 'groups_id' => 3]));
+check($regrant() === [7], 'group membership changed: the user regranted (group rights, group tickets)');
+Events::onPurge(new User(['id' => 7]));
+check(RightsWatch::pending()['revoke'] === [7], 'user deleted: sessions revoked');
+Events::flush();
+
 exit($GLOBALS['failures'] === 0 ? 0 : 1);
