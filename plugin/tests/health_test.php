@@ -92,6 +92,50 @@ check($res['itemtypes'][0] !== Health::WARNING, 'server following GLPI: no warni
 Config::$values = [];
 GlpiPlugin\Realtime\Settings::reset();
 
+// The tab's own WebSocket session (web only): no token, or a token Valkey lost.
+unset($_SESSION['plugin_realtime']);
+$res = results();
+check($res['session'][0] === Health::WARNING && str_contains($res['session'][2], 'log out and in again'), 'no token for this GLPI session: warning, log in again');
+$_SESSION['plugin_realtime'] = ['hash' => 'health-test'];
+$res = results();
+check($res['session'][0] === Health::WARNING && str_contains($res['session'][1], 'not in Valkey'), 'token lost by Valkey: warning, reload');
+$r->set(GlpiPlugin\Realtime\SessionToken::sessionKey('health-test'), '{}');
+check(results()['session'][0] === Health::OK, 'token in Valkey: ok');
+$r->del(GlpiPlugin\Realtime\SessionToken::sessionKey('health-test'));
+unset($_SESSION['plugin_realtime']);
+
+// A Valkey too old for presence (no hash field expiry).
+final class OldValkey extends Redis
+{
+    public function info(string ...$sections): Redis|array|false
+    {
+        return ['valkey_version' => '8.1.1'];
+    }
+}
+$old = new OldValkey();
+$old->connect('127.0.0.1', (int) ($argv[1] ?? 6379), 1.0);
+$old->select(6);
+Valkey::$override = $old;
+$res = results();
+check($res['valkey_version'][0] === Health::ERROR && str_contains($res['valkey_version'][1], 'HEXPIRE') && str_contains($res['valkey_version'][2], 'Valkey 9.0'), 'Valkey 8.1: error, which version is needed');
+$old->close();
+Valkey::$override = $r;
+
+// Valkey unreachable: why, and nothing that needs it is checked.
+Valkey::$override = null;
+Config::$values = ['valkey_socket' => '/tmp/rt-health-no-such.sock'];
+GlpiPlugin\Realtime\Settings::reset();
+$res = results();
+check($res['valkey'][0] === Health::ERROR && str_contains($res['valkey'][1], 'No socket at /tmp/rt-health-no-such.sock') && str_contains($res['valkey'][2], 'unixsocket'), 'no socket: error, where Valkey\'s socket must be');
+check(!isset($res['valkey_version']) && !isset($res['valkey_acl']) && !isset($res['server']), 'nothing else checked without Valkey');
+Config::$values = ['valkey_socket' => '127.0.0.1:1'];
+GlpiPlugin\Realtime\Settings::reset();
+$res = results();
+check($res['valkey'][0] === Health::ERROR && str_contains($res['valkey'][1], '127.0.0.1:1') && str_contains($res['valkey'][2], 'Check that Valkey runs'), 'nothing listening: error, with the target and the reason');
+Config::$values = [];
+GlpiPlugin\Realtime\Settings::reset();
+Valkey::$override = $r;
+
 // Command line: no request, GLPI's URL is what browsers use; the web server is requested.
 Health::$requestOrigin = '';
 Health::$urlBase = 'https://glpi.example.org/';
