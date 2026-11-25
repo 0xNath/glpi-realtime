@@ -61,6 +61,12 @@ if [[ -d "$ROOT/client/src" ]] && [[ -n "$(find "$ROOT/client/src" -newer "$ROOT
     die "plugin/public/realtime.js is older than client/src: run 'npm run build' in client/ first"
 fi
 
+# What is installed now (empty: first install), and what this installs.
+version_of() { sed -n "s/.*define('PLUGIN_REALTIME_VERSION', '\([^']*\)').*/\1/p" "$1" 2>/dev/null || true; }
+OLD_VERSION=$(version_of "$GLPI_DIR/plugins/realtime/setup.php")
+NEW_VERSION=$(version_of "$ROOT/plugin/setup.php")
+TODO=() # what is left for the user to do, said at the end
+
 # --- Server binary ----------------------------------------------------------------------
 echo "==> Server binary: $DEST"
 install -d "$PREFIX/bin"
@@ -69,7 +75,8 @@ if [[ -f "$CONFIG" ]]; then
     # The new binary must accept the existing configuration before it replaces the old one.
     "$DEST.new" --config "$CONFIG" --check || { rm -f "$DEST.new"; die "$CONFIG is not valid for this version (see README)"; }
 else
-    echo "   no $CONFIG yet: create it from deploy/examples/config.toml.example"
+    echo "   no $CONFIG yet"
+    TODO+=("Server configuration: copy deploy/examples/config.toml.example to $CONFIG and adapt it (README, \"Install\", step 3).")
 fi
 mv "$DEST.new" "$DEST"
 
@@ -117,9 +124,11 @@ if [[ -n "$SERVICE" ]] && command -v systemctl >/dev/null && systemctl cat "$SER
     echo "==> Restarting $SERVICE"
     systemctl try-restart "$SERVICE"
 elif [[ -z "$SERVICE" ]]; then
-    echo "   service not restarted (SERVICE is empty): restart the server yourself"
+    echo "   service not restarted (SERVICE is empty)"
+    TODO+=("Restart the server yourself (SERVICE is empty).")
 else
-    echo "   service not restarted (no systemd unit '$SERVICE'): restart the server yourself"
+    echo "   no systemd unit '$SERVICE'"
+    TODO+=("Service: install deploy/examples/glpi-realtime.service (and sysusers.conf for its user), then systemctl enable --now $SERVICE (README, \"Install\", step 3).")
 fi
 
 # --- Checks -------------------------------------------------------------------------------
@@ -128,10 +137,34 @@ if [[ "$SKIP_PLUGIN_UPGRADE" != 1 && "${CHECK:-1}" == 1 ]]; then
     sleep 2 # the restarted server publishes its status in Valkey
     echo "==> Checks (bin/console plugins:realtime:check)"
     # shellcheck disable=SC2086
-    runuser -u "$GLPI_USER" -- $PHP "$GLPI_DIR/bin/console" plugins:realtime:check \
-        || echo "   see above: what to fix, and the plugin's configuration page (Setup > Plugins > Realtime)"
+    rc=0
+    runuser -u "$GLPI_USER" -- $PHP "$GLPI_DIR/bin/console" plugins:realtime:check || rc=$?
+    # 1: warnings, 2: errors (Valkey, the web server, the server: what the checks say).
+    if [[ $rc -ge 2 ]]; then
+        TODO+=("Fix the errors the checks reported above; Setup > Plugins > Realtime shows them too, with how to fix (README, \"Install\", steps 4 to 6).")
+    elif [[ $rc -eq 1 ]]; then
+        TODO+=("Have a look at the warnings the checks reported above.")
+    fi
 fi
 
+# --- Summary ------------------------------------------------------------------------------
 echo
-echo "Done. Browsers pick up the new client on their next page load."
-echo "First install? Follow README, \"Install\": configuration, service, Valkey, web server."
+if [[ -z "$OLD_VERSION" ]]; then
+    echo "Installed glpi-realtime $NEW_VERSION."
+elif [[ "$OLD_VERSION" == "$NEW_VERSION" ]]; then
+    echo "Reinstalled glpi-realtime $NEW_VERSION."
+else
+    echo "Upgraded glpi-realtime from $OLD_VERSION to $NEW_VERSION (CHANGELOG.md says what changed)."
+    notes=$("$ROOT/deploy/notes.sh" "$OLD_VERSION" "$NEW_VERSION" "$ROOT/CHANGELOG.md" || true)
+    if [[ -n "$notes" ]]; then
+        echo "Configuration to edit yourself since $OLD_VERSION:"
+        sed 's/^/   /' <<<"$notes"
+        TODO+=("Edit the configuration as listed above, then restart the server.")
+    fi
+fi
+if [[ ${#TODO[@]} -eq 0 ]]; then
+    echo "Nothing left to do: browsers pick up the new client on their next page load."
+else
+    echo "Left to do:"
+    for t in "${TODO[@]}"; do echo " - $t"; done
+fi
