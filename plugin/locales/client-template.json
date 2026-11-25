@@ -107,6 +107,8 @@
       "Actions"
     ],
     "allStatuses": "All statuses",
+    "statusFilter": "Filter by status",
+    "periodFilter": "Filter by period",
     "periods": {
       "": "All periods",
       "today": "Today",

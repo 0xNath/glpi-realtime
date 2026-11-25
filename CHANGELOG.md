@@ -5,6 +5,9 @@ Server and plugin share one version number. Upgrades never change your configura
 
 ## Unreleased
 
+- Accessibility: the status and period filters of the notifications page are named for
+  screen readers ("Filter by status", "Filter by period"); they were announced as bare
+  drop-down lists (found by axe).
 - Fix: what GLPI's automatic actions change (tickets created or updated by the mail
   collector, any task) was neither notified nor shown live when GLPI's cron runs on the
   command line (`php front/cron.php`): GLPI ends such runs with `exit()` in a shutdown
