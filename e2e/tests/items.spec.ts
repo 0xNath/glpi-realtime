@@ -70,3 +70,29 @@ test("the asset list shows who is on each asset", async ({ browser }) => {
   test.skip(!watching.rooms.includes(`Computer:${items.computer}`), "the computer is not on the first page of rt-alice's list");
   await expect(alice.page.locator(".glpi-rt-row-presence .glpi-rt-mini[title*='bob' i]")).toBeVisible();
 });
+
+test("a list marks the rows someone else changed, and offers to refresh", async ({ browser }) => {
+  test.skip(!items.computer, "RT_COMPUTER_ID is not set");
+  const room = `Computer:${items.computer}`;
+  const alice = await login(browser, "alice");
+  const bob = await login(browser, "bob");
+  await alice.page.goto("/front/computer.php");
+  const watching = await waitForFrame(alice, (f) => f.t === "watching", "watching");
+  test.skip(!watching.rooms.includes(room), "the computer is not on the first page of rt-alice's list");
+  await expect(alice.page.locator(".glpi-rt-list-changed")).toHaveCount(0);
+
+  // Bob saves the computer.
+  expect(await openItem(bob, "Computer", items.computer)).toBe(200);
+  await itemForm(bob.page, items.computer).locator("input[name='comment'], textarea[name='comment']").first().fill(`list e2e ${Date.now()}`);
+  await Promise.all([bob.page.waitForEvent("load"), itemForm(bob.page, items.computer).locator("[name='update']").first().click()]);
+
+  // Alice's list says so: the frame carries nothing but the item.
+  const changed = await waitForFrame(alice, (f) => f.t === "changed" && f.room === room, "changed");
+  expect(Object.keys(changed).sort()).toEqual(["room", "t", "v"]);
+  const row = alice.page.locator(`tr:has(input[name='item[Computer][${items.computer}]'])`);
+  await expect(row).toHaveClass(/glpi-rt-row-changed/);
+  const banner = alice.page.locator(".glpi-rt-list-changed");
+  await expect(banner).toContainText(/Items changed in this list: 1|Éléments modifiés dans cette liste : 1/);
+  await Promise.all([alice.page.waitForEvent("load"), banner.getByRole("button", { name: /^(refresh|actualiser)$/i }).click()]);
+  await expect(alice.page.locator(".glpi-rt-list-changed")).toHaveCount(0);
+});

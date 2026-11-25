@@ -149,6 +149,11 @@
       "cancel": "Cancel"
     }
   },
+  "list": {
+    "changed": "Items changed in this list: {0}",
+    "refresh": "Refresh",
+    "row": "Changed since the list was displayed"
+  },
   "notifications.items": {
     "Ticket": "ticket",
     "Change": "change",

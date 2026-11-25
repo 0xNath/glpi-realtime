@@ -1,4 +1,5 @@
 import { h } from "./dom.ts";
+import { register } from "./i18n.ts";
 import { labels, look, others } from "./presence.ts";
 import type { PresenceUser } from "./protocol.ts";
 
@@ -38,6 +39,20 @@ function cellOf(row: Element): Element | null {
   );
 }
 
+const TEXT = register("list", {
+  fr: {
+    // No plural form: translations get one template ("{0}").
+    changed: (n: number) => `Éléments modifiés dans cette liste : ${n}`,
+    refresh: "Actualiser",
+    row: "Modifié depuis l'affichage de la liste",
+  },
+  en: {
+    changed: (n: number) => `Items changed in this list: ${n}`,
+    refresh: "Refresh",
+    row: "Changed since the list was displayed",
+  },
+});
+
 const STYLE = `
 .glpi-rt-row-presence { display:inline-flex; gap:.15rem; margin-left:.4rem; vertical-align:middle; }
 .glpi-rt-row-presence .glpi-rt-mini { width:1.35rem; height:1.35rem; border-radius:50%; display:inline-flex; align-items:center;
@@ -45,6 +60,8 @@ const STYLE = `
   box-shadow:0 0 0 2px var(--tblr-bg-surface, #fff), 0 0 0 3px var(--tblr-green, #2fb344); }
 .glpi-rt-row-presence .glpi-rt-mini.is-inactive { opacity:.55; box-shadow:0 0 0 2px var(--tblr-bg-surface, #fff), 0 0 0 3px var(--tblr-gray-400, #9ba9be); }
 .glpi-rt-row-presence .glpi-rt-mini.is-more { background:var(--tblr-secondary, #667382); color:#fff; box-shadow:none; }
+tr.glpi-rt-row-changed > td:first-child { box-shadow:inset 3px 0 var(--tblr-warning, #f59f00); }
+.glpi-rt-list-changed { display:flex; align-items:center; gap:.75rem; margin:.5rem 0; }
 `;
 
 export interface ListClient {
@@ -61,12 +78,16 @@ export class ListPresence {
   private keys = "";
   private readonly users = new Map<string, PresenceUser[]>();
   private timer: ReturnType<typeof setTimeout> | null = null;
+  /** Followed rows that changed since the list was displayed. */
+  private readonly changed = new Set<string>();
+  private readonly reload: () => void;
 
-  constructor(doc: Document, client: ListClient, grant: (items: string[]) => Promise<string[]>, lang: string) {
+  constructor(doc: Document, client: ListClient, grant: (items: string[]) => Promise<string[]>, lang: string, reload?: () => void) {
     this.doc = doc;
     this.client = client;
     this.grant = grant;
     this.lang = lang;
+    this.reload = reload ?? (() => doc.defaultView?.location.reload());
     const style = doc.createElement("style");
     style.textContent = STYLE;
     doc.head.appendChild(style);
@@ -74,6 +95,37 @@ export class ListPresence {
       this.users.set(m.room, m.users);
       this.paint(m.room);
     });
+    // Someone changed a row: marked, and a banner offers to refresh the list (GLPI draws
+    // it; reloading in place would lose the reader's scroll and selection).
+    client.on("changed", (m) => {
+      if (!this.keys.split(",").includes(m.room)) return;
+      this.changed.add(m.room);
+      this.paint(m.room);
+      this.banner();
+    });
+  }
+
+  private text() {
+    return TEXT[this.lang.slice(0, 2).toLowerCase() === "fr" ? "fr" : "en"];
+  }
+
+  /** Above the list: how many rows changed, and a button to refresh it. */
+  private banner(): void {
+    const table = this.doc.querySelector("table.search-results");
+    if (!table) return;
+    let el = this.doc.querySelector<HTMLElement>(".glpi-rt-list-changed");
+    if (!this.changed.size) return el?.remove();
+    const t = this.text();
+    if (!el) {
+      el = h(
+        "div",
+        { class: "glpi-rt-list-changed alert alert-info", role: "status" },
+        h("span", { class: "glpi-rt-list-changed-text" }),
+        h("button", { type: "button", class: "btn btn-sm btn-primary", text: t.refresh, onclick: () => this.reload() }),
+      );
+      (table.closest(".table-responsive") ?? table).before(el);
+    }
+    el.querySelector(".glpi-rt-list-changed-text")!.textContent = t.changed(this.changed.size);
   }
 
   /** The list changed (first display, page, sort, filter): follow its rows. */
@@ -99,6 +151,9 @@ export class ListPresence {
       return;
     }
     this.keys = keys;
+    // Another page, sort or filter: what changed concerned the rows that were shown.
+    this.changed.clear();
+    this.banner();
     const granted = rows.size ? await this.grant([...rows.keys()]).catch(() => []) : [];
     this.client.watch(granted);
     for (const k of rows.keys()) this.paint(k);
@@ -107,6 +162,12 @@ export class ListPresence {
   private paint(room: string): void {
     for (const row of Array.from(this.doc.querySelectorAll("table.search-results tbody tr"))) {
       if (rowKey(row) !== room) continue;
+      const changed = this.changed.has(room);
+      if (row.classList.contains("glpi-rt-row-changed") !== changed) {
+        row.classList.toggle("glpi-rt-row-changed", changed);
+        if (changed) row.setAttribute("title", this.text().row);
+        else row.removeAttribute("title");
+      }
       const cell = cellOf(row);
       if (!cell) continue;
       const list = others(this.users.get(room) ?? [], this.client.user?.id);

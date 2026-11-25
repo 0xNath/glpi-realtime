@@ -3,7 +3,8 @@ mod common;
 use std::time::Duration;
 
 use common::*;
-use serde_json::json;
+use fred::prelude::*;
+use serde_json::{Value, json};
 
 macro_rules! valkey_or_skip {
     () => {
@@ -98,5 +99,84 @@ async fn watched_items_are_capped() {
     )
     .await;
     assert_eq!(recv(&mut b).await["rooms"], json!(["Ticket:1", "Ticket:2"]));
+    srv.stop().await.unwrap();
+}
+
+/// Publishes as the plugin does (the first publication waits until the server listens).
+async fn publish(vk: &Valkey, batch: Value) {
+    for _ in 0..100 {
+        let n: i64 = vk.client.publish("rt:ev", batch.to_string()).await.unwrap();
+        if n > 0 {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    panic!("nobody listens on rt:ev");
+}
+
+async fn next_non_presence(ws: &mut Ws) -> Option<Value> {
+    recv_matching(ws, Duration::from_millis(700), |m| m["t"] != "presence").await
+}
+
+#[tokio::test]
+async fn a_list_is_told_its_items_changed_and_nothing_more() {
+    let vk = valkey_or_skip!();
+    let (srv, addr) = start(config(&vk)).await;
+    let bob = session(&vk, 11, "Bob").await;
+    grant(&vk, &bob, "Ticket:5", &[("read", "1")]).await;
+    let mut b = connect(addr, Some(ORIGIN), Some(&bob)).await.unwrap();
+    recv(&mut b).await;
+    send(
+        &mut b,
+        json!({"v":1,"id":1,"t":"watch","rooms":["Ticket:5","Ticket:6"]}),
+    )
+    .await;
+    assert_eq!(recv(&mut b).await["rooms"], json!(["Ticket:5"]));
+    let by = json!({"id":10,"name":"Alice"});
+
+    publish(
+        &vk,
+        json!({"room":"Ticket:5","by":by,"events":[{"kind":"item.update","fields":["status"]}]}),
+    )
+    .await;
+    assert_eq!(
+        next_non_presence(&mut b).await,
+        Some(json!({"v":1,"t":"changed","room":"Ticket:5"})),
+        "the row changed: no fields, no author"
+    );
+
+    // A followup's visibility needs more than `read`: the list is not told.
+    publish(&vk, json!({"room":"Ticket:5","by":by,"events":[{"kind":"followup.add",
+        "item":{"type":"ITILFollowup","id":3},"vis":{"right":"followup","private":true,"uids":[10]}}]})).await;
+    assert_eq!(next_non_presence(&mut b).await, None, "followup: nothing");
+
+    // Rights on the item may be gone: nothing either.
+    publish(
+        &vk,
+        json!({"room":"Ticket:5","by":by,"regrant":true,"events":[{"kind":"actor.delete"}]}),
+    )
+    .await;
+    assert_eq!(next_non_presence(&mut b).await, None, "regrant: nothing");
+
+    // An item the list may not read is not followed.
+    publish(
+        &vk,
+        json!({"room":"Ticket:6","by":by,"events":[{"kind":"item.update"}]}),
+    )
+    .await;
+    assert_eq!(
+        next_non_presence(&mut b).await,
+        None,
+        "unreadable item: nothing"
+    );
+
+    send(&mut b, json!({"v":1,"id":2,"t":"watch","rooms":[]})).await;
+    assert_eq!(recv(&mut b).await["rooms"], json!([]));
+    publish(
+        &vk,
+        json!({"room":"Ticket:5","by":by,"events":[{"kind":"item.update"}]}),
+    )
+    .await;
+    assert_eq!(next_non_presence(&mut b).await, None, "unwatched: nothing");
     srv.stop().await.unwrap();
 }

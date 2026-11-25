@@ -220,6 +220,8 @@ struct UserConn {
 pub struct Hub {
     registry: Arc<Registry>,
     rooms: Mutex<HashMap<Room, HashMap<Uuid, mpsc::Sender<Delivery>>>>,
+    /// Connections of list pages following an item (`watch`): told it `changed`, no more.
+    watchers: Mutex<HashMap<Room, HashMap<Uuid, mpsc::Sender<Delivery>>>>,
     users: Mutex<HashMap<u64, HashMap<Uuid, UserConn>>>,
 }
 
@@ -228,6 +230,7 @@ impl Hub {
         Arc::new(Self {
             registry,
             rooms: Mutex::default(),
+            watchers: Mutex::default(),
             users: Mutex::default(),
         })
     }
@@ -272,6 +275,26 @@ impl Hub {
             m.remove(&conn);
             if m.is_empty() {
                 rooms.remove(room);
+            }
+        }
+    }
+
+    /// A list page follows `room` (its grant has `read`).
+    pub fn watch(&self, room: &Room, conn: Uuid, tx: mpsc::Sender<Delivery>) {
+        self.watchers
+            .lock()
+            .expect("hub poisoned")
+            .entry(room.clone())
+            .or_default()
+            .insert(conn, tx);
+    }
+
+    pub fn unwatch(&self, room: &Room, conn: Uuid) {
+        let mut watchers = self.watchers.lock().expect("hub poisoned");
+        if let Some(m) = watchers.get_mut(room) {
+            m.remove(&conn);
+            if m.is_empty() {
+                watchers.remove(room);
             }
         }
     }
@@ -339,6 +362,29 @@ impl Hub {
                 .unwrap_or_default();
             for (id, tx) in &members {
                 self.deliver(*id, tx, Delivery::Room(room.clone(), Arc::clone(&batch)));
+            }
+            // List pages: that the item changed, when anyone who may read it sees the change
+            // (not for followups or tasks, whose visibility needs more than `read`), and not
+            // on a regrant (rights on the item may be gone).
+            if !batch.regrant && batch.events.iter().any(|e| e.vis.right.is_none()) {
+                let watchers: Vec<(Uuid, mpsc::Sender<Delivery>)> = self
+                    .watchers
+                    .lock()
+                    .expect("hub poisoned")
+                    .get(room)
+                    .map(|m| m.iter().map(|(id, tx)| (*id, tx.clone())).collect())
+                    .unwrap_or_default();
+                if !watchers.is_empty() {
+                    let text = protocol::encode(
+                        &ServerMsg::Changed {
+                            room: room.to_string(),
+                        },
+                        None,
+                    );
+                    for (id, tx) in &watchers {
+                        self.deliver(*id, tx, Delivery::Text(text.clone()));
+                    }
+                }
             }
         }
         for n in &batch.notify {
