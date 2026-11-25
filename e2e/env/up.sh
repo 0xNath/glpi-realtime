@@ -94,7 +94,13 @@ if [[ -n "${UPGRADE_FROM:-}" ]]; then
     echo "==> Upgrade with deploy/install.sh"
     install_plugin
     old_version=$(sed -n "s/.*define('PLUGIN_REALTIME_VERSION', '\([^']*\)').*/\1/p" "$HERE/.old/plugin/setup.php")
-    expect_summary "^Upgraded glpi-realtime from ${old_version//./\\.} to "
+    new_version=$(sed -n "s/.*define('PLUGIN_REALTIME_VERSION', '\([^']*\)').*/\1/p" "$ROOT/plugin/setup.php")
+    # Right after a release, the previous tag has the version being installed.
+    if [[ "$old_version" == "$new_version" ]]; then
+        expect_summary "^Reinstalled glpi-realtime ${new_version//./\\.}\\."
+    else
+        expect_summary "^Upgraded glpi-realtime from ${old_version//./\\.} to "
+    fi
     # The configuration notes of the versions in between (0.8.0 has one, for upgrades from
     # 0.6.0 and older).
     if [[ "$(printf '%s\n0.8.0\n' "$old_version" | sort -V | head -1)" == "$old_version" && "$old_version" != 0.8.0 ]]; then
